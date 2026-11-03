@@ -100,7 +100,7 @@ void main() {
       expect(keys(Cmd.exportSql), 'Ctrl+E');
       expect(keys(Cmd.exportImage), 'Ctrl+Shift+E');
       expect(keys(Cmd.undo), 'Ctrl+Z');
-      expect(keys(Cmd.redo), 'Ctrl+Y');
+      expect(keys(Cmd.redo), 'Ctrl+Shift+Z');
       expect(keys(Cmd.copy), 'Ctrl+C');
       expect(keys(Cmd.paste), 'Ctrl+V');
       expect(keys(Cmd.duplicate), 'Ctrl+D');
@@ -276,9 +276,9 @@ void main() {
       expect(tb(c.project, 'tu').y, 110);
       await press(tester, LogicalKeyboardKey.arrowLeft, shift: true);
       await press(tester, LogicalKeyboardKey.arrowLeft, shift: true);
-      expect(tb(c.project, 'tu').x, 0); // ไม่ติดลบ
+      expect(tb(c.project, 'tu').x, -50); // ติดลบได้ กระดานขยายไปทางซ้าย
       c.undo();
-      expect(tb(c.project, 'tu').x, greaterThan(0)); // undo ทีละการกด
+      expect(tb(c.project, 'tu').x, 0); // undo ทีละการกด
     });
 
     testWidgets('F2 เปลี่ยนชื่อตารางที่เลือก', (tester) async {

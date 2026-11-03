@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nsl_modeler/core/layout/diagram_geometry.dart';
 import 'package:nsl_modeler/core/clipboard/table_clipboard.dart';
 import 'package:nsl_modeler/core/models/enums.dart';
 import 'package:nsl_modeler/core/models/project.dart';
@@ -95,14 +96,16 @@ void main() {
   });
 
   group('ย้าย / ขยับ / ลบ หลายตาราง', () {
-    test('moveSelectedBy ย้ายทุกตัวที่เลือก ไม่ติดลบ', () {
+    test('moveSelectedBy ย้ายทุกตัวที่เลือก (ติดลบได้ กระดานขยาย) และไม่เกินช่วง world', () {
       final c = loaded();
       c.selectAllTables();
       c.moveSelectedBy(30, -500);
       expect(tb(c.project, 'tu').x, 130);
       expect(tb(c.project, 'to').x, 430);
-      expect(tb(c.project, 'tu').y, 0);
-      expect(tb(c.project, 'to').y, 0);
+      expect(tb(c.project, 'tu').y, -400);
+      expect(tb(c.project, 'to').y, -400);
+      c.moveSelectedBy(0, -100000);
+      expect(tb(c.project, 'tu').y, kWorldMin); // ไม่เกินช่วงที่ชั้นวาดรองรับ
     });
 
     test('ลากทั้งกลุ่มเป็น undo ขั้นเดียว', () {
@@ -119,7 +122,7 @@ void main() {
       expect(tb(c.project, 'to').x, 400);
     });
 
-    test('nudgeSelected ขั้นเดียวต่อครั้ง; ขยับไม่ได้ (ชนขอบ 0) คืน false ไม่สร้างประวัติ', () {
+    test('nudgeSelected ขั้นเดียวต่อครั้ง; ขยับไม่ได้ (ชนขอบ world) คืน false ไม่สร้างประวัติ', () {
       final c = loaded();
       c.selectTable('tu');
       expect(c.nudgeSelected(10, 0), true);
@@ -128,7 +131,7 @@ void main() {
       expect(tb(c.project, 'tu').x, 100);
 
       final d = ProjectController();
-      final t = d.addTable(x: 0, y: 0);
+      final t = d.addTable(x: kWorldMin, y: kWorldMin);
       d.undo();
       d.redo();
       d.selectTable(t.id);

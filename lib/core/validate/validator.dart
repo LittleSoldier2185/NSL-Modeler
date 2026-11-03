@@ -7,6 +7,7 @@ import '../types/type_map.dart';
 import 'issue.dart';
 import 'naming.dart';
 import 'reserved_words.dart';
+import '../l10n/l10n.dart';
 
 /// ตรวจ schema ตาม dialect ที่เลือกในโปรเจกต์ — เรียงผลลัพธ์ error -> warning -> info
 List<Issue> validateProject(Project p) => _Validator(p).run();
@@ -58,32 +59,32 @@ class _Validator {
   void _tables() {
     final seen = <String, TableModel>{};
     for (final t in p.tables) {
-      final label = t.name.isEmpty ? '(ไม่มีชื่อ)' : t.name;
-      _checkName(t.name, 'ตาราง', t.id, null, label);
+      final label = t.name.isEmpty ? tr('(ไม่มีชื่อ)') : t.name;
+      _checkName(t.name, tr('ตาราง@@kind'), t.id, null, label);
 
       final key = t.name.toLowerCase();
       if (key.isNotEmpty) {
         if (seen.containsKey(key)) {
-          err('dup_table', 'ชื่อตารางซ้ำ', 'มีตารางชื่อ "$label" มากกว่าหนึ่งตาราง', table: t.id);
+          err('dup_table', tr('ชื่อตารางซ้ำ'), tr('มีตารางชื่อ "{0}" มากกว่าหนึ่งตาราง', [label]), table: t.id);
         }
         seen.putIfAbsent(key, () => t);
       }
 
       if (t.columns.isEmpty) {
-        err('no_columns', 'ตารางไม่มีคอลัมน์', '$label ไม่มีคอลัมน์ จึงไม่ถูกสร้างใน SQL', table: t.id);
+        err('no_columns', tr('ตารางไม่มีคอลัมน์'), tr('{0} ไม่มีคอลัมน์ จึงไม่ถูกสร้างใน SQL', [label]), table: t.id);
         continue;
       }
       if (!t.columns.any((c) => c.isPrimaryKey)) {
-        warn('no_pk', 'ไม่มี Primary Key', '$label ยังไม่มีคอลัมน์ที่เป็น PK', table: t.id);
+        warn('no_pk', tr('ไม่มี Primary Key'), tr('{0} ยังไม่มีคอลัมน์ที่เป็น PK', [label]), table: t.id);
       }
 
       final names = <String>{};
       var aiCount = 0;
       for (final c in t.columns) {
-        final cl = '$label.${c.name.isEmpty ? '(ไม่มีชื่อ)' : c.name}';
-        _checkName(c.name, 'คอลัมน์', t.id, c.id, cl);
+        final cl = tr('{0}.{1}', [label, c.name.isEmpty ? tr('(ไม่มีชื่อ)') : c.name]);
+        _checkName(c.name, tr('คอลัมน์@@kind'), t.id, c.id, cl);
         if (c.name.isNotEmpty && !names.add(c.name.toLowerCase())) {
-          err('dup_column', 'ชื่อคอลัมน์ซ้ำ', '$cl ซ้ำกับคอลัมน์อื่นในตารางเดียวกัน',
+          err('dup_column', tr('ชื่อคอลัมน์ซ้ำ'), tr('{0} ซ้ำกับคอลัมน์อื่นในตารางเดียวกัน', [cl]),
               table: t.id, column: c.id);
         }
         _checkType(t, c, cl);
@@ -94,8 +95,8 @@ class _Validator {
         _checkDefault(t, c, cl);
       }
       if (aiCount > 1 && (d == Dialect.mysql || d == Dialect.mssql || d == Dialect.sqlite)) {
-        err('ai_multiple', 'AUTO INCREMENT หลายคอลัมน์',
-            '$label มีคอลัมน์ AUTO INCREMENT $aiCount คอลัมน์ แต่ ${d.label} ใช้ได้ตารางละ 1 คอลัมน์',
+        err('ai_multiple', tr('AUTO INCREMENT หลายคอลัมน์'),
+            tr('{0} มีคอลัมน์ AUTO INCREMENT {1} คอลัมน์ แต่ {2} ใช้ได้ตารางละ 1 คอลัมน์', [label, aiCount, d.label]),
             table: t.id);
       }
     }
@@ -103,36 +104,36 @@ class _Validator {
 
   void _checkName(String name, String kind, String tableId, String? columnId, String label) {
     if (name.trim().isEmpty) {
-      err('empty_name', 'ชื่อ$kindว่าง', 'มี$kindที่ยังไม่ได้ตั้งชื่อ', table: tableId, column: columnId);
+      err('empty_name', tr('ชื่อ{0}ว่าง', [kind]), tr('มี{0}ที่ยังไม่ได้ตั้งชื่อ', [kind]), table: tableId, column: columnId);
       return;
     }
     final max = maxIdentifierLength(d);
     if (max != null && name.length > max) {
-      err('name_too_long', 'ชื่อ$kindยาวเกินไป',
-          '$label ยาว ${name.length} ตัวอักษร (${d.label} จำกัด $max)',
+      err('name_too_long', tr('ชื่อ{0}ยาวเกินไป', [kind]),
+          tr('{0} ยาว {1} ตัวอักษร ({2} จำกัด {3})', [label, name.length, d.label, max]),
           table: tableId, column: columnId);
     }
     if (isReservedWord(name, d)) {
-      warn('reserved_word', 'ชื่อชนกับ reserved word',
-          '"$name" เป็นคำสงวนของ SQL — ระบบ quote ให้แล้ว แต่ควรเลี่ยงเพื่อกันปัญหาตอนเขียนคำสั่งเอง',
+      warn('reserved_word', tr('ชื่อชนกับ reserved word'),
+          tr('"{0}" เป็นคำสงวนของ SQL — ระบบ quote ให้แล้ว แต่ควรเลี่ยงเพื่อกันปัญหาตอนเขียนคำสั่งเอง', [name]),
           table: tableId, column: columnId);
     }
     // รูปแบบการตั้งชื่อ: แนะนำ snake_case (ข้ามชื่อภาษาไทย/อักขระนอก ASCII ซึ่งแปลงไม่ได้)
     if (!hasNonAscii(name) && styleOf(name) != NameStyle.snake) {
       final fix = toSnakeCase(name);
-      info('naming_style', 'ชื่อไม่เป็น snake_case',
-          '$label${fix.isEmpty || fix == name ? '' : ' → แนะนำ "$fix"'} (รูปแบบ ${_styleLabel(styleOf(name))})',
+      info('naming_style', tr('ชื่อไม่เป็น snake_case'),
+          tr('{0}{1} (รูปแบบ {2})', [label, fix.isEmpty || fix == name ? '' : tr(' → แนะนำ "{0}"', [fix]), _styleLabel(styleOf(name))]),
           table: tableId, column: columnId);
     }
   }
 
   static String _styleLabel(NameStyle s) => switch (s) {
-        NameStyle.upperSnake => 'ตัวพิมพ์ใหญ่',
+        NameStyle.upperSnake => tr('ตัวพิมพ์ใหญ่'),
         NameStyle.camel => 'camelCase',
         NameStyle.pascal => 'PascalCase',
-        NameStyle.kebab => 'มีขีดกลาง',
-        NameStyle.spaced => 'มีช่องว่าง',
-        _ => 'อื่น ๆ',
+        NameStyle.kebab => tr('มีขีดกลาง'),
+        NameStyle.spaced => tr('มีช่องว่าง'),
+        _ => tr('อื่น ๆ'),
       };
 
   /// ตารางส่วนใหญ่ใช้พหูพจน์ (users) หรือเอกพจน์ (user) แต่บางตารางไม่ตรง
@@ -147,8 +148,8 @@ class _Validator {
     final majority = majorityIsPlural ? plural.length : singular.length;
     if (majority * 3 < named.length * 2 || minority.isEmpty) return;
     for (final t in minority) {
-      info('naming_number', 'ชื่อตารางไม่สม่ำเสมอ',
-          '${t.name} เป็น${majorityIsPlural ? 'เอกพจน์' : 'พหูพจน์'} แต่ตารางอื่นส่วนใหญ่ใช้${majorityIsPlural ? 'พหูพจน์' : 'เอกพจน์'}',
+      info('naming_number', tr('ชื่อตารางไม่สม่ำเสมอ'),
+          tr('{0} เป็น{1} แต่ตารางอื่นส่วนใหญ่ใช้{2}', [t.name, majorityIsPlural ? tr('เอกพจน์') : tr('พหูพจน์'), majorityIsPlural ? 'พหูพจน์' : 'เอกพจน์']),
           table: t.id);
     }
   }
@@ -157,15 +158,15 @@ class _Validator {
     if (c.type == DataType.varchar) {
       final n = c.length ?? 255;
       if (n <= 0) {
-        err('bad_length', 'ความยาวไม่ถูกต้อง', '$label: VARCHAR ต้องยาวอย่างน้อย 1',
+        err('bad_length', tr('ความยาวไม่ถูกต้อง'), tr('{0}: VARCHAR ต้องยาวอย่างน้อย 1', [label]),
             table: t.id, column: c.id);
       } else if (d == Dialect.mssql && n > 4000) {
-        err('bad_length', 'ความยาวเกินขีดจำกัด',
-            '$label: NVARCHAR($n) เกิน 4000 — ใช้ชนิด TEXT (NVARCHAR(MAX)) แทน',
+        err('bad_length', tr('ความยาวเกินขีดจำกัด'),
+            tr('{0}: NVARCHAR({1}) เกิน 4000 — ใช้ชนิด TEXT (NVARCHAR(MAX)) แทน', [label, n]),
             table: t.id, column: c.id);
       } else if (d == Dialect.mysql && n > 16383) {
-        err('bad_length', 'ความยาวเกินขีดจำกัด',
-            '$label: VARCHAR($n) เกิน 16383 (utf8mb4) — ใช้ชนิด TEXT แทน',
+        err('bad_length', tr('ความยาวเกินขีดจำกัด'),
+            tr('{0}: VARCHAR({1}) เกิน 16383 (utf8mb4) — ใช้ชนิด TEXT แทน', [label, n]),
             table: t.id, column: c.id);
       }
     }
@@ -179,12 +180,12 @@ class _Validator {
         Dialect.sqlite => 1000,
       };
       if (prec < 1 || prec > maxPrec) {
-        err('bad_precision', 'Precision ไม่ถูกต้อง',
-            '$label: DECIMAL($prec,$scale) — ${d.label} รองรับ precision 1–$maxPrec',
+        err('bad_precision', tr('Precision ไม่ถูกต้อง'),
+            tr('{0}: DECIMAL({1},{2}) — {3} รองรับ precision 1–{4}', [label, prec, scale, d.label, maxPrec]),
             table: t.id, column: c.id);
       } else if (scale < 0 || scale > prec) {
-        err('bad_precision', 'Scale ไม่ถูกต้อง',
-            '$label: DECIMAL($prec,$scale) — scale ต้องอยู่ระหว่าง 0 ถึง precision',
+        err('bad_precision', tr('Scale ไม่ถูกต้อง'),
+            tr('{0}: DECIMAL({1},{2}) — scale ต้องอยู่ระหว่าง 0 ถึง precision', [label, prec, scale]),
             table: t.id, column: c.id);
       }
     }
@@ -192,25 +193,25 @@ class _Validator {
 
   void _checkAutoIncrement(TableModel t, ColumnModel c, String label) {
     if (!isIntegerType(c.type)) {
-      err('ai_type', 'AUTO INCREMENT ใช้กับชนิดนี้ไม่ได้',
-          '$label ต้องเป็นชนิดจำนวนเต็ม (INT/BIGINT/SMALLINT)',
+      err('ai_type', tr('AUTO INCREMENT ใช้กับชนิดนี้ไม่ได้'),
+          tr('{0} ต้องเป็นชนิดจำนวนเต็ม (INT/BIGINT/SMALLINT)', [label]),
           table: t.id, column: c.id);
       return;
     }
     if (c.defaultValue != null && c.defaultValue!.trim().isNotEmpty) {
-      warn('ai_default', 'ค่าเริ่มต้นจะถูกข้าม', '$label เป็น AUTO INCREMENT จึงไม่ใส่ DEFAULT ใน SQL',
+      warn('ai_default', tr('ค่าเริ่มต้นจะถูกข้าม'), tr('{0} เป็น AUTO INCREMENT จึงไม่ใส่ DEFAULT ใน SQL', [label]),
           table: t.id, column: c.id);
     }
     if (d == Dialect.mysql && !_isKeyColumn(t, c)) {
-      err('ai_key', 'AUTO INCREMENT ต้องเป็น key',
-          '$label: MySQL บังคับให้คอลัมน์ AUTO_INCREMENT เป็น PK, UNIQUE หรืออยู่ใน INDEX',
+      err('ai_key', tr('AUTO INCREMENT ต้องเป็น key'),
+          tr('{0}: MySQL บังคับให้คอลัมน์ AUTO_INCREMENT เป็น PK, UNIQUE หรืออยู่ใน INDEX', [label]),
           table: t.id, column: c.id);
     }
     if (d == Dialect.sqlite) {
       final pk = t.columns.where((x) => x.isPrimaryKey).toList();
       if (!(pk.length == 1 && pk.first.id == c.id)) {
-        warn('ai_ignored', 'AUTOINCREMENT จะถูกข้าม',
-            '$label: SQLite ใช้ AUTOINCREMENT ได้เฉพาะ PK คอลัมน์เดียวเท่านั้น',
+        warn('ai_ignored', tr('AUTOINCREMENT จะถูกข้าม'),
+            tr('{0}: SQLite ใช้ AUTOINCREMENT ได้เฉพาะ PK คอลัมน์เดียวเท่านั้น', [label]),
             table: t.id, column: c.id);
       }
     }
@@ -226,20 +227,20 @@ class _Validator {
         !isFunc &&
         v.toUpperCase() != 'NULL' &&
         !RegExp(r'^[+-]?\d+(\.\d+)?$').hasMatch(v)) {
-      err('bad_default', 'ค่าเริ่มต้นไม่ตรงกับชนิด', '$label: "$v" ไม่ใช่ตัวเลข',
+      err('bad_default', tr('ค่าเริ่มต้นไม่ตรงกับชนิด'), tr('{0}: "{1}" ไม่ใช่ตัวเลข', [label, v]),
           table: t.id, column: c.id);
     }
     if (c.type == DataType.boolean &&
         !const {'TRUE', 'FALSE', '0', '1', 'NULL'}.contains(v.toUpperCase())) {
-      err('bad_default', 'ค่าเริ่มต้นไม่ตรงกับชนิด', '$label: BOOLEAN ใช้ได้เฉพาะ true / false / 0 / 1',
+      err('bad_default', tr('ค่าเริ่มต้นไม่ตรงกับชนิด'), tr('{0}: BOOLEAN ใช้ได้เฉพาะ true / false / 0 / 1', [label]),
           table: t.id, column: c.id);
     }
     if (d == Dialect.mysql &&
         (c.type == DataType.text || c.type == DataType.blob || c.type == DataType.json) &&
         !isFunc &&
         v.toUpperCase() != 'NULL') {
-      err('mysql_blob_default', 'ค่าเริ่มต้นใช้ไม่ได้',
-          '$label: MySQL ไม่ให้ DEFAULT ค่าคงที่กับ TEXT/BLOB/JSON',
+      err('mysql_blob_default', tr('ค่าเริ่มต้นใช้ไม่ได้'),
+          tr('{0}: MySQL ไม่ให้ DEFAULT ค่าคงที่กับ TEXT/BLOB/JSON', [label]),
           table: t.id, column: c.id);
     }
   }
@@ -253,8 +254,8 @@ class _Validator {
       final cc = child?.columnById(r.fromColumnId);
       final pc = parent?.columnById(r.toColumnId);
       if (child == null || parent == null || cc == null || pc == null) {
-        err('fk_dangling', 'FK ชี้ไปที่ไม่มีอยู่',
-            'ความสัมพันธ์นี้อ้างถึงตารางหรือคอลัมน์ที่ถูกลบไปแล้ว — จะถูกข้ามตอน Export',
+        err('fk_dangling', tr('FK ชี้ไปที่ไม่มีอยู่'),
+            tr('ความสัมพันธ์นี้อ้างถึงตารางหรือคอลัมน์ที่ถูกลบไปแล้ว — จะถูกข้ามตอน Export'),
             table: child?.id ?? parent?.id, relation: r.id);
         continue;
       }
@@ -262,32 +263,32 @@ class _Validator {
       final to = '${parent.name}.${pc.name}';
 
       if (cc.type != pc.type) {
-        warn('fk_type_mismatch', 'ชนิดข้อมูลไม่ตรงกัน',
+        warn('fk_type_mismatch', tr('ชนิดข้อมูลไม่ตรงกัน'),
             '$from (${cc.type.name.toUpperCase()}) ≠ $to (${pc.type.name.toUpperCase()})',
             table: child.id, column: cc.id, relation: r.id);
       }
 
       if (!_isUniqueColumn(parent, pc)) {
-        final msg = '$to ไม่ใช่ PK/UNIQUE จึงถูกอ้างถึงด้วย FK ไม่ได้';
+        final msg = tr('{0} ไม่ใช่ PK/UNIQUE จึงถูกอ้างถึงด้วย FK ไม่ได้', [to]);
         if (d == Dialect.mysql) {
-          warn('fk_target_not_unique', 'FK ชี้คอลัมน์ที่ไม่ unique',
-              '$msg (MySQL ยอมถ้ามี INDEX แต่ไม่แนะนำ)',
+          warn('fk_target_not_unique', tr('FK ชี้คอลัมน์ที่ไม่ unique'),
+              tr('{0} (MySQL ยอมถ้ามี INDEX แต่ไม่แนะนำ)', [msg]),
               table: child.id, column: cc.id, relation: r.id);
         } else {
-          err('fk_target_not_unique', 'FK ชี้คอลัมน์ที่ไม่ unique', msg,
+          err('fk_target_not_unique', tr('FK ชี้คอลัมน์ที่ไม่ unique'), msg,
               table: child.id, column: cc.id, relation: r.id);
         }
       }
 
       if ((r.onDelete == RefAction.setNull || r.onUpdate == RefAction.setNull) &&
           (cc.notNull || cc.isPrimaryKey)) {
-        err('fk_set_null_notnull', 'SET NULL กับคอลัมน์ NOT NULL',
-            '$from เป็น NOT NULL/PK แต่ตั้ง ON DELETE/UPDATE เป็น SET NULL',
+        err('fk_set_null_notnull', tr('SET NULL กับคอลัมน์ NOT NULL'),
+            tr('{0} เป็น NOT NULL/PK แต่ตั้ง ON DELETE/UPDATE เป็น SET NULL', [from]),
             table: child.id, column: cc.id, relation: r.id);
       }
 
       if (!_isIndexedFirst(child, cc)) {
-        info('fk_no_index', 'คำแนะนำ', '$from ยังไม่มี INDEX — การ JOIN และลบแถวแม่จะช้าเมื่อข้อมูลเยอะ',
+        info('fk_no_index', tr('คำแนะนำ'), tr('{0} ยังไม่มี INDEX — การ JOIN และลบแถวแม่จะช้าเมื่อข้อมูลเยอะ', [from]),
             table: child.id, column: cc.id, relation: r.id);
       }
     }
@@ -301,28 +302,28 @@ class _Validator {
       final local = <String>{};
       for (final i in t.indexes) {
         if (i.name.trim().isEmpty) {
-          err('empty_name', 'ชื่อ INDEX ว่าง', 'ตาราง ${t.name} มี INDEX ที่ยังไม่ได้ตั้งชื่อ', table: t.id);
+          err('empty_name', tr('ชื่อ INDEX ว่าง'), tr('ตาราง {0} มี INDEX ที่ยังไม่ได้ตั้งชื่อ', [t.name]), table: t.id);
           continue;
         }
         if (i.columnIds.isEmpty || i.columnIds.any((id) => t.columnById(id) == null)) {
-          err('index_missing_column', 'INDEX อ้างคอลัมน์ที่ไม่มี',
-              '${i.name} บนตาราง ${t.name} ไม่มีคอลัมน์ที่ใช้ได้ — จะถูกข้ามตอน Export',
+          err('index_missing_column', tr('INDEX อ้างคอลัมน์ที่ไม่มี'),
+              tr('{0} บนตาราง {1} ไม่มีคอลัมน์ที่ใช้ได้ — จะถูกข้ามตอน Export', [i.name, t.name]),
               table: t.id);
         }
         final key = i.name.toLowerCase();
         final perSchema = d == Dialect.postgres || d == Dialect.sqlite;
         final dup = perSchema ? global.containsKey(key) : !local.add(key);
         if (dup) {
-          err('dup_index', 'ชื่อ INDEX ซ้ำ',
+          err('dup_index', tr('ชื่อ INDEX ซ้ำ'),
               perSchema
-                  ? '"${i.name}" ซ้ำกับ INDEX อื่น (${d.label} บังคับชื่อไม่ซ้ำทั้งฐานข้อมูล)'
-                  : '"${i.name}" ซ้ำในตาราง ${t.name}',
+                  ? tr('"{0}" ซ้ำกับ INDEX อื่น ({1} บังคับชื่อไม่ซ้ำทั้งฐานข้อมูล)', [i.name, d.label])
+                  : tr('"{0}" ซ้ำในตาราง {1}', [i.name, t.name]),
               table: t.id);
         }
         global.putIfAbsent(key, () => t);
         final max = maxIdentifierLength(d);
         if (max != null && i.name.length > max) {
-          err('name_too_long', 'ชื่อ INDEX ยาวเกินไป', '${i.name} ยาวเกิน $max ตัวอักษร', table: t.id);
+          err('name_too_long', tr('ชื่อ INDEX ยาวเกินไป'), tr('{0} ยาวเกิน {1} ตัวอักษร', [i.name, max]), table: t.id);
         }
       }
     }
@@ -365,8 +366,7 @@ class _Validator {
       final child = p.tableById(r.fromTableId)!;
       final parent = p.tableById(r.toTableId)!;
       err('mssql_cascade_paths', 'Multiple cascade paths',
-          'FK ${child.name} → ${parent.name} อาจทำให้ลบ/แก้แล้วลามถึงตารางเดียวกันหลายทางหรือวนเป็นวง '
-          '— SQL Server จะ error ให้เปลี่ยน ON DELETE/UPDATE เป็น NO ACTION อย่างน้อยหนึ่งเส้น',
+          tr('FK {0} → {1} อาจทำให้ลบ/แก้แล้วลามถึงตารางเดียวกันหลายทางหรือวนเป็นวง — SQL Server จะ error ให้เปลี่ยน ON DELETE/UPDATE เป็น NO ACTION อย่างน้อยหนึ่งเส้น', [child.name, parent.name]),
           table: child.id, column: r.fromColumnId, relation: r.id);
     }
   }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../core/parser/sql_importer.dart';
 import 'theme.dart';
+import '../core/l10n/l10n.dart';
 
 /// พรีวิวผลการ import: จำนวนที่อ่านได้ + รายการที่ข้าม/ไม่แน่ใจ ก่อนยืนยันแทนที่โปรเจกต์
 /// คืน true เมื่อผู้ใช้กด "นำเข้า"
@@ -19,25 +20,25 @@ class ImportPreviewDialog extends StatelessWidget {
     final empty = p.tables.isEmpty;
 
     return AlertDialog(
-      title: Text('นำเข้า $fileName'),
+      title: Text(tr('นำเข้า {0}', [fileName])),
       content: SizedBox(
         width: 520,
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(
             empty
-                ? 'ไม่พบ CREATE TABLE ในไฟล์นี้'
-                : 'พบ ${p.tables.length} ตาราง · $cols คอลัมน์ · ${p.relations.length} ความสัมพันธ์ FK\n'
-                    'ตรวจพบ dialect: ${result.detected.label}',
+                ? tr('ไม่พบ CREATE TABLE ในไฟล์นี้')
+                : tr('พบ {0} ตาราง · {1} คอลัมน์ · {2} ความสัมพันธ์ FK\nตรวจพบ dialect: {3}',
+                    [p.tables.length, cols, p.relations.length, result.detected.label]),
             style: const TextStyle(fontSize: 13.5, height: 1.5),
           ),
           if (!empty) ...[
             const SizedBox(height: 6),
-            const Text('การนำเข้าจะแทนที่โปรเจกต์ที่เปิดอยู่',
+            Text(tr('การนำเข้าจะแทนที่โปรเจกต์ที่เปิดอยู่'),
                 style: TextStyle(fontSize: 12.5, color: C.muted)),
           ],
           if (warnings.isNotEmpty || infos.isNotEmpty) ...[
             const SizedBox(height: 14),
-            Text(warnings.isEmpty ? 'ข้อมูลเพิ่มเติม' : 'สิ่งที่ควรตรวจ (${warnings.length})',
+            Text(warnings.isEmpty ? tr('ข้อมูลเพิ่มเติม') : tr('สิ่งที่ควรตรวจ ({0})', [warnings.length]),
                 style: const TextStyle(fontWeight: FontWeight.w600)),
             const SizedBox(height: 6),
             Flexible(
@@ -61,10 +62,10 @@ class ImportPreviewDialog extends StatelessWidget {
         ]),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('ยกเลิก')),
+        TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('ยกเลิก'))),
         FilledButton(
           onPressed: empty ? null : () => Navigator.pop(context, true),
-          child: const Text('นำเข้า'),
+          child: Text(tr('นำเข้า')),
         ),
       ],
     );
@@ -77,7 +78,7 @@ class ImportPreviewDialog extends StatelessWidget {
           const SizedBox(width: 7),
           Expanded(
             child: Text(
-              n.line > 0 ? 'บรรทัด ${n.line}: ${n.message}' : n.message,
+              n.line > 0 ? tr('บรรทัด {0}: {1}', [n.line, n.message]) : n.message,
               style: TextStyle(fontSize: 12.5, color: color),
             ),
           ),

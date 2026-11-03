@@ -6,6 +6,7 @@ import '../models/project.dart';
 import '../models/relation_model.dart';
 import '../models/table_model.dart';
 import 'sql_lexer.dart';
+import '../l10n/l10n.dart';
 
 /// หมายเหตุระหว่าง import (ส่วนที่ข้าม / ไม่แน่ใจ) เพื่อให้ผู้ใช้รู้ว่าอะไรไม่ได้ถูกอ่าน
 class ImportNote {
@@ -15,7 +16,7 @@ class ImportNote {
   final bool warning;
 
   @override
-  String toString() => 'บรรทัด $line: $message';
+  String toString() => tr('บรรทัด {0}: {1}', [line, message]);
 }
 
 class ImportResult {
@@ -74,7 +75,7 @@ class _Cur {
   bool get done => i >= t.length;
   Tok? at(int k) => i + k < t.length ? t[i + k] : null;
   Tok next() {
-    if (done) throw const _ParseError('SQL จบก่อนครบประโยค');
+    if (done) throw _ParseError(tr('SQL จบก่อนครบประโยค'));
     return t[i++];
   }
 
@@ -151,14 +152,14 @@ class _Importer {
       try {
         _statement(st);
       } on _ParseError catch (e) {
-        note(st.first.line, 'อ่านคำสั่งไม่ได้ (${e.message}) — ข้าม');
+        note(st.first.line, tr('อ่านคำสั่งไม่ได้ ({0}) — ข้าม', [e.message]));
       }
     }
     if (lex.error != null) {
-      note(lex.errorLine, '${lex.error} — ไฟล์ถูกอ่านถึงตรงนี้เท่านั้น');
+      note(lex.errorLine, tr('{0} — ไฟล์ถูกอ่านถึงตรงนี้เท่านั้น', [lex.error]));
     }
     for (final e in skipped.entries) {
-      note(0, 'ข้าม ${e.value} คำสั่ง ${e.key}', warning: false);
+      note(0, tr('ข้าม {0} คำสั่ง {1}', [e.value, e.key]), warning: false);
     }
     _resolveFks();
 
@@ -269,7 +270,7 @@ class _Importer {
       c.i++;
       return _extendedProperty(c, line);
     }
-    _skip(st, w.isEmpty ? '(ไม่ทราบ)' : (w == 'ALTER' || w == 'DROP' ? '$w ${c.at(0)?.text.toUpperCase() ?? ''}'.trim() : w));
+    _skip(st, w.isEmpty ? tr('(ไม่ทราบ)') : (w == 'ALTER' || w == 'DROP' ? '$w ${c.at(0)?.text.toUpperCase() ?? ''}'.trim() : w));
   }
 
   void _skip(List<Tok> st, String what) {
@@ -282,19 +283,19 @@ class _Importer {
   /// ชื่อวัตถุ อาจมี schema นำหน้า (a.b.c) — เอาส่วนสุดท้าย
   String _objectName(_Cur c) {
     final t = c.next();
-    if (!t.isName) throw _ParseError('คาดว่าเป็นชื่อ แต่พบ "${t.text}"');
+    if (!t.isName) throw _ParseError(tr('คาดว่าเป็นชื่อ แต่พบ "{0}"', [t.text]));
     var name = t.text;
     while (c.isSym('.')) {
       c.i++;
       final n = c.next();
-      if (!n.isName) throw _ParseError('ชื่อหลังจุดไม่ถูกต้อง');
+      if (!n.isName) throw _ParseError(tr('ชื่อหลังจุดไม่ถูกต้อง'));
       name = n.text;
     }
     return name;
   }
 
   List<Tok> _balanced(_Cur c) {
-    if (!c.isSym('(')) throw const _ParseError('คาดว่าเป็น (');
+    if (!c.isSym('(')) throw _ParseError(tr('คาดว่าเป็น ('));
     c.i++;
     var depth = 1;
     final start = c.i;
@@ -311,7 +312,7 @@ class _Importer {
       }
       c.i++;
     }
-    throw const _ParseError('วงเล็บไม่ครบคู่');
+    throw _ParseError(tr('วงเล็บไม่ครบคู่'));
   }
 
   List<List<Tok>> _splitTop(List<Tok> toks) {
@@ -366,11 +367,11 @@ class _Importer {
     c.eatWords(['IF', 'NOT', 'EXISTS']);
     final name = _objectName(c);
     if (!c.isSym('(')) {
-      note(line, 'CREATE TABLE $name ... AS/LIKE ไม่รองรับ — ข้าม');
+      note(line, tr('CREATE TABLE {0} ... AS/LIKE ไม่รองรับ — ข้าม', [name]));
       return;
     }
     if (byName.containsKey(name.toLowerCase())) {
-      note(line, 'ตาราง $name ถูกสร้างซ้ำ — ใช้ครั้งแรก ข้ามครั้งนี้');
+      note(line, tr('ตาราง {0} ถูกสร้างซ้ำ — ใช้ครั้งแรก ข้ามครั้งนี้', [name]));
       return;
     }
     final body = _balanced(c);
@@ -382,7 +383,7 @@ class _Importer {
       try {
         _tableItem(t, item, line);
       } on _ParseError catch (e) {
-        note(item.first.line, '$name: อ่านรายการ "${item.first.text}…" ไม่ได้ (${e.message}) — ข้าม');
+        note(item.first.line, tr('{0}: อ่านรายการ "{1}…" ไม่ได้ ({2}) — ข้าม', [name, item.first.text, e.message]));
       }
     }
 
@@ -400,7 +401,7 @@ class _Importer {
       }
       c.i++;
     }
-    if (t.columns.isEmpty) note(line, 'ตาราง $name ไม่มีคอลัมน์ที่อ่านได้');
+    if (t.columns.isEmpty) note(line, tr('ตาราง {0} ไม่มีคอลัมน์ที่อ่านได้', [name]));
   }
 
   void _tableItem(TableModel t, List<Tok> item, int line) {
@@ -420,11 +421,11 @@ class _Importer {
         if (looksIndex) return _constraint(t, c, null, line);
       }
       if (u == 'FULLTEXT' || u == 'SPATIAL') {
-        note(line, '${t.name}: ข้าม $u INDEX');
+        note(line, tr('{0}: ข้าม {1} INDEX', [t.name, u]));
         return;
       }
       if (u == 'EXCLUDE' || u == 'LIKE' || u == 'PERIOD') {
-        note(line, '${t.name}: ข้ามข้อกำหนด $u');
+        note(line, tr('{0}: ข้ามข้อกำหนด {1}', [t.name, u]));
         return;
       }
     }
@@ -440,7 +441,7 @@ class _Importer {
       for (final col in _colList(c)) {
         final m = _findCol(t, col.name);
         if (m == null) {
-          note(line, '${t.name}: PRIMARY KEY ชี้คอลัมน์ "${col.name}" ที่ไม่มี');
+          note(line, tr('{0}: PRIMARY KEY ชี้คอลัมน์ "{1}" ที่ไม่มี', [t.name, col.name]));
           continue;
         }
         m.isPrimaryKey = true;
@@ -461,7 +462,7 @@ class _Importer {
     if (c.eatWords(['FOREIGN', 'KEY'])) {
       if (c.at(0)?.isName == true && c.isSym('(', 1)) c.i++;
       final cols = _colList(c).map((x) => x.name).toList();
-      if (!c.eatWord('REFERENCES')) throw const _ParseError('FOREIGN KEY ไม่มี REFERENCES');
+      if (!c.eatWord('REFERENCES')) throw _ParseError(tr('FOREIGN KEY ไม่มี REFERENCES'));
       final ref = _references(c);
       _queueFk(line, t.name, cols, ref, cname);
       return;
@@ -473,7 +474,7 @@ class _Importer {
       _addIndex(t, _colList(c), iname, false, line);
       return;
     }
-    throw _ParseError('ข้อกำหนด "${c.at(0)?.text}" ไม่รองรับ');
+    throw _ParseError(tr('ข้อกำหนด "{0}" ไม่รองรับ', [c.at(0)?.text]));
   }
 
   void _unique(TableModel t, List<({String? name, bool ai})> cols, String? iname, int line) {
@@ -492,7 +493,7 @@ class _Importer {
     for (final col in cols) {
       final m = _findCol(t, col.name);
       if (m == null) {
-        note(line, '${t.name}: INDEX ${iname ?? ''} ใช้ expression หรือคอลัมน์ที่ไม่มี — ข้าม');
+        note(line, tr('{0}: INDEX {1} ใช้ expression หรือคอลัมน์ที่ไม่มี — ข้าม', [t.name, iname ?? '']));
         return;
       }
       ids.add(m.id);
@@ -515,7 +516,7 @@ class _Importer {
 
   void _column(TableModel t, _Cur c, int line) {
     final nameTok = c.next();
-    if (!nameTok.isName) throw _ParseError('ชื่อคอลัมน์ไม่ถูกต้อง "${nameTok.text}"');
+    if (!nameTok.isName) throw _ParseError(tr('ชื่อคอลัมน์ไม่ถูกต้อง "{0}"', [nameTok.text]));
     final col = ColumnModel(id: id('c'), name: nameTok.text);
     final ty = _type(c, line, t.name, col.name);
     col.type = ty.type;
@@ -566,7 +567,7 @@ class _Importer {
           col.autoIncrement = true;
           if (c.isSym('(')) _balanced(c);
         } else {
-          note(line, '${t.name}.${col.name}: คอลัมน์ที่คำนวณจากสูตรไม่รองรับ — เก็บเป็นคอลัมน์ปกติ');
+          note(line, tr('{0}.{1}: คอลัมน์ที่คำนวณจากสูตรไม่รองรับ — เก็บเป็นคอลัมน์ปกติ', [t.name, col.name]));
           if (c.isSym('(')) _balanced(c);
           c.eatWord('STORED');
           c.eatWord('VIRTUAL');
@@ -596,7 +597,7 @@ class _Importer {
       }
     }
     if (_findCol(t, col.name) != null) {
-      note(line, '${t.name}: คอลัมน์ "${col.name}" ซ้ำ — ข้ามตัวหลัง');
+      note(line, tr('{0}: คอลัมน์ "{1}" ซ้ำ — ข้ามตัวหลัง', [t.name, col.name]));
       return;
     }
     t.columns.add(col);
@@ -635,7 +636,7 @@ class _Importer {
         if (t.kind == Tk.word && t.text.toUpperCase() == 'NULL') value = null;
       }
     } else {
-      throw _ParseError('ค่า DEFAULT ไม่ถูกต้อง "${t.text}"');
+      throw _ParseError(tr('ค่า DEFAULT ไม่ถูกต้อง "{0}"', [t.text]));
     }
     // PostgreSQL cast: 'x'::character varying
     while (c.isSym('::')) {
@@ -680,7 +681,7 @@ class _Importer {
 
   ({DataType type, int? length, int? scale, bool ai}) _type(_Cur c, int line, String table, String col) {
     final first = c.next();
-    if (!first.isName) throw _ParseError('คาดว่าเป็นชนิดข้อมูล แต่พบ "${first.text}"');
+    if (!first.isName) throw _ParseError(tr('คาดว่าเป็นชนิดข้อมูล แต่พบ "{0}"', [first.text]));
     var base = first.text.toUpperCase();
 
     if (base == 'DOUBLE' && c.isWord('PRECISION')) {
@@ -717,7 +718,7 @@ class _Importer {
     if (c.eatWords(['WITHOUT', 'TIME', 'ZONE'])) tz = false;
     while (c.isSym('[') && c.isSym(']', 1)) {
       c.i += 2;
-      note(line, '$table.$col: ชนิด array ไม่รองรับ — เก็บเป็น TEXT');
+      note(line, tr('{0}.{1}: ชนิด array ไม่รองรับ — เก็บเป็น TEXT', [table, col]));
       base = 'TEXT';
     }
     // ตัวขยายชนิดที่ไม่กระทบโมเดล
@@ -822,7 +823,7 @@ class _Importer {
       case 'JSONB':
         return r(DataType.json);
     }
-    note(line, '$table.$col: ไม่รู้จักชนิด "${first.text}" — เก็บเป็น TEXT');
+    note(line, tr('{0}.{1}: ไม่รู้จักชนิด "{2}" — เก็บเป็น TEXT', [table, col, first.text]));
     return r(DataType.text);
   }
 
@@ -868,10 +869,10 @@ class _Importer {
     if (c.eatWords(['NO', 'ACTION'])) return RefAction.noAction;
     if (c.eatWords(['SET', 'NULL'])) return RefAction.setNull;
     if (c.eatWords(['SET', 'DEFAULT'])) {
-      note(c.at(-1)?.line ?? 0, 'SET DEFAULT ไม่รองรับ — ใช้ NO ACTION แทน');
+      note(c.at(-1)?.line ?? 0, tr('SET DEFAULT ไม่รองรับ — ใช้ NO ACTION แทน'));
       return RefAction.noAction;
     }
-    throw const _ParseError('action ของ FK ไม่ถูกต้อง');
+    throw _ParseError(tr('action ของ FK ไม่ถูกต้อง'));
   }
 
   void _queueFk(int line, String child, List<String?> cols, _Ref ref, String? name) {
@@ -893,7 +894,7 @@ class _Importer {
       final parent = byName[p.parentTable.toLowerCase()];
       if (child == null) continue;
       if (parent == null) {
-        note(p.line, 'FK ${p.childTable} → ${p.parentTable}: ไม่พบตาราง ${p.parentTable} ในไฟล์ — ข้าม');
+        note(p.line, tr('FK {0} → {1}: ไม่พบตาราง {2} ในไฟล์ — ข้าม', [p.childTable, p.parentTable, p.parentTable]));
         continue;
       }
       var parentCols = p.parentCols;
@@ -901,17 +902,17 @@ class _Importer {
         parentCols = [for (final c in parent.columns) if (c.isPrimaryKey) c.name];
       }
       if (parentCols.length != p.childCols.length || parentCols.isEmpty) {
-        note(p.line, 'FK ${p.childTable} → ${p.parentTable}: จำนวนคอลัมน์ไม่ตรงกัน — ข้าม');
+        note(p.line, tr('FK {0} → {1}: จำนวนคอลัมน์ไม่ตรงกัน — ข้าม', [p.childTable, p.parentTable]));
         continue;
       }
       if (p.childCols.length > 1) {
-        note(p.line, 'FK หลายคอลัมน์ ${p.childTable} → ${p.parentTable}: แยกเป็น FK ทีละคอลัมน์');
+        note(p.line, tr('FK หลายคอลัมน์ {0} → {1}: แยกเป็น FK ทีละคอลัมน์', [p.childTable, p.parentTable]));
       }
       for (var k = 0; k < p.childCols.length; k++) {
         final cc = _findCol(child, p.childCols[k]);
         final pc = _findCol(parent, parentCols[k]);
         if (cc == null || pc == null) {
-          note(p.line, 'FK ${p.childTable}.${p.childCols[k]} → ${p.parentTable}.${parentCols[k]}: ไม่พบคอลัมน์ — ข้าม');
+          note(p.line, tr('FK {0}.{1} → {2}.{3}: ไม่พบคอลัมน์ — ข้าม', [p.childTable, p.childCols[k], p.parentTable, parentCols[k]]));
           continue;
         }
         final dup = _relations.any((r) =>
@@ -951,7 +952,7 @@ class _Importer {
         continue;
       }
       if (t == null) {
-        note(line, 'ALTER TABLE $name: ไม่พบตาราง $name ในไฟล์ — ข้าม');
+        note(line, tr('ALTER TABLE {0}: ไม่พบตาราง {1} ในไฟล์ — ข้าม', [name, name]));
         return;
       }
       try {
@@ -967,7 +968,7 @@ class _Importer {
           _column(t, a, line);
         }
       } on _ParseError catch (e) {
-        note(line, 'ALTER TABLE $name: อ่านไม่ได้ (${e.message}) — ข้าม');
+        note(line, tr('ALTER TABLE {0}: อ่านไม่ได้ ({1}) — ข้าม', [name, e.message]));
       }
     }
   }
@@ -979,14 +980,14 @@ class _Importer {
     c.eatWords(['IF', 'NOT', 'EXISTS']);
     String? iname;
     if (!c.isWord('ON')) iname = _objectName(c);
-    if (!c.eatWord('ON')) throw const _ParseError('CREATE INDEX ไม่มี ON');
+    if (!c.eatWord('ON')) throw _ParseError(tr('CREATE INDEX ไม่มี ON'));
     c.eatWord('ONLY');
     final tname = _objectName(c);
     final t = byName[tname.toLowerCase()];
     if (c.eatWord('USING')) c.next();
     final cols = _colList(c);
     if (t == null) {
-      note(line, 'INDEX ${iname ?? ''}: ไม่พบตาราง $tname ในไฟล์ — ข้าม');
+      note(line, tr('INDEX {0}: ไม่พบตาราง {1} ในไฟล์ — ข้าม', [iname ?? '', tname]));
       return;
     }
     if (unique && cols.length == 1 && iname == null) {
@@ -1010,7 +1011,7 @@ class _Importer {
     do {
       parts.add(c.next().text);
     } while (c.eatSym('.'));
-    if (!c.eatWord('IS')) throw const _ParseError('COMMENT ON ไม่มี IS');
+    if (!c.eatWord('IS')) throw _ParseError(tr('COMMENT ON ไม่มี IS'));
     final s = c.next();
     final text = s.kind == Tk.string ? s.text : '';
     if (isTable) {

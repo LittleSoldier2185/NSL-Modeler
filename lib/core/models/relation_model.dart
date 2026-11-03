@@ -1,3 +1,4 @@
+import 'color_utils.dart';
 import 'enums.dart';
 
 /// FK: fromTable.fromColumn (ลูก) -> toTable.toColumn (แม่)
@@ -11,7 +12,11 @@ class RelationModel {
     this.onDelete = RefAction.noAction,
     this.onUpdate = RefAction.noAction,
     this.name,
+    this.color,
   });
+
+  /// สีเส้นของความสัมพันธ์นี้ (ARGB) — null = ใช้สีเส้นเริ่มต้นของโปรเจกต์/ธีม
+  int? color;
 
   String id;
   String fromTableId;
@@ -31,6 +36,7 @@ class RelationModel {
         'onDelete': onDelete.name,
         'onUpdate': onUpdate.name,
         if (name != null) 'name': name,
+        if (color != null) 'color': color,
       };
 
   factory RelationModel.fromJson(Map<String, dynamic> j) => RelationModel(
@@ -42,5 +48,6 @@ class RelationModel {
         onDelete: RefAction.values.byName(j['onDelete'] as String? ?? 'noAction'),
         onUpdate: RefAction.values.byName(j['onUpdate'] as String? ?? 'noAction'),
         name: j['name'] as String?,
+        color: parseArgb(j['color']),
       );
 }

@@ -1,6 +1,7 @@
 import '../models/column_model.dart';
 import '../models/project.dart';
 import '../types/type_label.dart';
+import '../l10n/l10n.dart';
 
 /// Data dictionary เป็น Markdown: ตาราง -> คอลัมน์ / FK ขาออก / FK ขาเข้า / INDEX
 /// ใช้ส่งงานหรือแปะใน README — ผลลัพธ์คงที่ ไม่มีวันที่
@@ -9,15 +10,15 @@ String exportDataDictionary(Project p) {
   b.writeln('# ${_inline(p.name)} — Data Dictionary');
   b.writeln();
   b.writeln('- Dialect: ${p.dialect.label}');
-  b.writeln('- ${p.tables.length} ตาราง · ${p.relations.length} ความสัมพันธ์');
+  b.writeln(tr('- {0} ตาราง · {1} ความสัมพันธ์', [p.tables.length, p.relations.length]));
   if (p.tables.isEmpty) {
     b.writeln();
-    b.writeln('_ยังไม่มีตาราง_');
+    b.writeln(tr('_ยังไม่มีตาราง_'));
     return b.toString();
   }
 
   b.writeln();
-  b.writeln('## สารบัญ');
+  b.writeln(tr('## สารบัญ'));
   b.writeln();
   for (final t in p.tables) {
     b.writeln('- [${_inline(t.name)}](#${_anchor(t.name)})${t.comment.isEmpty ? '' : ' — ${_inline(t.comment)}'}');
@@ -32,14 +33,14 @@ String exportDataDictionary(Project p) {
     }
     b.writeln();
     if (t.columns.isEmpty) {
-      b.writeln('_ไม่มีคอลัมน์_');
+      b.writeln(tr('_ไม่มีคอลัมน์_'));
       continue;
     }
     final fkCols = {
       for (final r in p.relations)
         if (r.fromTableId == t.id) r.fromColumnId: r
     };
-    b.writeln('| # | คอลัมน์ | ชนิด | Key | Null | ค่าเริ่มต้น | หมายเหตุ |');
+    b.writeln(tr('| # | คอลัมน์ | ชนิด | Key | Null | ค่าเริ่มต้น | หมายเหตุ |'));
     b.writeln('|--:|---------|------|-----|:----:|-------------|----------|');
     for (var i = 0; i < t.columns.length; i++) {
       final c = t.columns[i];
@@ -60,7 +61,7 @@ String exportDataDictionary(Project p) {
     ];
     if (out.isNotEmpty) {
       b.writeln();
-      b.writeln('**อ้างถึง (FK)**');
+      b.writeln(tr('**อ้างถึง (FK)**'));
       b.writeln();
       for (final r in out) {
         b.writeln('- ${_cell(_ref(p, r.fromTableId, r.fromColumnId))} → ${_cell(_ref(p, r.toTableId, r.toColumnId))}'
@@ -73,7 +74,7 @@ String exportDataDictionary(Project p) {
     ];
     if (incoming.isNotEmpty) {
       b.writeln();
-      b.writeln('**ถูกอ้างถึงโดย**');
+      b.writeln(tr('**ถูกอ้างถึงโดย**'));
       b.writeln();
       for (final r in incoming) {
         b.writeln('- ${_cell(_ref(p, r.fromTableId, r.fromColumnId))}');

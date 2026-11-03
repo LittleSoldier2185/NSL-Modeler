@@ -11,6 +11,7 @@ import '../app_actions.dart';
 import '../file_actions.dart';
 import '../shortcuts.dart';
 import '../theme.dart';
+import '../../core/l10n/l10n.dart';
 
 enum PaletteKind { command, table, column }
 
@@ -53,46 +54,49 @@ List<PaletteEntry> buildPaletteEntries(BuildContext context) {
       cmd(title, keywords, () => actions.run(k), shortcut: shortcutText(k).isEmpty ? null : shortcutText(k));
 
   final commands = <PaletteEntry>[
-    byCmd('โปรเจกต์ใหม่', 'new project', Cmd.newProject),
-    byCmd('เปิดไฟล์โปรเจกต์…', 'open erd', Cmd.open),
-    byCmd('บันทึก', 'save', Cmd.save),
-    byCmd('บันทึกเป็น…', 'save as', Cmd.saveAs),
-    byCmd('Export .sql', 'export sql ddl สคริปต์', Cmd.exportSql),
-    byCmd('Export ภาพ PNG / SVG', 'export image png svg รูป', Cmd.exportImage),
-    byCmd('Export Data dictionary (Markdown)', 'export markdown dictionary เอกสาร', Cmd.exportText),
+    byCmd(tr('โปรเจกต์ใหม่'), 'new project', Cmd.newProject),
+    byCmd(tr('เปิดไฟล์โปรเจกต์…'), 'open erd', Cmd.open),
+    byCmd(tr('บันทึก'), 'save', Cmd.save),
+    byCmd(tr('บันทึกเป็น…'), 'save as', Cmd.saveAs),
+    byCmd('Export .sql', tr('export sql ddl สคริปต์'), Cmd.exportSql),
+    byCmd(tr('Export ภาพ PNG / SVG'), tr('export image png svg รูป'), Cmd.exportImage),
+    byCmd('Export Data dictionary (Markdown)', tr('export markdown dictionary เอกสาร'), Cmd.exportText),
     cmd('Export Mermaid', 'export mermaid er diagram',
         () => FileActions.exportText(context, c, kind: TextExportKind.mermaid)),
     cmd('Export DBML', 'export dbml dbdiagram',
         () => FileActions.exportText(context, c, kind: TextExportKind.dbml)),
-    cmd('สร้างข้อมูลตัวอย่าง (INSERT)', 'sample data insert ข้อมูลทดสอบ',
+    cmd(tr('สร้างข้อมูลตัวอย่าง (INSERT)'), tr('sample data insert ข้อมูลทดสอบ'),
         () => FileActions.exportText(context, c, kind: TextExportKind.sample)),
-    byCmd('นำเข้าจากไฟล์ .sql…', 'import sql create table', Cmd.importSql),
-    byCmd('เปรียบเทียบกับไฟล์เก่า (Migration)…', 'diff migration alter compare เทียบ', Cmd.compare),
-    byCmd('ย้อนกลับ', 'undo', Cmd.undo),
-    byCmd('ทำซ้ำ', 'redo', Cmd.redo),
-    byCmd('คัดลอกตารางที่เลือก', 'copy', Cmd.copy),
-    byCmd('วางตาราง', 'paste', Cmd.paste),
-    byCmd('ทำสำเนาตารางที่เลือก', 'duplicate clone', Cmd.duplicate),
-    byCmd('เลือกทุกตาราง', 'select all', Cmd.selectAll),
-    byCmd('ลบตาราง / คอลัมน์ที่เลือก', 'delete remove', Cmd.delete),
-    byCmd('เปลี่ยนชื่อที่เลือก', 'rename', Cmd.rename),
-    cmd('จัดวางตารางอัตโนมัติ', 'auto layout จัดตำแหน่ง', () {
+    byCmd(tr('นำเข้าจากไฟล์ .sql…'), 'import sql create table', Cmd.importSql),
+    byCmd(tr('เปรียบเทียบกับไฟล์เก่า (Migration)…'), tr('diff migration alter compare เทียบ'), Cmd.compare),
+    byCmd(tr('ย้อนกลับ'), 'undo', Cmd.undo),
+    byCmd(tr('ทำซ้ำ'), 'redo', Cmd.redo),
+    byCmd(tr('คัดลอกตารางที่เลือก'), 'copy', Cmd.copy),
+    byCmd(tr('สร้างตารางแบบฟอร์ม (เหมือน phpMyAdmin)'), 'create table form phpmyadmin columns new', Cmd.createTableForm),
+    byCmd(tr('จัดกลุ่มตารางที่เลือก'), 'group box frame area section', Cmd.groupSelected),
+    byCmd(tr('วางตาราง'), 'paste', Cmd.paste),
+    byCmd(tr('ทำสำเนาตารางที่เลือก'), 'duplicate clone', Cmd.duplicate),
+    byCmd(tr('เลือกทุกตาราง'), 'select all', Cmd.selectAll),
+    byCmd(tr('ลบตาราง / คอลัมน์ที่เลือก'), 'delete remove', Cmd.delete),
+    byCmd(tr('เปลี่ยนชื่อที่เลือก'), 'rename', Cmd.rename),
+    cmd(tr('จัดวางตารางอัตโนมัติ'), tr('auto layout จัดตำแหน่ง'), () {
       c.autoLayoutTables();
       cv.fit(c.project);
     }),
-    byCmd('พอดีหน้าจอ', 'fit zoom', Cmd.fit),
-    byCmd('ซูม 100%', 'zoom reset', Cmd.zoom100),
-    byCmd('เพิ่มตาราง', 'add table', Cmd.toolTable),
-    byCmd('โหมดเชื่อม FK', 'foreign key relation เส้น', Cmd.toolFk),
-    byCmd('เพิ่มโน้ต', 'note', Cmd.toolNote),
-    byCmd('ใช้ ${Dialect.mysql.label}', 'dialect mysql สลับ', Cmd.dialectMysql),
-    byCmd('ใช้ ${Dialect.postgres.label}', 'dialect postgres สลับ', Cmd.dialectPostgres),
-    byCmd('ใช้ ${Dialect.sqlite.label}', 'dialect sqlite สลับ', Cmd.dialectSqlite),
-    byCmd('ใช้ ${Dialect.mssql.label}', 'dialect mssql สลับ', Cmd.dialectMssql),
-    cmd('แสดง SQL Preview', 'sql preview', () => cv.showDock(DockTab.sql)),
-    cmd('แสดงปัญหาที่ตรวจพบ', 'issues problems validate ตรวจสอบ', () => cv.showDock(DockTab.issues)),
-    byCmd('ค้นหาตาราง / คอลัมน์', 'search find', Cmd.find),
-    byCmd('ดูคีย์ลัดทั้งหมด', 'shortcuts help keyboard', Cmd.help),
+    byCmd(tr('พอดีหน้าจอ'), 'fit zoom', Cmd.fit),
+    byCmd(tr('ซูม 100%'), 'zoom reset', Cmd.zoom100),
+    byCmd(tr('เพิ่มตาราง'), 'add table', Cmd.toolTable),
+    byCmd(tr('โหมดเชื่อม FK'), tr('foreign key relation เส้น'), Cmd.toolFk),
+    byCmd(tr('โหมดเลือก'), 'select tool pointer cursor', Cmd.toolSelect),
+    byCmd(tr('เพิ่มโน้ต'), 'note', Cmd.toolNote),
+    byCmd(tr('ใช้ {0}', [Dialect.mysql.label]), tr('dialect mysql สลับ'), Cmd.dialectMysql),
+    byCmd(tr('ใช้ {0}', [Dialect.postgres.label]), tr('dialect postgres สลับ'), Cmd.dialectPostgres),
+    byCmd(tr('ใช้ {0}', [Dialect.sqlite.label]), tr('dialect sqlite สลับ'), Cmd.dialectSqlite),
+    byCmd(tr('ใช้ {0}', [Dialect.mssql.label]), tr('dialect mssql สลับ'), Cmd.dialectMssql),
+    cmd(tr('แสดง SQL Preview'), 'sql preview', () => cv.showDock(DockTab.sql)),
+    cmd(tr('แสดงปัญหาที่ตรวจพบ'), tr('issues problems validate ตรวจสอบ'), () => cv.showDock(DockTab.issues)),
+    byCmd(tr('ค้นหาตาราง / คอลัมน์'), 'search find', Cmd.find),
+    byCmd(tr('ดูคีย์ลัดทั้งหมด'), 'shortcuts help keyboard', Cmd.help),
   ];
 
   final objects = <PaletteEntry>[
@@ -100,7 +104,7 @@ List<PaletteEntry> buildPaletteEntries(BuildContext context) {
       PaletteEntry(
         kind: PaletteKind.table,
         title: t.name,
-        subtitle: 'ตาราง · ${t.columns.length} คอลัมน์${t.comment.isEmpty ? '' : ' · ${t.comment}'}',
+        subtitle: tr('ตาราง · {0} คอลัมน์{1}', [t.columns.length, t.comment.isEmpty ? '' : ' · ${t.comment}']),
         search: '${t.name} ${t.comment}',
         run: () {
           c.selectTable(t.id);
@@ -111,7 +115,7 @@ List<PaletteEntry> buildPaletteEntries(BuildContext context) {
         PaletteEntry(
           kind: PaletteKind.column,
           title: '${t.name}.${col.name}',
-          subtitle: 'คอลัมน์ · ${typeLabel(col)}${col.comment.isEmpty ? '' : ' · ${col.comment}'}',
+          subtitle: tr('คอลัมน์ · {0}{1}', [typeLabel(col), col.comment.isEmpty ? '' : ' · ${col.comment}']),
           search: '${t.name}.${col.name} ${col.comment}',
           run: () {
             c.selectTable(t.id, columnId: col.id);
@@ -219,8 +223,8 @@ class _CommandPaletteState extends State<CommandPalette> {
                   onChanged: _onQuery,
                   onSubmitted: (_) => _pick(_index),
                   style: const TextStyle(fontSize: 15),
-                  decoration: const InputDecoration(
-                    hintText: 'พิมพ์คำสั่ง หรือชื่อตาราง / คอลัมน์…',
+                  decoration: InputDecoration(
+                    hintText: tr('พิมพ์คำสั่ง หรือชื่อตาราง / คอลัมน์…'),
                     prefixIcon: Icon(Icons.search),
                     border: InputBorder.none,
                     contentPadding: EdgeInsets.symmetric(vertical: 16),
@@ -233,7 +237,7 @@ class _CommandPaletteState extends State<CommandPalette> {
                 child: _results.isEmpty
                     ? Padding(
                         padding: const EdgeInsets.all(24),
-                        child: Text('ไม่พบ "$_query"', style: const TextStyle(color: C.muted)),
+                        child: Text(tr('ไม่พบ "{0}"', [_query]), style: TextStyle(color: C.muted)),
                       )
                     : ListView.builder(
                         controller: _scroll,
@@ -244,14 +248,14 @@ class _CommandPaletteState extends State<CommandPalette> {
                       ),
               ),
               const Divider(height: 1),
-              const Padding(
+              Padding(
                 padding: EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 child: Row(children: [
-                  Text('↑↓ เลือก', style: TextStyle(fontSize: 11.5, color: C.muted)),
+                  Text(tr('↑↓ เลือก'), style: TextStyle(fontSize: 11.5, color: C.muted)),
                   SizedBox(width: 14),
-                  Text('Enter ทำงาน', style: TextStyle(fontSize: 11.5, color: C.muted)),
+                  Text(tr('Enter ทำงาน'), style: TextStyle(fontSize: 11.5, color: C.muted)),
                   SizedBox(width: 14),
-                  Text('Esc ปิด', style: TextStyle(fontSize: 11.5, color: C.muted)),
+                  Text(tr('Esc ปิด'), style: TextStyle(fontSize: 11.5, color: C.muted)),
                 ]),
               ),
             ]),
@@ -286,7 +290,7 @@ class _CommandPaletteState extends State<CommandPalette> {
                 if (e.subtitle != null)
                   Text(e.subtitle!,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 11.5, color: C.muted)),
+                      style: TextStyle(fontSize: 11.5, color: C.muted)),
               ]),
             ),
             if (e.shortcut != null)

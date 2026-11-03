@@ -6,11 +6,15 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../core/ddl/ddl_generator.dart';
+import '../core/export/seed_data.dart';
+import '../core/export/selection_crop.dart';
+import '../core/export/sql_export.dart';
+import '../core/layout/diagram_geometry.dart';
 import '../core/parser/sql_decode.dart';
 import '../core/parser/sql_importer.dart';
 import '../core/models/project.dart';
 import '../core/export/svg_export.dart';
+import 'board_size_dialog.dart';
 import 'export/diagram_png.dart';
 import 'export/export_image_dialog.dart';
 import 'export/text_export_dialog.dart';
@@ -21,6 +25,7 @@ import '../core/storage/project_file.dart';
 import '../core/validate/issue.dart';
 import 'canvas/canvas_controller.dart';
 import '../state/project_controller.dart';
+import '../core/l10n/l10n.dart';
 
 /// เปิด/บันทึก/โปรเจกต์ใหม่ พร้อมถามก่อนทิ้งงานที่ยังไม่บันทึก
 class FileActions {
@@ -31,17 +36,17 @@ class FileActions {
   }
 
   /// true = ไปต่อได้ (บันทึกแล้ว / ไม่บันทึก / ไม่มีอะไรค้าง)
-  static Future<bool> _confirmDiscard(BuildContext context, ProjectController c) async {
+  static Future<bool> confirmDiscard(BuildContext context, ProjectController c) async {
     if (!c.dirty) return true;
     final r = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('มีการแก้ไขที่ยังไม่ได้บันทึก'),
-        content: const Text('ต้องการบันทึกก่อนหรือไม่'),
+        title: Text(tr('มีการแก้ไขที่ยังไม่ได้บันทึก')),
+        content: Text(tr('ต้องการบันทึกก่อนหรือไม่')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, 'cancel'), child: const Text('ยกเลิก')),
-          TextButton(onPressed: () => Navigator.pop(ctx, 'discard'), child: const Text('ไม่บันทึก')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, 'save'), child: const Text('บันทึก')),
+          TextButton(onPressed: () => Navigator.pop(ctx, 'cancel'), child: Text(tr('ยกเลิก'))),
+          TextButton(onPressed: () => Navigator.pop(ctx, 'discard'), child: Text(tr('ไม่บันทึก'))),
+          FilledButton(onPressed: () => Navigator.pop(ctx, 'save'), child: Text(tr('บันทึก'))),
         ],
       ),
     );
@@ -53,13 +58,29 @@ class FileActions {
   }
 
   static Future<void> newProject(BuildContext context, ProjectController c) async {
-    if (await _confirmDiscard(context, c)) c.newProject();
+    if (!await confirmDiscard(context, c)) return;
+    if (!context.mounted) return;
+    final size = await showBoardSizeDialog(context, title: tr('โปรเจกต์ใหม่'), confirmLabel: tr('สร้าง'));
+    if (size == null) return;
+    c.newProject(boardWidth: size.width, boardHeight: size.height);
+  }
+
+  /// เปลี่ยนขนาดกระดานของโปรเจกต์ที่เปิดอยู่ (undo ได้)
+  static Future<void> changeBoardSize(BuildContext context, ProjectController c) async {
+    final size = await showBoardSizeDialog(
+      context,
+      title: tr('ขนาดกระดาน'),
+      confirmLabel: tr('ตกลง'),
+      width: c.project.boardWidth,
+      height: c.project.boardHeight,
+    );
+    if (size != null) c.setBoardSize(size.width, size.height);
   }
 
   static Future<void> open(BuildContext context, ProjectController c) async {
-    if (!await _confirmDiscard(context, c)) return;
+    if (!await confirmDiscard(context, c)) return;
     final f = await FilePicker.pickFile(
-      dialogTitle: 'เปิดโปรเจกต์',
+      dialogTitle: tr('เปิดโปรเจกต์'),
       type: FileType.custom,
       allowedExtensions: ['erd'],
     );
@@ -70,15 +91,15 @@ class FileActions {
     } on ProjectFormatException catch (e) {
       if (context.mounted) _toast(context, e.message);
     } catch (e) {
-      if (context.mounted) _toast(context, 'เปิดไฟล์ไม่ได้: $e');
+      if (context.mounted) _toast(context, tr('เปิดไฟล์ไม่ได้: {0}', [e]));
     }
   }
 
   /// นำเข้าจากไฟล์ .sql (CREATE TABLE ฯลฯ) -> แทนที่โปรเจกต์ หลังพรีวิวและยืนยัน
   static Future<void> importSqlFile(BuildContext context, ProjectController c) async {
-    if (!await _confirmDiscard(context, c)) return;
+    if (!await confirmDiscard(context, c)) return;
     final f = await FilePicker.pickFile(
-      dialogTitle: 'นำเข้าจากไฟล์ .sql',
+      dialogTitle: tr('นำเข้าจากไฟล์ .sql'),
       type: FileType.custom,
       allowedExtensions: ['sql', 'ddl', 'txt'],
     );
@@ -101,14 +122,14 @@ class FileActions {
       cv.fit(c.project);
       if (result.notes.any((n) => n.warning)) cv.showDock(DockTab.issues);
     } catch (e) {
-      if (context.mounted) _toast(context, 'นำเข้าไม่ได้: $e');
+      if (context.mounted) _toast(context, tr('นำเข้าไม่ได้: {0}', [e]));
     }
   }
 
   /// เลือกไฟล์ .erd เก่ามาเทียบกับโปรเจกต์ปัจจุบัน -> หน้าต่างรายการเปลี่ยนแปลง + สคริปต์ migration
   static Future<void> compareWithFile(BuildContext context, ProjectController c) async {
     final f = await FilePicker.pickFile(
-      dialogTitle: 'เลือกไฟล์โปรเจกต์เวอร์ชันเก่าเพื่อเปรียบเทียบ',
+      dialogTitle: tr('เลือกไฟล์โปรเจกต์เวอร์ชันเก่าเพื่อเปรียบเทียบ'),
       type: FileType.custom,
       allowedExtensions: ['erd'],
     );
@@ -128,7 +149,7 @@ class FileActions {
     } on ProjectFormatException catch (e) {
       if (context.mounted) _toast(context, e.message);
     } catch (e) {
-      if (context.mounted) _toast(context, 'เปิดไฟล์ไม่ได้: $e');
+      if (context.mounted) _toast(context, tr('เปิดไฟล์ไม่ได้: {0}', [e]));
     }
   }
 
@@ -146,7 +167,7 @@ class FileActions {
   static Future<void> exportText(BuildContext context, ProjectController c,
       {TextExportKind kind = TextExportKind.dictionary}) async {
     if (c.project.tables.isEmpty) {
-      _toast(context, 'ยังไม่มีตารางให้ Export');
+      _toast(context, tr('ยังไม่มีตารางให้ Export'));
       return;
     }
     await showDialog<void>(
@@ -168,37 +189,57 @@ class FileActions {
       final ext = fileName.contains('.') ? fileName.substring(fileName.lastIndexOf('.')) : '';
       if (ext.isNotEmpty && !path.toLowerCase().endsWith(ext)) path = '$path$ext';
       await File(path).writeAsString(text);
-      if (context.mounted) _toast(context, 'บันทึกแล้ว: $path');
+      if (context.mounted) _toast(context, tr('บันทึกแล้ว: {0}', [path]));
     } catch (e) {
-      if (context.mounted) _toast(context, 'บันทึกไม่ได้: $e');
+      if (context.mounted) _toast(context, tr('บันทึกไม่ได้: {0}', [e]));
     }
   }
 
   /// Export แผนภาพเป็น PNG หรือ SVG (ทั้งแผนภาพ ไม่ขึ้นกับว่าตอนนี้ซูม/เลื่อนอยู่ตรงไหน)
-  static Future<void> exportImage(BuildContext context, ProjectController c) async {
+  static Future<void> exportImage(BuildContext context, ProjectController c, {ImageArea? initialArea}) async {
     final p = c.project;
     if (p.tables.isEmpty && p.notes.isEmpty) {
-      _toast(context, 'ยังไม่มีตารางให้ Export เป็นภาพ');
+      _toast(context, tr('ยังไม่มีตารางให้ Export เป็นภาพ'));
       return;
     }
+    // ตารางที่ถือว่าเลือกอยู่: ที่เลือกเอง + ตารางในกลุ่มที่เลือกอยู่ (เลือกกลุ่ม = export กลุ่มทั้งก้อน)
+    final gid = c.selectedGroupId;
+    final selGroup = gid == null ? null : p.groupById(gid);
+    final selected = {...c.selectedTableIds, if (selGroup != null) ...groupMembers(p, selGroup).tables};
     final opts = await showDialog<ImageExportOptions>(
       context: context,
-      builder: (_) => ExportImageDialog(hasNotes: p.notes.isNotEmpty),
+      builder: (_) =>
+          ExportImageDialog(hasNotes: p.notes.isNotEmpty, hasSelection: selected.isNotEmpty, initialArea: initialArea),
     );
     if (opts == null || !context.mounted) return;
+
+    // เลือกพื้นที่: เฉพาะตารางที่เลือก (ทำโปรเจกต์ย่อย) / ทั้งกระดาน / เฉพาะส่วนที่มีตาราง (ค่าเริ่มต้น)
+    var src = p;
+    var includeNotes = opts.includeNotes;
+    DiagramBounds? bounds;
+    switch (opts.area) {
+      case ImageArea.selection:
+        // กรอบกลุ่มที่เกี่ยวข้องติดไปด้วย (ดู cropToSelection)
+        src = cropToSelection(p, selected, groupId: gid);
+        includeNotes = false;
+      case ImageArea.board:
+        bounds = boardBounds(p);
+      case ImageArea.content:
+        break;
+    }
     try {
       late final Uint8List bytes;
       var note = '';
       if (opts.format == ImageFormat.svg) {
-        bytes = Uint8List.fromList(utf8.encode(exportSvg(p, includeNotes: opts.includeNotes)!));
+        bytes = Uint8List.fromList(utf8.encode(exportSvg(src, includeNotes: includeNotes, bounds: bounds, dark: opts.dark)!));
       } else {
-        final png = await exportPng(p, scale: opts.scale, includeNotes: opts.includeNotes);
+        final png = await exportPng(src, scale: opts.scale, includeNotes: includeNotes, bounds: bounds, dark: opts.dark);
         if (png == null) return;
         bytes = png.bytes;
-        if (png.scale < opts.scale) note = ' (ลดสเกลเหลือ ${png.scale.toStringAsFixed(1)}x เพราะภาพใหญ่เกินไป)';
+        if (png.scale < opts.scale) note = tr(' (ลดสเกลเหลือ {0}x เพราะภาพใหญ่เกินไป)', [png.scale.toStringAsFixed(1)]);
       }
       final uri = await FilePicker.saveFile(
-        dialogTitle: 'Export ภาพ ${opts.format.name.toUpperCase()}',
+        dialogTitle: tr('Export ภาพ {0}', [opts.format.name.toUpperCase()]),
         fileName: imageFileName(p.name, opts.format),
         bytes: bytes,
       );
@@ -206,9 +247,9 @@ class FileActions {
       var path = uri.toFilePath();
       if (!path.toLowerCase().endsWith('.${opts.format.name}')) path = '$path.${opts.format.name}';
       await File(path).writeAsBytes(bytes);
-      if (context.mounted) _toast(context, 'Export แล้ว: $path$note');
+      if (context.mounted) _toast(context, tr('Export แล้ว: {0}{1}', [path, note]));
     } catch (e) {
-      if (context.mounted) _toast(context, 'Export ภาพไม่ได้: $e');
+      if (context.mounted) _toast(context, tr('Export ภาพไม่ได้: {0}', [e]));
     }
   }
 
@@ -216,7 +257,7 @@ class FileActions {
   static Future<void> saveMigration(BuildContext context, String sql, Project neu) async {
     try {
       final uri = await FilePicker.saveFile(
-        dialogTitle: 'บันทึกสคริปต์ migration',
+        dialogTitle: tr('บันทึกสคริปต์ migration'),
         fileName: sqlFileName('${neu.name}_migration', neu.dialect),
         bytes: utf8.encode(sql),
       );
@@ -224,9 +265,9 @@ class FileActions {
       var path = uri.toFilePath();
       if (!path.toLowerCase().endsWith('.sql')) path = '$path.sql';
       await File(path).writeAsString(sql);
-      if (context.mounted) _toast(context, 'บันทึกแล้ว: $path');
+      if (context.mounted) _toast(context, tr('บันทึกแล้ว: {0}', [path]));
     } catch (e) {
-      if (context.mounted) _toast(context, 'บันทึกไม่ได้: $e');
+      if (context.mounted) _toast(context, tr('บันทึกไม่ได้: {0}', [e]));
     }
   }
 
@@ -240,7 +281,7 @@ class FileActions {
   static Future<bool> saveAs(BuildContext context, ProjectController c) async {
     final name = c.project.name.trim().isEmpty ? 'untitled' : c.project.name.trim();
     final uri = await FilePicker.saveFile(
-      dialogTitle: 'บันทึกเป็น',
+      dialogTitle: tr('บันทึกเป็น'),
       fileName: '$name.erd',
       bytes: utf8.encode(ProjectFile.encode(c.project)),
     );
@@ -263,13 +304,12 @@ class FileActions {
       final go = await showDialog<String>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: Text('พบข้อผิดพลาด $errors รายการ'),
-          content: Text('SQL ที่ได้อาจ import เข้า ${dialect.label} ไม่ผ่าน '
-              'ต้องการดูปัญหาก่อน หรือ Export ต่อเลย?'),
+          title: Text(tr('พบข้อผิดพลาด {0} รายการ', [errors])),
+          content: Text(tr('SQL ที่ได้อาจ import เข้า {0} ไม่ผ่าน ต้องการดูปัญหาก่อน หรือ Export ต่อเลย?', [dialect.label])),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, 'cancel'), child: const Text('ยกเลิก')),
-            TextButton(onPressed: () => Navigator.pop(ctx, 'export'), child: const Text('Export ต่อ')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, 'view'), child: const Text('ดูปัญหา')),
+            TextButton(onPressed: () => Navigator.pop(ctx, 'cancel'), child: Text(tr('ยกเลิก'))),
+            TextButton(onPressed: () => Navigator.pop(ctx, 'export'), child: Text(tr('Export ต่อ'))),
+            FilledButton(onPressed: () => Navigator.pop(ctx, 'view'), child: Text(tr('ดูปัญหา'))),
           ],
         ),
       );
@@ -280,7 +320,55 @@ class FileActions {
       }
       if (go != 'export') return;
     }
-    final sql = DdlGenerator.forDialect(dialect).generate(c.project);
+    // ข้อมูลตั้งต้น: ตรวจก่อน แล้วถามว่าจะรวมหรือไม่ (ข้อมูลที่ไม่ถูกต้องไม่ถูกใส่ลง SQL)
+    var includeSeed = false;
+    final seed = seedSummary(c.project);
+    if (seed.rows > 0) {
+      final problems = validateSeed(c.project);
+      if (!context.mounted) return;
+      if (problems.isNotEmpty) {
+        final go = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text(tr('ข้อมูลตั้งต้นมีปัญหา {0} รายการ', [problems.length])),
+            content: SizedBox(
+              width: 460,
+              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(tr('จะไม่รวมข้อมูลตั้งต้นใน SQL จนกว่าจะแก้ให้ถูกต้อง'), style: const TextStyle(fontSize: 13)),
+                const SizedBox(height: 8),
+                for (final pr in problems.take(6))
+                  Text('• ${c.project.tableById(pr.tableId)?.name ?? '?'}'
+                      '${pr.row == null ? '' : ' #${pr.row! + 1}'}: ${pr.message}',
+                      style: const TextStyle(fontSize: 12.5)),
+                if (problems.length > 6) Text(tr('…และอีก {0} รายการ', [problems.length - 6])),
+              ]),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('ยกเลิก'))),
+              FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(tr('Export โดยไม่รวมข้อมูลตั้งต้น'))),
+            ],
+          ),
+        );
+        if (go != true) return;
+      } else {
+        final choice = await showDialog<String>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text(tr('รวมข้อมูลตั้งต้นใน SQL หรือไม่')),
+            content: Text(tr('มีข้อมูลตั้งต้น {0} แถวใน {1} ตาราง จะสร้างเป็น INSERT ต่อท้ายไฟล์', [seed.rows, seed.tables])),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, 'cancel'), child: Text(tr('ยกเลิก'))),
+              TextButton(onPressed: () => Navigator.pop(ctx, 'skip'), child: Text(tr('ไม่รวม'))),
+              FilledButton(key: const ValueKey('seed-include'), onPressed: () => Navigator.pop(ctx, 'include'), child: Text(tr('รวมข้อมูลตั้งต้น'))),
+            ],
+          ),
+        );
+        if (choice == null || choice == 'cancel') return;
+        includeSeed = choice == 'include';
+      }
+    }
+    if (!context.mounted) return;
+    final sql = buildExportSql(c.project, includeSeed: includeSeed);
     try {
       final uri = await FilePicker.saveFile(
         dialogTitle: 'Export .sql (${dialect.label})',
@@ -291,9 +379,9 @@ class FileActions {
       var path = uri.toFilePath();
       if (!path.toLowerCase().endsWith('.sql')) path = '$path.sql';
       await File(path).writeAsString(sql); // UTF-8 ไม่มี BOM
-      if (context.mounted) _toast(context, 'Export แล้ว: $path');
+      if (context.mounted) _toast(context, tr('Export แล้ว: {0}', [path]));
     } catch (e) {
-      if (context.mounted) _toast(context, 'Export ไม่ได้: $e');
+      if (context.mounted) _toast(context, tr('Export ไม่ได้: {0}', [e]));
     }
   }
 
@@ -303,7 +391,7 @@ class FileActions {
       c.markSaved(path);
       return true;
     } catch (e) {
-      if (context.mounted) _toast(context, 'บันทึกไม่ได้: $e');
+      if (context.mounted) _toast(context, tr('บันทึกไม่ได้: {0}', [e]));
       return false;
     }
   }

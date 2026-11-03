@@ -145,8 +145,9 @@ void main() {
         return s.contains('.') ? s.replaceFirst(RegExp(r'\.?0+$'), '') : s;
       }
 
-      expect(svg, contains('M${n(g.fx)} ${n(g.fy)} C'));
-      expect(svg, contains('${n(g.tx)} ${n(g.ty)}"/>'));
+      // เส้นหักมุมฉากโค้งมน: เริ่มที่จุดต้นทาง จบที่จุดปลายทางของ relationGeometry
+      expect(svg, contains('M${n(g.fx)} ${n(g.fy)} L'));
+      expect(svg, contains('L${n(g.tx)} ${n(g.ty)}"/>'));
     });
 
     test('escape อักขระพิเศษ และคงภาษาไทย', () {

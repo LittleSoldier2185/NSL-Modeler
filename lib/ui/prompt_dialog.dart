@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../core/l10n/l10n.dart';
 
 class PromptResult {
   const PromptResult(this.text, {this.deleted = false});
@@ -20,7 +21,7 @@ class TextPromptDialog extends StatefulWidget {
     this.label,
     this.maxLines = 1,
     this.minLines = 1,
-    this.confirmLabel = 'ตกลง',
+    this.confirmLabel,
     this.deleteLabel,
   });
 
@@ -29,7 +30,7 @@ class TextPromptDialog extends StatefulWidget {
   final String? label;
   final int maxLines;
   final int minLines;
-  final String confirmLabel;
+  final String? confirmLabel;
   final String? deleteLabel;
 
   @override
@@ -68,10 +69,10 @@ class _TextPromptDialogState extends State<TextPromptDialog> {
               onPressed: () => Navigator.pop(context, const PromptResult('', deleted: true)),
               child: Text(widget.deleteLabel!, style: const TextStyle(color: Color(0xFFB42318))),
             ),
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('ยกเลิก')),
+          TextButton(onPressed: () => Navigator.pop(context), child: Text(tr('ยกเลิก'))),
           FilledButton(
             onPressed: () => Navigator.pop(context, PromptResult(_value)),
-            child: Text(widget.confirmLabel),
+            child: Text(widget.confirmLabel ?? tr('ตกลง')),
           ),
         ],
       );

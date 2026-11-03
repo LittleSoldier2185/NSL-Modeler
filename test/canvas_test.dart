@@ -1,3 +1,4 @@
+import 'package:nsl_modeler/core/layout/diagram_geometry.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nsl_modeler/core/models/project.dart';
@@ -116,7 +117,7 @@ void main() {
       expect(cv.tool, CanvasTool.select);
     });
 
-    testWidgets('โหมด + ตาราง: คลิกพื้นที่ว่างวางตารางตรงจุดนั้น', (tester) async {
+    testWidgets('โหมด + ตาราง: คลิกพื้นที่ว่างวางตารางตรงจุดนั้น (ปัดเข้าช่องตาราง 20px เมื่อเปิด snap)', (tester) async {
       final (c, cv) = await pump(tester);
       cv.setTool(CanvasTool.table);
       await tester.pump();
@@ -126,8 +127,10 @@ void main() {
       expect(c.project.tables.length, 1);
       final t = c.project.tables.single;
       final w = cv.toWorld(const Offset(700 - 248, 400 - 52));
-      expect(t.x, closeTo(w.dx, 1));
-      expect(t.y, closeTo(w.dy, 1));
+      expect(t.x, snapToGrid(w.dx));
+      expect(t.y, snapToGrid(w.dy));
+      expect((t.x - w.dx).abs(), lessThanOrEqualTo(kGridSize / 2));
+      expect((t.y - w.dy).abs(), lessThanOrEqualTo(kGridSize / 2));
       expect(cv.tool, CanvasTool.select);
     });
   });

@@ -3,8 +3,10 @@ import '../models/column_model.dart';
 import '../models/enums.dart';
 import '../models/index_model.dart';
 import '../models/project.dart';
+import '../export/seed_data.dart';
 import '../models/table_model.dart';
 import 'schema_diff.dart';
+import '../l10n/l10n.dart';
 
 /// สร้างสคริปต์ migration (ALTER TABLE ฯลฯ) ที่เปลี่ยนฐานข้อมูลจากโครงสร้าง [old] ไปเป็น [neu]
 /// ตาม dialect ของ [neu] — บรรทัดที่ขึ้นต้น `-- ⚠` คือจุดที่ข้อมูลอาจหายหรือต้องทำเอง
@@ -42,17 +44,17 @@ class _Migration {
   String build() {
     final lines = diff.summary(old, neu);
     if (diff.isEmpty) {
-      return '-- ${DdlGenerator.flat(neu.name)} (${d.label}): ไม่มีความแตกต่างของโครงสร้าง — ไม่ต้อง migrate\n';
+      return tr('-- {0} ({1}): ไม่มีความแตกต่างของโครงสร้าง — ไม่ต้อง migrate\n', [DdlGenerator.flat(neu.name), d.label]);
     }
 
     // ตารางที่ SQLite ต้องสร้างใหม่ (ALTER ทำไม่ได้)
     final rebuild = sqlite ? _rebuildSet() : <String>{};
 
     final header = StringBuffer('-- Migration → ${DdlGenerator.flat(neu.name)} (${d.label})\n'
-        '-- ${lines.length} การเปลี่ยนแปลง');
+        '${tr('-- {0} การเปลี่ยนแปลง', [lines.length])}');
     final risky = lines.where((l) => l.destructive).length;
     if (risky > 0) {
-      header.write('\n-- ⚠ $risky รายการอาจทำให้ข้อมูลหาย — สำรองฐานข้อมูลก่อนรัน');
+      header.write(tr('\n-- ⚠ {0} รายการอาจทำให้ข้อมูลหาย — สำรองฐานข้อมูลก่อนรัน', [risky]));
     }
     blocks.add(header.toString());
 
@@ -66,13 +68,54 @@ class _Migration {
     _createIndexes(rebuild);
     _addForeignKeys();
     _comments();
+    _seedData();
 
     final body = blocks.join('\n\n');
     if (sqlite && rebuild.isNotEmpty) {
       // ปิด FK ระหว่างสร้างตารางใหม่ (PRAGMA ใช้ไม่ได้ในทรานแซกชัน จึงอยู่นอก BEGIN)
       return 'PRAGMA foreign_keys = OFF;\nBEGIN TRANSACTION;\n\n$body\n\nCOMMIT;\nPRAGMA foreign_key_check;\nPRAGMA foreign_keys = ON;\n';
     }
-    return '$body\n';
+    // ห่อทรานแซกชัน: ผิดพลาดกลางทางแล้วย้อนกลับทั้งหมด ไม่ค้างโครงสร้างครึ่ง ๆ กลาง ๆ
+    switch (d) {
+      case Dialect.postgres:
+        return 'BEGIN;\n\n$body\n\nCOMMIT;\n';
+      case Dialect.sqlite:
+        return 'BEGIN TRANSACTION;\n\n$body\n\nCOMMIT;\n';
+      case Dialect.mssql:
+        // XACT_ABORT ON: error ใด ๆ ย้อนกลับทั้งทรานแซกชัน
+        return 'SET XACT_ABORT ON;\nBEGIN TRANSACTION;\n\n$body\n\nCOMMIT TRANSACTION;\n';
+      case Dialect.mysql:
+        return '${tr('-- ⚠ MySQL: คำสั่งแก้โครงสร้าง (DDL) ยืนยันทันทีและย้อนกลับไม่ได้ — สำรองข้อมูลก่อนรัน')}\n\n$body\n';
+    }
+  }
+
+  // ---------- 10. ข้อมูลตั้งต้น (เพิ่มเฉพาะแถวใหม่ รันซ้ำได้ ไม่แตะแถวเดิม) ----------
+
+  void _seedWarning(String text) => blocks.add(text);
+
+  void _seedData() {
+    if (diff.seed.isEmpty) return;
+    final problems = validateSeed(neu);
+    if (problems.isNotEmpty) {
+      _seedWarning(tr('-- ⚠ ข้ามข้อมูลตั้งต้น: มีข้อมูลไม่ถูกต้อง {0} รายการ (แก้ในโปรแกรมก่อน)', [problems.length]));
+      return;
+    }
+    final byId = {for (final s in diff.seed) s.table.id: s};
+    for (final t in seedOrder(neu)) {
+      final s = byId[t.id];
+      if (s == null || s.added.isEmpty) continue;
+      section(tr('ข้อมูลตั้งต้น: เพิ่มแถวใหม่ของ {0}', [DdlGenerator.flat(t.name)]), [
+        seedInsertSql(neu, t, s.added, idempotent: true),
+      ]);
+    }
+    final notTouched = [for (final s in diff.seed) if (s.changed > 0 || s.removed > 0) s];
+    if (notTouched.isNotEmpty) {
+      _seedWarning([
+        tr('-- ⚠ ข้อมูลตั้งต้นที่แก้ไข/ถูกลบไม่ถูกแตะในสคริปต์นี้ (ไม่สร้าง UPDATE/DELETE เพื่อไม่ให้ข้อมูลหาย) ต้องทำเอง:'),
+        for (final s in notTouched)
+          tr('--   {0}: แก้ {1} แถว / ลบ {2} แถว', [DdlGenerator.flat(s.table.name), s.changed, s.removed]),
+      ].join('\n'));
+    }
   }
 
   // ---------- 1. ลบ FK ----------
@@ -90,7 +133,7 @@ class _Migration {
           ? 'ALTER TABLE ${q(child.name)} DROP FOREIGN KEY ${q(name)};'
           : 'ALTER TABLE ${q(child.name)} DROP CONSTRAINT ${q(name)};');
     }
-    section('ลบความสัมพันธ์ FK ที่เลิกใช้/เปลี่ยน', out);
+    section(tr('ลบความสัมพันธ์ FK ที่เลิกใช้/เปลี่ยน'), out);
   }
 
   // ---------- 2. ลบ INDEX ----------
@@ -105,7 +148,7 @@ class _Migration {
             : 'DROP INDEX ${q(i.name)};');
       }
     }
-    section('ลบ INDEX ที่เลิกใช้/เปลี่ยน', out);
+    section(tr('ลบ INDEX ที่เลิกใช้/เปลี่ยน'), out);
   }
 
   // ---------- 3. เอา UNIQUE ออก ----------
@@ -123,21 +166,20 @@ class _Migration {
           case Dialect.postgres:
             out.add('ALTER TABLE $t DROP CONSTRAINT ${q('${td.old.name}_${c.old.name}_key')};');
           case Dialect.mssql:
-            out.add('-- ⚠ ต้องลบ UNIQUE ของ ${td.old.name}.${c.old.name} เอง: SQL Server ตั้งชื่อ constraint อัตโนมัติ '
-                '(ดูชื่อด้วย sp_helpconstraint แล้ว ALTER TABLE ... DROP CONSTRAINT)');
+            out.add(tr('-- ⚠ ต้องลบ UNIQUE ของ {0}.{1} เอง: SQL Server ตั้งชื่อ constraint อัตโนมัติ (ดูชื่อด้วย sp_helpconstraint แล้ว ALTER TABLE ... DROP CONSTRAINT)', [td.old.name, c.old.name]));
           case Dialect.sqlite:
             break;
         }
       }
     }
-    section('เอา UNIQUE ออก', out);
+    section(tr('เอา UNIQUE ออก'), out);
   }
 
   // ---------- 4. ลบตาราง ----------
 
   void _dropTables() {
-    section('ลบตาราง', [
-      for (final t in diff.droppedTables) '-- ⚠ ลบตาราง ${DdlGenerator.flat(t.name)} พร้อมข้อมูลทั้งหมด\nDROP TABLE ${q(t.name)};',
+    section(tr('ลบตาราง@@drop'), [
+      for (final t in diff.droppedTables) tr('-- ⚠ ลบตาราง {0} พร้อมข้อมูลทั้งหมด\nDROP TABLE {1};', [DdlGenerator.flat(t.name), q(t.name)]),
     ]);
   }
 
@@ -153,13 +195,13 @@ class _Migration {
         _ => 'ALTER TABLE ${q(a)} RENAME TO ${q(b)};',
       });
     }
-    section('เปลี่ยนชื่อตาราง', out);
+    section(tr('เปลี่ยนชื่อตาราง'), out);
   }
 
   // ---------- 6. สร้างตารางใหม่ ----------
 
   void _createTables() {
-    section('สร้างตารางใหม่', [for (final t in diff.addedTables) gen.createTable(neu, t, newNames)]);
+    section(tr('สร้างตารางใหม่'), [for (final t in diff.addedTables) gen.createTable(neu, t, newNames)]);
   }
 
   // ---------- 7. แก้ตารางเดิม ----------
@@ -173,14 +215,14 @@ class _Migration {
       } else {
         out.addAll(_alterOne(td));
       }
-      section('แก้ตาราง ${DdlGenerator.flat(n.name)}', out);
+      section(tr('แก้ตาราง {0}', [DdlGenerator.flat(n.name)]), out);
     }
     // SQLite: ตารางที่ต้องสร้างใหม่เพราะ FK เปลี่ยนอย่างเดียว (ไม่มีการแก้คอลัมน์)
     final inModified = diff.modified.map((x) => x.neu.id).toSet();
     for (final id in rebuild.where((id) => !inModified.contains(id))) {
       final t = neu.tableById(id);
       if (t != null) {
-        section('แก้ตาราง ${DdlGenerator.flat(t.name)}', _rebuildTable(null, plain: t));
+        section(tr('แก้ตาราง {0}', [DdlGenerator.flat(t.name)]), _rebuildTable(null, plain: t));
       }
     }
   }
@@ -202,7 +244,7 @@ class _Migration {
     }
 
     for (final c in td.droppedColumns) {
-      out.add('-- ⚠ ลบคอลัมน์ ${DdlGenerator.flat(n.name)}.${DdlGenerator.flat(c.name)} พร้อมข้อมูล\n'
+      out.add('${tr('-- ⚠ ลบคอลัมน์ {0}.{1} พร้อมข้อมูล', [DdlGenerator.flat(n.name), DdlGenerator.flat(c.name)])}\n'
           'ALTER TABLE $t DROP COLUMN ${q(c.name)};');
     }
 
@@ -216,7 +258,7 @@ class _Migration {
       if ((c.notNull || c.isPrimaryKey) &&
           !c.autoIncrement &&
           (c.defaultValue ?? '').trim().isEmpty) {
-        out.add('-- ⚠ ${DdlGenerator.flat(c.name)} เป็น NOT NULL ไม่มี DEFAULT: ถ้าตารางมีข้อมูลอยู่จะ error (ตั้ง DEFAULT หรือเติมค่าก่อน)');
+        out.add(tr('-- ⚠ {0} เป็น NOT NULL ไม่มี DEFAULT: ถ้าตารางมีข้อมูลอยู่จะ error (ตั้ง DEFAULT หรือเติมค่าก่อน)', [DdlGenerator.flat(c.name)]));
       }
       final def = gen.columnDef(n, c, pk);
       out.add(d == Dialect.mssql ? 'ALTER TABLE $t ADD $def;' : 'ALTER TABLE $t ADD COLUMN $def;');
@@ -255,13 +297,13 @@ class _Migration {
       case Dialect.mysql:
         // MODIFY ต้องบอกนิยามเต็ม; UNIQUE จัดการแยกต่างหาก
         final copy = c.copy()..unique = false;
-        if (ch.typeChanged) out.add('-- ⚠ เปลี่ยนชนิด $t.$col: ข้อมูลเดิมอาจถูกตัด/แปลงไม่ได้');
+        if (ch.typeChanged) out.add(tr('-- ⚠ เปลี่ยนชนิด {0}.{1}: ข้อมูลเดิมอาจถูกตัด/แปลงไม่ได้', [t, col]));
         out.add('ALTER TABLE $t MODIFY COLUMN ${gen.columnDef(n, copy, pk)};');
       case Dialect.postgres:
         final noAi = c.copy()..autoIncrement = false;
         if (ch.typeChanged) {
           final type = gen.columnType(noAi);
-          out.add('-- ⚠ เปลี่ยนชนิด $t.$col: ข้อมูลเดิมอาจแปลงไม่ได้ (ใช้ USING แปลงให้)');
+          out.add(tr('-- ⚠ เปลี่ยนชนิด {0}.{1}: ข้อมูลเดิมอาจแปลงไม่ได้ (ใช้ USING แปลงให้)', [t, col]));
           out.add('ALTER TABLE $t ALTER COLUMN $col TYPE $type USING $col::$type;');
         }
         if (ch.nullChanged) {
@@ -274,24 +316,22 @@ class _Migration {
               : 'ALTER TABLE $t ALTER COLUMN $col SET DEFAULT ${gen.formatDefault(v, c)};');
         }
         if (ch.autoIncrementChanged) {
-          out.add('-- ⚠ ${c.autoIncrement ? 'เปิด' : 'ปิด'} AUTO INCREMENT ของ $t.$col ต้องจัดการ SEQUENCE เอง '
-              '(เช่น ALTER COLUMN ... ADD GENERATED BY DEFAULT AS IDENTITY)');
+          out.add(tr('-- ⚠ {0} AUTO INCREMENT ของ {1}.{2} ต้องจัดการ SEQUENCE เอง (เช่น ALTER COLUMN ... ADD GENERATED BY DEFAULT AS IDENTITY)', [c.autoIncrement ? tr('เปิด@@enable') : tr('ปิด@@disable'), t, col]));
         }
         if (ch.commentChanged) {
           out.add('COMMENT ON COLUMN $t.$col IS ${c.comment.isEmpty ? 'NULL' : lit(c.comment)};');
         }
       case Dialect.mssql:
         if (ch.typeChanged || ch.nullChanged) {
-          if (ch.typeChanged) out.add('-- ⚠ เปลี่ยนชนิด $t.$col: ข้อมูลเดิมอาจแปลงไม่ได้');
+          if (ch.typeChanged) out.add(tr('-- ⚠ เปลี่ยนชนิด {0}.{1}: ข้อมูลเดิมอาจแปลงไม่ได้', [t, col]));
           out.add('ALTER TABLE $t ALTER COLUMN $col ${gen.columnType(c)} '
               '${c.notNull || c.isPrimaryKey ? 'NOT NULL' : 'NULL'};');
         }
         if (ch.defaultChanged) {
-          out.add('-- ⚠ เปลี่ยนค่าเริ่มต้นของ $t.$col เป็น ${(c.defaultValue ?? '').trim().isEmpty ? '(ไม่มี)' : c.defaultValue} '
-              'ต้องทำเอง: DEFAULT constraint ของ SQL Server มีชื่ออัตโนมัติ (ลบของเดิมแล้ว ADD CONSTRAINT ... DEFAULT ... FOR $col)');
+          out.add(tr('-- ⚠ เปลี่ยนค่าเริ่มต้นของ {0}.{1} เป็น {2} ต้องทำเอง: DEFAULT constraint ของ SQL Server มีชื่ออัตโนมัติ (ลบของเดิมแล้ว ADD CONSTRAINT ... DEFAULT ... FOR {1})', [t, col, (c.defaultValue ?? '').trim().isEmpty ? tr('(ไม่มี)') : c.defaultValue]));
         }
         if (ch.autoIncrementChanged) {
-          out.add('-- ⚠ SQL Server เปลี่ยน IDENTITY ของ $t.$col ตรง ๆ ไม่ได้ ต้องสร้างคอลัมน์/ตารางใหม่');
+          out.add(tr('-- ⚠ SQL Server เปลี่ยน IDENTITY ของ {0}.{1} ตรง ๆ ไม่ได้ ต้องสร้างคอลัมน์/ตารางใหม่', [t, col]));
         }
         if (ch.commentChanged) out.addAll(_mssqlColumnComment(n.name, c.name, ch.old.comment, c.comment));
       case Dialect.sqlite:
@@ -337,7 +377,7 @@ class _Migration {
     final n = td?.neu ?? plain!;
     final tmp = '${n.name}__new';
     final out = <String>[
-      '-- SQLite แก้โครงสร้างตารางตรง ๆ ไม่ได้: สร้างตารางใหม่ → คัดลอกข้อมูล → แทนที่ของเดิม',
+      tr('-- SQLite แก้โครงสร้างตารางตรง ๆ ไม่ได้: สร้างตารางใหม่ → คัดลอกข้อมูล → แทนที่ของเดิม'),
     ];
     final copy = TableModel(
       id: n.id,
@@ -362,11 +402,11 @@ class _Migration {
       }
       for (final c in td.addedColumns) {
         if ((c.notNull || c.isPrimaryKey) && !c.autoIncrement && (c.defaultValue ?? '').trim().isEmpty) {
-          out.add('-- ⚠ คอลัมน์ใหม่ ${DdlGenerator.flat(c.name)} เป็น NOT NULL ไม่มี DEFAULT: ถ้าตารางมีข้อมูลอยู่ INSERT ด้านล่างจะ error');
+          out.add(tr('-- ⚠ คอลัมน์ใหม่ {0} เป็น NOT NULL ไม่มี DEFAULT: ถ้าตารางมีข้อมูลอยู่ INSERT ด้านล่างจะ error', [DdlGenerator.flat(c.name)]));
         }
       }
       for (final c in td.changedColumns.where((c) => c.typeChanged)) {
-        out.add('-- ⚠ ชนิดของ ${DdlGenerator.flat(c.neu.name)} เปลี่ยน — SQLite จะเก็บค่าเดิมตามที่เป็น');
+        out.add(tr('-- ⚠ ชนิดของ {0} เปลี่ยน — SQLite จะเก็บค่าเดิมตามที่เป็น', [DdlGenerator.flat(c.neu.name)]));
       }
     } else {
       for (final c in n.columns) {
@@ -414,7 +454,7 @@ class _Migration {
         add(t, i);
       }
     }
-    section('สร้าง INDEX', out);
+    section(tr('สร้าง INDEX'), out);
   }
 
   // ---------- 9. เพิ่ม FK ----------
@@ -426,7 +466,7 @@ class _Migration {
       final s = gen.addForeignKeyStatement(neu, r, newNames);
       if (s != null) out.add(s);
     }
-    section('เพิ่มความสัมพันธ์ FK', out);
+    section(tr('เพิ่มความสัมพันธ์ FK'), out);
   }
 
   // ---------- 10. หมายเหตุ ----------
@@ -449,7 +489,7 @@ class _Migration {
           break;
       }
     }
-    section('หมายเหตุ (COMMENT)', out);
+    section(tr('หมายเหตุ (COMMENT)'), out);
   }
 
   List<String> _mssqlTableComment(String table, String from, String to) {

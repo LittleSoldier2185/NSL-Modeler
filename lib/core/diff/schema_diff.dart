@@ -4,6 +4,8 @@ import '../models/index_model.dart';
 import '../models/project.dart';
 import '../models/relation_model.dart';
 import '../models/table_model.dart';
+import 'seed_diff.dart';
+import '../l10n/l10n.dart';
 
 /// การเปลี่ยนของคอลัมน์หนึ่งตัว (จับคู่ old/new ได้แล้ว)
 class ColumnChange {
@@ -81,6 +83,8 @@ class ChangeLine {
 }
 
 class SchemaDiff {
+  /// ความต่างของข้อมูลตั้งต้นต่อตาราง (เฉพาะตารางที่มีอะไรเปลี่ยน)
+  final seed = <SeedTableDelta>[];
   final addedTables = <TableModel>[];
   final droppedTables = <TableModel>[];
   final modified = <TableDiff>[];
@@ -91,6 +95,7 @@ class SchemaDiff {
   final tableMap = <String, String>{};
 
   bool get isEmpty =>
+      seed.isEmpty &&
       addedTables.isEmpty &&
       droppedTables.isEmpty &&
       modified.isEmpty &&
@@ -106,57 +111,67 @@ class SchemaDiff {
     }
 
     for (final t in droppedTables) {
-      out.add(ChangeLine(ChangeKind.drop, 'ลบตาราง ${t.name}', destructive: true));
+      out.add(ChangeLine(ChangeKind.drop, tr('ลบตาราง {0}', [t.name]), destructive: true));
     }
     for (final t in addedTables) {
-      out.add(ChangeLine(ChangeKind.add, 'เพิ่มตาราง ${t.name} (${t.columns.length} คอลัมน์)'));
+      out.add(ChangeLine(ChangeKind.add, tr('เพิ่มตาราง {0} ({1} คอลัมน์)', [t.name, t.columns.length])));
     }
     for (final d in modified) {
       final n = d.neu.name;
-      if (d.renamed) out.add(ChangeLine(ChangeKind.change, 'เปลี่ยนชื่อตาราง ${d.old.name} → $n'));
-      if (d.commentChanged) out.add(ChangeLine(ChangeKind.change, '$n: แก้หมายเหตุตาราง'));
+      if (d.renamed) out.add(ChangeLine(ChangeKind.change, tr('เปลี่ยนชื่อตาราง {0} → {1}', [d.old.name, n])));
+      if (d.commentChanged) out.add(ChangeLine(ChangeKind.change, tr('{0}: แก้หมายเหตุตาราง', [n])));
       for (final c in d.droppedColumns) {
-        out.add(ChangeLine(ChangeKind.drop, '$n: ลบคอลัมน์ ${c.name}', destructive: true));
+        out.add(ChangeLine(ChangeKind.drop, tr('{0}: ลบคอลัมน์ {1}', [n, c.name]), destructive: true));
       }
       for (final c in d.addedColumns) {
-        out.add(ChangeLine(ChangeKind.add, '$n: เพิ่มคอลัมน์ ${c.name} ${ColumnChange.typeText(c)}'));
+        out.add(ChangeLine(ChangeKind.add, tr('{0}: เพิ่มคอลัมน์ {1} {2}', [n, c.name, ColumnChange.typeText(c)])));
       }
       for (final c in d.changedColumns) {
-        if (c.renamed) out.add(ChangeLine(ChangeKind.change, '$n: เปลี่ยนชื่อคอลัมน์ ${c.old.name} → ${c.neu.name}'));
+        if (c.renamed) out.add(ChangeLine(ChangeKind.change, tr('{0}: เปลี่ยนชื่อคอลัมน์ {1} → {2}', [n, c.old.name, c.neu.name])));
         final col = '$n.${c.neu.name}';
         if (c.typeChanged) {
           out.add(ChangeLine(ChangeKind.change,
-              '$col: ชนิด ${ColumnChange.typeText(c.old)} → ${ColumnChange.typeText(c.neu)}',
+              tr('{0}: ชนิด {1} → {2}', [col, ColumnChange.typeText(c.old), ColumnChange.typeText(c.neu)]),
               destructive: true));
         }
         if (c.nullChanged) {
-          out.add(ChangeLine(ChangeKind.change, '$col: ${c.neu.notNull || c.neu.isPrimaryKey ? 'เป็น NOT NULL' : 'อนุญาต NULL'}'));
+          out.add(ChangeLine(ChangeKind.change, tr('{0}: {1}', [col, c.neu.notNull || c.neu.isPrimaryKey ? tr('เป็น NOT NULL') : tr('อนุญาต NULL')])));
         }
         if (c.defaultChanged) {
           out.add(ChangeLine(ChangeKind.change,
-              '$col: ค่าเริ่มต้น ${c.old.defaultValue ?? '(ไม่มี)'} → ${c.neu.defaultValue ?? '(ไม่มี)'}'));
+              tr('{0}: ค่าเริ่มต้น {1} → {2}', [col, c.old.defaultValue ?? tr('(ไม่มี)'), c.neu.defaultValue ?? tr('(ไม่มี)')])));
         }
         if (c.autoIncrementChanged) {
-          out.add(ChangeLine(ChangeKind.change, '$col: ${c.neu.autoIncrement ? 'เปิด' : 'ปิด'} AUTO INCREMENT'));
+          out.add(ChangeLine(ChangeKind.change, tr('{0}: {1} AUTO INCREMENT', [col, c.neu.autoIncrement ? tr('เปิด@@enable') : tr('ปิด@@disable')])));
         }
         if (c.uniqueChanged) {
-          out.add(ChangeLine(ChangeKind.change, '$col: ${c.neu.unique ? 'เพิ่ม' : 'เอา'} UNIQUE'));
+          out.add(ChangeLine(ChangeKind.change, tr('{0}: {1} UNIQUE', [col, c.neu.unique ? tr('เพิ่ม') : tr('เอา')])));
         }
-        if (c.commentChanged) out.add(ChangeLine(ChangeKind.change, '$col: แก้หมายเหตุ'));
+        if (c.commentChanged) out.add(ChangeLine(ChangeKind.change, tr('{0}: แก้หมายเหตุ', [col])));
       }
-      if (d.pkChanged) out.add(ChangeLine(ChangeKind.change, '$n: เปลี่ยน Primary Key'));
+      if (d.pkChanged) out.add(ChangeLine(ChangeKind.change, tr('{0}: เปลี่ยน Primary Key', [n])));
       for (final i in d.droppedIndexes) {
-        out.add(ChangeLine(ChangeKind.drop, '$n: ลบ INDEX ${i.name}'));
+        out.add(ChangeLine(ChangeKind.drop, tr('{0}: ลบ INDEX {1}', [n, i.name])));
       }
       for (final i in d.addedIndexes) {
-        out.add(ChangeLine(ChangeKind.add, '$n: เพิ่ม ${i.unique ? 'UNIQUE ' : ''}INDEX ${i.name}'));
+        out.add(ChangeLine(ChangeKind.add, tr('{0}: เพิ่ม {1}INDEX {2}', [n, i.unique ? 'UNIQUE ' : '', i.name])));
       }
     }
     for (final r in droppedRelations) {
-      out.add(ChangeLine(ChangeKind.drop, 'ลบ FK ${fk(old, r)}'));
+      out.add(ChangeLine(ChangeKind.drop, tr('ลบ FK {0}', [fk(old, r)])));
     }
     for (final r in addedRelations) {
-      out.add(ChangeLine(ChangeKind.add, 'เพิ่ม FK ${fk(neu, r)}'));
+      out.add(ChangeLine(ChangeKind.add, tr('เพิ่ม FK {0}', [fk(neu, r)])));
+    }
+    for (final s in seed) {
+      if (s.added.isNotEmpty) {
+        out.add(ChangeLine(ChangeKind.add, tr('เพิ่มข้อมูลตั้งต้น {0}: {1} แถว', [s.table.name, s.added.length])));
+      }
+      if (s.changed > 0 || s.removed > 0) {
+        // ไม่ใช่การลบข้อมูลโดยสคริปต์ (ไม่สร้าง UPDATE/DELETE ให้) จึงไม่ติดธงอันตราย แต่แจ้งให้ทำเอง
+        out.add(ChangeLine(ChangeKind.change,
+            tr('ข้อมูลตั้งต้น {0}: แก้ {1} แถว / ลบ {2} แถว — ไม่ถูกแตะ (ต้องทำเอง)', [s.table.name, s.changed, s.removed])));
+      }
     }
     return out;
   }
@@ -234,6 +249,7 @@ SchemaDiff diffProjects(Project old, Project neu) {
   for (final e in newByKey.entries) {
     if (!seen.contains(e.key)) diff.addedRelations.add(e.value);
   }
+  diff.seed.addAll(computeSeedDelta(old, neu, diff.tableMap));
   return diff;
 }
 

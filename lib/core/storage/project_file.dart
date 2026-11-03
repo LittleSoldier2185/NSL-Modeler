@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../models/project.dart';
+import '../l10n/l10n.dart';
 
 class ProjectFormatException implements Exception {
   ProjectFormatException(this.message);
@@ -20,19 +21,19 @@ class ProjectFile {
     try {
       data = jsonDecode(text);
     } on FormatException catch (e) {
-      throw ProjectFormatException('ไฟล์ไม่ใช่ JSON ที่ถูกต้อง: ${e.message}');
+      throw ProjectFormatException(tr('ไฟล์ไม่ใช่ JSON ที่ถูกต้อง: {0}', [e.message]));
     }
     if (data is! Map<String, dynamic> || data['format'] != 'nsl-erd') {
-      throw ProjectFormatException('ไม่ใช่ไฟล์โปรเจกต์ NSL Modeler');
+      throw ProjectFormatException(tr('ไม่ใช่ไฟล์โปรเจกต์ NSL Modeler'));
     }
     final v = data['version'];
     if (v is! int || v > Project.formatVersion) {
-      throw ProjectFormatException('ไฟล์เวอร์ชันใหม่กว่าที่โปรแกรมรองรับ');
+      throw ProjectFormatException(tr('ไฟล์เวอร์ชันใหม่กว่าที่โปรแกรมรองรับ'));
     }
     try {
       return Project.fromJson(data);
     } catch (e) {
-      throw ProjectFormatException('โครงสร้างไฟล์ไม่ถูกต้อง: $e');
+      throw ProjectFormatException(tr('โครงสร้างไฟล์ไม่ถูกต้อง: {0}', [e]));
     }
   }
 

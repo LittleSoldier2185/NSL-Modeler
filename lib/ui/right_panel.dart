@@ -8,7 +8,10 @@ import '../core/models/table_model.dart';
 import '../state/project_controller.dart';
 import 'issue_widgets.dart';
 import 'theme.dart';
+import 'seed_data_dialog.dart';
+import 'style_actions.dart';
 import 'widgets.dart';
+import '../core/l10n/l10n.dart';
 
 class RightPanel extends StatelessWidget {
   const RightPanel({super.key});
@@ -19,17 +22,16 @@ class RightPanel extends StatelessWidget {
     final t = c.selectedTable;
 
     return Container(
-      width: 320,
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: C.surface,
         border: Border(left: BorderSide(color: C.border)),
       ),
       child: t == null
-          ? const Center(
+          ? Center(
               child: Padding(
                 padding: EdgeInsets.all(24),
                 child: Text(
-                  'เลือกตารางทางซ้ายเพื่อแก้ไข',
+                  tr('เลือกตารางทางซ้ายเพื่อแก้ไข'),
                   style: TextStyle(color: C.muted),
                   textAlign: TextAlign.center,
                 ),
@@ -60,17 +62,17 @@ class _TableEditor extends StatelessWidget {
             decoration: BoxDecoration(color: C.primaryTint, borderRadius: BorderRadius.circular(8)),
             child: Row(children: [
               Expanded(
-                child: Text('เลือกอยู่ ${c.selectionCount} ตาราง · แก้ไขทีละตาราง (กำลังแสดงตารางล่าสุดที่เลือก)',
-                    style: const TextStyle(fontSize: 12, color: C.primaryDark)),
+                child: Text(tr('เลือกอยู่ {0} ตาราง · แก้ไขทีละตาราง (กำลังแสดงตารางล่าสุดที่เลือก)', [c.selectionCount]),
+                    style: TextStyle(fontSize: 12, color: C.primaryDark)),
               ),
               TextButton(
                 onPressed: c.duplicateSelected,
-                child: const Text('ทำสำเนา'),
+                child: Text(tr('ทำสำเนา')),
               ),
               TextButton(
                 onPressed: c.removeSelectedTables,
-                style: TextButton.styleFrom(foregroundColor: const Color(0xFFB42318)),
-                child: const Text('ลบ'),
+                style: TextButton.styleFrom(foregroundColor: C.danger),
+                child: Text(tr('ลบ')),
               ),
             ]),
           ),
@@ -79,7 +81,7 @@ class _TableEditor extends StatelessWidget {
           child: Row(children: [
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('คุณสมบัติของตาราง', style: TextStyle(fontSize: 12, color: C.muted)),
+                Text(tr('คุณสมบัติของตาราง'), style: TextStyle(fontSize: 12, color: C.muted)),
                 const SizedBox(height: 2),
                 Text(
                   table.name,
@@ -89,12 +91,12 @@ class _TableEditor extends StatelessWidget {
               ]),
             ),
             IconButton(
-              tooltip: 'ทำสำเนาตาราง',
+              tooltip: tr('ทำสำเนาตาราง'),
               onPressed: () => c.duplicateTable(table.id),
               icon: const Icon(Icons.copy_outlined, size: 18),
             ),
             IconButton(
-              tooltip: 'ลบตาราง',
+              tooltip: tr('ลบตาราง'),
               onPressed: () => _confirmDelete(context, c),
               icon: const Icon(Icons.delete_outline, size: 19, color: Color(0xFFB42318)),
             ),
@@ -106,17 +108,70 @@ class _TableEditor extends StatelessWidget {
           child: Column(children: [
             CommitField(
               key: ValueKey('tn-${table.id}-${table.name}'),
-              label: 'ชื่อตาราง',
+              label: tr('ชื่อตาราง'),
               value: table.name,
               mono: true,
+              height: 42,
+              fontSize: 15,
               onCommit: (v) => c.renameTable(table.id, v.trim().isEmpty ? table.name : v.trim()),
             ),
             const SizedBox(height: 12),
             CommitField(
               key: ValueKey('tc-${table.id}-${table.comment}'),
-              label: 'หมายเหตุ (COMMENT)',
+              label: tr('หมายเหตุ (COMMENT)'),
               value: table.comment,
+              minLines: 4,
+              maxLines: 10,
+              hint: tr('อธิบายว่าตารางนี้เก็บอะไร (ใช้เป็น COMMENT ใน SQL)'),
               onCommit: (v) => c.setTableComment(table.id, v),
+            ),
+            const SizedBox(height: 14),
+            _ColorPicker(
+              selected: table.colorIndex,
+              custom: table.customColor,
+              onPick: (i) => c.setTablesColor(c.selectedTableIds, i),
+              onCustom: () => StyleActions.tableColor(context, c, c.selectedTableIds, current: table.colorValue),
+            ),
+            const SizedBox(height: 14),
+            LabeledField(
+              label: tr('ฟอนต์ตาราง'),
+              child: SizedBox(
+                width: double.infinity,
+                height: kFieldHeight,
+                child: OutlinedButton.icon(
+                  key: const ValueKey('table-font'),
+                  onPressed: () => StyleActions.tableFont(context, c, c.selectedTableIds, current: table.fontFamily),
+                  icon: const Icon(Icons.font_download_outlined, size: 16),
+                  label: Text(table.fontFamily ?? tr('ค่าเริ่มต้น (Noto Sans Thai)'),
+                      maxLines: 1, overflow: TextOverflow.ellipsis, style: tableFont(const TextStyle(fontSize: 13), table.fontFamily)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            LabeledField(
+              label: tr('ข้อมูลตั้งต้น (Seed data)'),
+              child: SizedBox(
+                width: double.infinity,
+                height: kFieldHeight,
+                child: OutlinedButton.icon(
+                  key: const ValueKey('seed-open'),
+                  onPressed: () async {
+                    final rows = await showSeedDataDialog(context, project: c.project, table: table);
+                    if (rows != null) c.setSeedRows(table.id, rows);
+                  },
+                  icon: const Icon(Icons.dataset_outlined, size: 16),
+                  label: Text(
+                    table.seedRows.isEmpty ? tr('เพิ่มข้อมูลตั้งต้น…') : tr('{0} แถว — แก้ไข…', [table.seedRows.length]),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: C.text,
+                    alignment: Alignment.centerLeft,
+                    side: BorderSide(color: C.inputBorder),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                  ),
+                ),
+              ),
             ),
           ]),
         ),
@@ -127,17 +182,17 @@ class _TableEditor extends StatelessWidget {
             Expanded(
               child: Text.rich(
                 TextSpan(children: [
-                  const TextSpan(text: 'คอลัมน์', style: TextStyle(fontWeight: FontWeight.w600)),
+                  TextSpan(text: tr('คอลัมน์'), style: TextStyle(fontWeight: FontWeight.w600)),
                   TextSpan(
                       text: ' (${table.columns.length})',
-                      style: const TextStyle(color: C.muted)),
+                      style: TextStyle(color: C.muted)),
                 ]),
                 overflow: TextOverflow.ellipsis,
                 maxLines: 1,
               ),
             ),
             const SizedBox(width: 8),
-            SmallButton(label: '+ เพิ่มคอลัมน์', onTap: () => c.addColumn(table.id)),
+            SmallButton(label: tr('+ เพิ่มคอลัมน์'), onTap: () => c.addColumn(table.id)),
           ]),
         ),
         _ColumnList(table: table),
@@ -154,17 +209,21 @@ class _TableEditor extends StatelessWidget {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('ลบตาราง ${table.name}?'),
-        content: const Text('ความสัมพันธ์ FK ที่เกี่ยวข้องจะถูกลบด้วย (ย้อนกลับได้ด้วย Ctrl+Z)'),
+        title: Text(tr('ลบตาราง {0}?', [table.name])),
+        content: Text(tr('ความสัมพันธ์ FK ที่เกี่ยวข้องจะถูกลบด้วย (ย้อนกลับได้ด้วย Ctrl+Z)')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ยกเลิก')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('ลบ')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('ยกเลิก'))),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(tr('ลบ'))),
         ],
       ),
     );
     if (ok == true) c.removeTable(table.id);
   }
 }
+
+/// ความกว้างช่องป้าย (PK/FK/NN/AI) และช่องชนิดข้อมูลในรายการคอลัมน์ — คงที่เพื่อให้ขอบขวาตรงกันทุกแถว
+const double kColumnBadgeWidth = 80;
+const double kColumnTypeWidth = 88;
 
 class _ColumnList extends StatelessWidget {
   const _ColumnList({required this.table});
@@ -202,30 +261,50 @@ class _ColumnList extends StatelessWidget {
                 child: Row(children: [
                   ReorderableDragStartListener(
                     index: i,
-                    child: const Padding(
+                    child: Padding(
                       padding: EdgeInsets.symmetric(horizontal: 4),
                       child: Icon(Icons.drag_indicator, size: 16, color: C.muted),
                     ),
                   ),
-                  Flexible(
+                  // จัดเป็นช่อง: ชื่อ (ยืดได้) | ป้าย (ชิดขวา ความกว้างคงที่) | ชนิดข้อมูล (ชิดขวา ความกว้างคงที่)
+                  // ขอบขวาของป้ายและชนิดข้อมูลจึงตรงกันทุกแถว ไม่เหลื่อมตามความยาวชื่อ/จำนวนป้าย
+                  Expanded(
                     child: Text(col.name,
+                        key: ValueKey('col-name-${col.id}'),
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
                   ),
                   const SizedBox(width: 6),
-                  if (col.isPrimaryKey) const Chip2('PK', C.pkBg, C.pkText),
-                  if (fkCols.contains(col.id)) const Chip2('FK', Color(0xFFD9F0EC), C.primaryDark),
-                  if (col.notNull) const Padding(
-                    padding: EdgeInsets.only(left: 3),
-                    child: Chip2('NN', C.nnBg, C.nnText),
+                  SizedBox(
+                    key: ValueKey('col-badges-${col.id}'),
+                    width: kColumnBadgeWidth,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerRight,
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        for (final b in [
+                          if (col.isPrimaryKey) Chip2('PK', C.pkBg, C.pkText),
+                          if (fkCols.contains(col.id)) Chip2('FK', C.fkChip, C.primaryDark),
+                          if (col.notNull) Chip2('NN', C.nnBg, C.nnText),
+                          if (col.autoIncrement) Chip2('AI', C.infoBg, C.infoText),
+                        ].indexed) ...[
+                          if (b.$1 > 0) const SizedBox(width: 3),
+                          b.$2,
+                        ],
+                      ]),
+                    ),
                   ),
-                  if (col.autoIncrement) const Padding(
-                    padding: EdgeInsets.only(left: 3),
-                    child: Chip2('AI', C.infoBg, C.infoText),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    key: ValueKey('col-type-${col.id}'),
+                    width: kColumnTypeWidth,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerRight,
+                      child: Text(typeLabel(col), maxLines: 1, style: monoStyle.copyWith(fontSize: 11.5, color: C.muted)),
+                    ),
                   ),
-                  const Spacer(),
-                  Text(typeLabel(col),
-                      style: monoStyle.copyWith(fontSize: 11.5, color: C.muted)),
                   const SizedBox(width: 8),
                 ]),
               ),
@@ -260,13 +339,13 @@ class _ColumnEditor extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text.rich(TextSpan(children: [
-          const TextSpan(text: 'คอลัมน์ที่เลือก: ', style: TextStyle(fontWeight: FontWeight.w600)),
+          TextSpan(text: tr('คอลัมน์ที่เลือก: '), style: TextStyle(fontWeight: FontWeight.w600)),
           TextSpan(text: column.name, style: monoStyle.copyWith(color: C.primaryDark)),
         ])),
         const SizedBox(height: 12),
         CommitField(
           key: ValueKey('cn-${column.id}-${column.name}'),
-          label: 'ชื่อคอลัมน์',
+          label: tr('ชื่อคอลัมน์'),
           value: column.name,
           mono: true,
           onCommit: (v) {
@@ -277,7 +356,7 @@ class _ColumnEditor extends StatelessWidget {
         Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Expanded(
             child: LabeledField(
-              label: 'ชนิดข้อมูล',
+              label: tr('ชนิดข้อมูล'),
               child: Dropdown<DataType>(
                 value: column.type,
                 items: DataType.values,
@@ -304,8 +383,8 @@ class _ColumnEditor extends StatelessWidget {
           Expanded(
             child: CommitField(
               key: ValueKey('cd-${column.id}-${column.defaultValue}'),
-              label: 'ค่าเริ่มต้น',
-              hint: 'ไม่มี',
+              label: tr('ค่าเริ่มต้น'),
+              hint: tr('ไม่มี'),
               value: column.defaultValue ?? '',
               onCommit: (v) => edit((x) => x.defaultValue = v.isEmpty ? null : v),
             ),
@@ -317,7 +396,7 @@ class _ColumnEditor extends StatelessWidget {
             Expanded(
               child: CommitField(
                 key: ValueKey('cl-${column.id}-${column.length}'),
-                label: column.type == DataType.decimal ? 'Precision' : 'ความยาว',
+                label: column.type == DataType.decimal ? 'Precision' : tr('ความยาว'),
                 value: '${column.length ?? ''}',
                 onCommit: (v) {
                   final n = int.tryParse(v.trim());
@@ -344,30 +423,35 @@ class _ColumnEditor extends StatelessWidget {
               const Spacer(),
           ]),
         ],
-        const SizedBox(height: 10),
-        Wrap(spacing: 14, runSpacing: 0, children: [
-          _Check('PK', column.isPrimaryKey, (v) => edit((x) {
-                x.isPrimaryKey = v;
-                if (v) x.notNull = true;
-              })),
-          _Check('NOT NULL', column.notNull, (v) => edit((x) => x.notNull = v),
-              enabled: !column.isPrimaryKey),
-          _Check('UNIQUE', column.unique, (v) => edit((x) => x.unique = v)),
-          _Check('AUTO INCREMENT', column.autoIncrement, (v) => edit((x) => x.autoIncrement = v),
-              enabled: canAi),
-        ]),
+        const SizedBox(height: 12),
+        // ช่องติ๊กเรียงเป็นตารางคอลัมน์เท่ากัน (2 คอลัมน์ในแผงปกติ, 4 คอลัมน์เมื่อแผงกว้าง) ไม่ปล่อยให้ตัดบรรทัดเหลื่อมกัน
+        LayoutBuilder(builder: (context, box) {
+          final cols = box.maxWidth >= 440 ? 4 : 2;
+          const gap = 8.0;
+          final w = (box.maxWidth - gap * (cols - 1)) / cols;
+          Widget cell(Widget child) => SizedBox(width: w, child: child);
+          return Wrap(spacing: gap, runSpacing: 2, children: [
+            cell(_Check('PK', column.isPrimaryKey, (v) => edit((x) {
+                  x.isPrimaryKey = v;
+                  if (v) x.notNull = true;
+                }))),
+            cell(_Check('NOT NULL', column.notNull, (v) => edit((x) => x.notNull = v), enabled: !column.isPrimaryKey)),
+            cell(_Check('UNIQUE', column.unique, (v) => edit((x) => x.unique = v))),
+            cell(_Check('AUTO INCREMENT', column.autoIncrement, (v) => edit((x) => x.autoIncrement = v), enabled: canAi)),
+          ]);
+        }),
         if (rel != null) ...[
-          const SizedBox(height: 10),
+          const SizedBox(height: 14),
           _FkBox(relation: rel),
         ],
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         Align(
           alignment: Alignment.centerLeft,
           child: TextButton.icon(
             onPressed: () => c.removeColumn(table.id, column.id),
             icon: const Icon(Icons.delete_outline, size: 16),
-            label: const Text('ลบคอลัมน์นี้'),
-            style: TextButton.styleFrom(foregroundColor: const Color(0xFFB42318)),
+            label: Text(tr('ลบคอลัมน์นี้')),
+            style: TextButton.styleFrom(foregroundColor: C.danger),
           ),
         ),
       ]),
@@ -388,15 +472,15 @@ class _TableIssues extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
       padding: const EdgeInsets.fromLTRB(0, 14, 0, 20),
-      decoration: const BoxDecoration(border: Border(top: BorderSide(color: C.borderSoft))),
+      decoration: BoxDecoration(border: Border(top: BorderSide(color: C.borderSoft))),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text.rich(TextSpan(children: [
-          const TextSpan(text: 'ตรวจสอบก่อน Export', style: TextStyle(fontWeight: FontWeight.w600)),
-          TextSpan(text: ' (${mine.length})', style: const TextStyle(color: C.muted)),
+          TextSpan(text: tr('ตรวจสอบก่อน Export'), style: TextStyle(fontWeight: FontWeight.w600)),
+          TextSpan(text: ' (${mine.length})', style: TextStyle(color: C.muted)),
         ])),
         const SizedBox(height: 8),
         if (mine.isEmpty)
-          const Text('✓ ตารางนี้ไม่พบปัญหา', style: TextStyle(fontSize: 12.5, color: C.primaryDark))
+          Text(tr('✓ ตารางนี้ไม่พบปัญหา'), style: TextStyle(fontSize: 12.5, color: C.primaryDark))
         else
           for (final i in mine)
             Padding(
@@ -421,15 +505,23 @@ class _Check extends StatelessWidget {
   @override
   Widget build(BuildContext context) => InkWell(
         onTap: enabled ? () => onChanged(!value) : null,
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
+        child: Row(children: [
           Checkbox(
             value: value,
             onChanged: enabled ? (v) => onChanged(v ?? false) : null,
             visualDensity: VisualDensity.compact,
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             activeColor: C.primary,
           ),
-          Text(label,
-              style: TextStyle(fontSize: 13, color: enabled ? C.text : C.muted)),
+          const SizedBox(width: 4),
+          // ป้ายย่อตามความกว้างของช่อง (เช่น AUTO INCREMENT ในแผงแคบ) ไม่ตัดบรรทัดและไม่ล้น
+          Flexible(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(label, style: TextStyle(fontSize: 13, color: enabled ? C.text : C.muted)),
+            ),
+          ),
         ]),
       );
 }
@@ -449,24 +541,51 @@ class _FkBox extends StatelessWidget {
       decoration: BoxDecoration(color: C.field, borderRadius: BorderRadius.circular(8)),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          const Text('Foreign Key',
-              style: TextStyle(fontSize: 12, color: C.muted, fontWeight: FontWeight.w500)),
-          const Spacer(),
+          Expanded(
+            child: Text('Foreign Key',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 12, color: C.muted, fontWeight: FontWeight.w500)),
+          ),
           InkWell(
             onTap: () => c.removeRelation(relation.id),
-            child: const Text('ลบ FK', style: TextStyle(fontSize: 12, color: Color(0xFFB42318))),
+            child: Text(tr('ลบ FK'), style: TextStyle(fontSize: 12, color: C.danger)),
           ),
         ]),
         const SizedBox(height: 4),
         Text('→ ${to?.name ?? '?'} (${toCol?.name ?? '?'})',
             style: monoStyle.copyWith(fontSize: 12.5)),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
+        Row(children: [
+          Expanded(child: Text(tr('สีเส้น'), style: TextStyle(fontSize: 12, color: C.muted, fontWeight: FontWeight.w500))),
+          InkResponse(
+            key: const ValueKey('fk-color'),
+            onTap: () => StyleActions.relationColor(context, c, relation.id, current: relation.color),
+            child: Container(
+              width: 22,
+              height: 22,
+              decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: relation.color == null ? null : Color(relation.color!),
+                  border: Border.all(color: C.border)),
+              child: relation.color == null ? Icon(Icons.colorize_rounded, size: 13, color: C.muted) : null,
+            ),
+          ),
+          if (relation.color != null) ...[
+            const SizedBox(width: 6),
+            InkResponse(
+              key: const ValueKey('fk-color-reset'),
+              onTap: () => c.setRelationColor(relation.id, null),
+              child: Icon(Icons.close_rounded, size: 15, color: C.muted),
+            ),
+          ],
+        ]),
+        const SizedBox(height: 10),
         Row(children: [
           Expanded(
             child: LabeledField(
               label: 'ON DELETE',
               child: Dropdown<RefAction>(
-                height: 32,
                 value: relation.onDelete,
                 items: RefAction.values,
                 labelOf: (a) => a.sql,
@@ -479,7 +598,6 @@ class _FkBox extends StatelessWidget {
             child: LabeledField(
               label: 'ON UPDATE',
               child: Dropdown<RefAction>(
-                height: 32,
                 value: relation.onUpdate,
                 items: RefAction.values,
                 labelOf: (a) => a.sql,
@@ -488,6 +606,77 @@ class _FkBox extends StatelessWidget {
             ),
           ),
         ]),
+      ]),
+    );
+  }
+}
+
+/// ชื่อสีของตาราง (ตามลำดับ [kTableColors]) ใช้เป็นทูลทิปและรายการเมนู
+const kTableColorNames = ['เขียวน้ำทะเล', 'ม่วง', 'น้ำเงิน', 'ส้ม', 'ชมพู', 'เขียว', 'เทา'];
+
+/// แถบเลือกสีตาราง: วงกลมสีต่าง ๆ + "ไม่มีสี" (กลับเป็นสีเริ่มต้น) — ใช้กับทุกตารางที่เลือกอยู่
+class _ColorPicker extends StatelessWidget {
+  const _ColorPicker({required this.selected, required this.onPick, this.custom, this.onCustom});
+  final int? selected;
+  final int? custom;
+  final ValueChanged<int?> onPick;
+  final VoidCallback? onCustom;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget swatch({required Key key, required String tip, required bool on, required VoidCallback onTap, required Widget child}) =>
+        Tooltip(
+          message: tip,
+          child: InkResponse(
+            key: key,
+            onTap: onTap,
+            radius: 18,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 120),
+              width: 26,
+              height: 26,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: on ? C.text : C.border, width: on ? 2 : 1),
+              ),
+              child: child,
+            ),
+          ),
+        );
+    return LabeledField(
+      label: tr('สีตาราง'),
+      child: Wrap(spacing: 8, runSpacing: 8, children: [
+        swatch(
+          key: const ValueKey('table-color-none'),
+          tip: tr('ไม่มีสี (ค่าเริ่มต้น)'),
+          on: selected == null && custom == null,
+          onTap: () => onPick(null),
+          child: Icon(Icons.block_rounded, size: 15, color: C.muted),
+        ),
+        for (var i = 0; i < kTableColors.length; i++)
+          swatch(
+            key: ValueKey('table-color-$i'),
+            tip: tr(kTableColorNames[i]),
+            on: selected == i && custom == null,
+            onTap: () => onPick(i),
+            child: Container(
+              width: 18,
+              height: 18,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: Color(kTableColors[i])),
+              child: selected == i && custom == null ? const Icon(Icons.check_rounded, size: 13, color: Colors.white) : null,
+            ),
+          ),
+        if (onCustom != null)
+          swatch(
+            key: const ValueKey('table-color-custom'),
+            tip: tr('กำหนดสีเอง…'),
+            on: custom != null,
+            onTap: onCustom!,
+            child: custom == null
+                ? Icon(Icons.colorize_rounded, size: 15, color: C.muted)
+                : Container(width: 18, height: 18, decoration: BoxDecoration(shape: BoxShape.circle, color: Color(custom!))),
+          ),
       ]),
     );
   }

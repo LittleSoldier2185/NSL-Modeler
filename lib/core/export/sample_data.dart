@@ -4,6 +4,7 @@ import '../ddl/ddl_generator.dart';
 import '../models/column_model.dart';
 import '../models/enums.dart';
 import '../models/project.dart';
+import '../l10n/l10n.dart';
 import '../models/table_model.dart';
 import '../types/type_map.dart';
 
@@ -59,7 +60,7 @@ class _Sample {
 
   String build() {
     final blocks = <String>[
-      '-- ข้อมูลตัวอย่างไว้ทดสอบ ($rows แถวต่อตาราง) — ${p.dialect.label}',
+      tr('-- ข้อมูลตัวอย่างไว้ทดสอบ ({0} แถวต่อตาราง) — {1}', [rows, p.dialect.label]),
     ];
     for (final t in _order()) {
       if (t.columns.isEmpty) continue;
@@ -130,7 +131,7 @@ class _Sample {
     }
 
     final name = gen.quote(t.name);
-    if (accepted.isEmpty) return '-- ข้ามตาราง ${DdlGenerator.flat(t.name)}: สร้างแถวที่ไม่ซ้ำไม่ได้';
+    if (accepted.isEmpty) return tr('-- ข้ามตาราง {0}: สร้างแถวที่ไม่ซ้ำไม่ได้', [DdlGenerator.flat(t.name)]);
     if (insertCols.isEmpty) {
       // ทุกคอลัมน์เป็น AUTO INCREMENT -> ให้ DB ตั้งเองทั้งหมด
       final stmt = switch (p.dialect) {

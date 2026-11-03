@@ -7,6 +7,7 @@ import '../core/models/enums.dart';
 import '../state/project_controller.dart';
 import 'canvas/canvas_controller.dart';
 import 'theme.dart';
+import '../core/l10n/l10n.dart';
 
 class LeftPanel extends StatefulWidget {
   const LeftPanel({super.key});
@@ -30,8 +31,7 @@ class _LeftPanelState extends State<LeftPanel> {
     }).toList();
 
     return Container(
-      width: 248,
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: C.surface,
         border: Border(right: BorderSide(color: C.border)),
       ),
@@ -41,9 +41,17 @@ class _LeftPanelState extends State<LeftPanel> {
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
             child: Row(children: [
-              const Text('ตาราง', style: TextStyle(fontWeight: FontWeight.w600)),
-              Text(' (${c.project.tables.length})', style: const TextStyle(color: C.muted)),
-              const Spacer(),
+              // ยุบด้วย … ได้เมื่อแผงแคบสุด (ไม่ล้นเหนือปุ่มเพิ่มตาราง)
+              Expanded(
+                child: Text.rich(
+                  TextSpan(children: [
+                    TextSpan(text: tr('ตาราง'), style: const TextStyle(fontWeight: FontWeight.w600)),
+                    TextSpan(text: ' (${c.project.tables.length})', style: TextStyle(color: C.muted)),
+                  ]),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
               SizedBox(
                 width: 28,
                 height: 28,
@@ -55,10 +63,10 @@ class _LeftPanelState extends State<LeftPanel> {
                   style: OutlinedButton.styleFrom(
                     padding: EdgeInsets.zero,
                     foregroundColor: C.primary,
-                    side: const BorderSide(color: C.border),
+                    side: BorderSide(color: C.border),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                   ),
-                  child: const Tooltip(message: 'เพิ่มตาราง', child: Icon(Icons.add, size: 18)),
+                  child: Tooltip(message: tr('เพิ่มตาราง'), child: Icon(Icons.add, size: 18)),
                 ),
               ),
             ]),
@@ -72,18 +80,18 @@ class _LeftPanelState extends State<LeftPanel> {
                 onChanged: (v) => setState(() => _query = v),
                 style: const TextStyle(fontSize: 13),
                 decoration: InputDecoration(
-                  hintText: 'ค้นหาตาราง / คอลัมน์',
-                  hintStyle: const TextStyle(fontSize: 13, color: C.muted),
-                  prefixIcon: const Icon(Icons.search, size: 16, color: C.muted),
+                  hintText: tr('ค้นหาตาราง / คอลัมน์'),
+                  hintStyle: TextStyle(fontSize: 13, color: C.muted),
+                  prefixIcon: Icon(Icons.search, size: 16, color: C.muted),
                   isDense: true,
                   contentPadding: EdgeInsets.zero,
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(7),
-                    borderSide: const BorderSide(color: C.inputBorder),
+                    borderSide: BorderSide(color: C.inputBorder),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(7),
-                    borderSide: const BorderSide(color: C.primary, width: 1.5),
+                    borderSide: BorderSide(color: C.primary, width: 1.5),
                   ),
                 ),
               ),
@@ -93,8 +101,8 @@ class _LeftPanelState extends State<LeftPanel> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
               child: Text(
-                c.project.tables.isEmpty ? 'ยังไม่มีตาราง กด + เพื่อเพิ่ม' : 'ไม่พบที่ค้นหา',
-                style: const TextStyle(color: C.muted, fontSize: 12.5),
+                c.project.tables.isEmpty ? tr('ยังไม่มีตาราง กด + เพื่อเพิ่ม') : tr('ไม่พบที่ค้นหา'),
+                style: TextStyle(color: C.muted, fontSize: 12.5),
               ),
             ),
           for (final t in tables) ...[
@@ -130,9 +138,9 @@ class _LeftPanelState extends State<LeftPanel> {
             padding: EdgeInsets.fromLTRB(14, 14, 14, 0),
             child: Divider(height: 1),
           ),
-          const Padding(
+          Padding(
             padding: EdgeInsets.fromLTRB(14, 14, 14, 6),
-            child: Text('เทมเพลตตาราง', style: TextStyle(fontWeight: FontWeight.w600)),
+            child: Text(tr('เทมเพลตตาราง'), style: TextStyle(fontWeight: FontWeight.w600)),
           ),
           _TemplateTile('+ users (id, email, password)', () => _usersTemplate(c)),
           _TemplateTile(
@@ -188,14 +196,14 @@ class _LeftPanelState extends State<LeftPanel> {
     if (id == null) {
       msg
         ..clearSnackBars()
-        ..showSnackBar(const SnackBar(content: Text('เลือกตารางก่อน แล้วค่อยกดเทมเพลตนี้')));
+        ..showSnackBar(SnackBar(content: Text(tr('เลือกตารางก่อน แล้วค่อยกดเทมเพลตนี้'))));
       return;
     }
     final n = c.appendColumns(id, cols);
     if (n == 0) {
       msg
         ..clearSnackBars()
-        ..showSnackBar(const SnackBar(content: Text('ตารางนี้มีคอลัมน์เหล่านี้อยู่แล้ว')));
+        ..showSnackBar(SnackBar(content: Text(tr('ตารางนี้มีคอลัมน์เหล่านี้อยู่แล้ว'))));
     }
   }
 }
@@ -237,7 +245,7 @@ class _TableTile extends StatelessWidget {
                     ),
                   ),
                 ),
-                Text('$count คอลัมน์', style: const TextStyle(fontSize: 12, color: C.muted)),
+                Text(tr('{0} คอลัมน์', [count]), style: TextStyle(fontSize: 12, color: C.muted)),
               ]),
             ),
           ),
@@ -266,7 +274,7 @@ class _ColumnHit extends StatelessWidget {
               borderRadius: BorderRadius.circular(6),
             ),
             child: Row(children: [
-              const Icon(Icons.subdirectory_arrow_right, size: 13, color: C.muted),
+              Icon(Icons.subdirectory_arrow_right, size: 13, color: C.muted),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(name,

@@ -1,6 +1,8 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart' show SingleActivator;
 
+import '../core/l10n/l10n.dart';
+
 /// คำสั่งที่ผูกกับคีย์ลัดได้ — การทำงานจริงอยู่ที่ [AppActions]
 enum Cmd {
   newProject,
@@ -20,9 +22,12 @@ enum Cmd {
   selectAll,
   delete,
   rename,
+  toolSelect,
   toolTable,
   toolFk,
   toolNote,
+  createTableForm,
+  groupSelected,
   escape,
   fit,
   zoom100,
@@ -90,8 +95,14 @@ const List<ShortcutDef> kShortcuts = [
   // ---- แก้ไข ----
   ShortcutDef('แก้ไข', 'ย้อนกลับ', 'Ctrl+Z', cmd: Cmd.undo,
       activator: SingleActivator(LogicalKeyboardKey.keyZ, control: _ctrl)),
-  ShortcutDef('แก้ไข', 'ทำซ้ำ', 'Ctrl+Y', cmd: Cmd.redo,
+  // ทำซ้ำ: ตามแบบ Adobe คือ Ctrl+Shift+Z (เมนู/ทูลทิปแสดงอันนี้เป็นหลัก — ต้องอยู่ก่อนรายการทางเลือก)
+  ShortcutDef('แก้ไข', 'ทำซ้ำ', 'Ctrl+Shift+Z', cmd: Cmd.redo,
+      activator: SingleActivator(LogicalKeyboardKey.keyZ, control: _ctrl, shift: true)),
+  // คีย์ทางเลือกของ ทำซ้ำ
+  ShortcutDef('แก้ไข', 'ทำซ้ำ (ทางเลือก)', 'Ctrl+Y', cmd: Cmd.redo,
       activator: SingleActivator(LogicalKeyboardKey.keyY, control: _ctrl)),
+  ShortcutDef('แก้ไข', 'ทำซ้ำ (ทางเลือก)', 'Alt+Z', cmd: Cmd.redo,
+      activator: SingleActivator(LogicalKeyboardKey.keyZ, alt: true)),
   ShortcutDef('แก้ไข', 'คัดลอกตาราง', 'Ctrl+C', cmd: Cmd.copy,
       activator: SingleActivator(LogicalKeyboardKey.keyC, control: _ctrl, includeRepeats: false)),
   ShortcutDef('แก้ไข', 'วางตาราง', 'Ctrl+V', cmd: Cmd.paste,
@@ -106,10 +117,16 @@ const List<ShortcutDef> kShortcuts = [
       activator: SingleActivator(LogicalKeyboardKey.f2, includeRepeats: false)),
 
   // ---- Canvas ----
+  ShortcutDef('Canvas', 'โหมดเลือก', 'S', cmd: Cmd.toolSelect,
+      activator: SingleActivator(LogicalKeyboardKey.keyS, includeRepeats: false)),
   ShortcutDef('Canvas', 'เพิ่มตารางใหม่', 'T', cmd: Cmd.toolTable,
       activator: SingleActivator(LogicalKeyboardKey.keyT, includeRepeats: false)),
   ShortcutDef('Canvas', 'โหมดเชื่อม FK', 'F', cmd: Cmd.toolFk,
       activator: SingleActivator(LogicalKeyboardKey.keyF, includeRepeats: false)),
+  ShortcutDef('Canvas', 'สร้างตารางแบบฟอร์ม (เหมือน phpMyAdmin)', 'Ctrl+Shift+T', cmd: Cmd.createTableForm, global: true,
+      activator: SingleActivator(LogicalKeyboardKey.keyT, control: _ctrl, shift: true, includeRepeats: false)),
+  ShortcutDef('Canvas', 'จัดกลุ่มตารางที่เลือก', 'Ctrl+G', cmd: Cmd.groupSelected,
+      activator: SingleActivator(LogicalKeyboardKey.keyG, control: _ctrl, includeRepeats: false)),
   ShortcutDef('Canvas', 'เพิ่มโน้ต', 'N', cmd: Cmd.toolNote,
       activator: SingleActivator(LogicalKeyboardKey.keyN, includeRepeats: false)),
   ShortcutDef('Canvas', 'กลับโหมดเลือก / ยกเลิก / ล้างการเลือก', 'Esc', cmd: Cmd.escape,
@@ -179,7 +196,7 @@ ShortcutDef? matchShortcut(KeyEvent e, HardwareKeyboard keyboard) {
 /// คีย์ลัดของคำสั่ง (สำหรับแสดงข้างเมนู/ปุ่ม) — "" ถ้าไม่มี
 String shortcutText(Cmd cmd) {
   for (final s in kShortcuts) {
-    if (s.cmd == cmd && s.keys.isNotEmpty) return s.keys;
+    if (s.cmd == cmd && s.keys.isNotEmpty) return tr(s.keys);
   }
   return '';
 }

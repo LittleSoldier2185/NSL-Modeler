@@ -9,6 +9,7 @@ import 'mysql_generator.dart';
 import 'postgres_generator.dart';
 import 'sqlite_generator.dart';
 import 'sqlserver_generator.dart';
+import '../l10n/l10n.dart';
 
 /// สร้างสคริปต์ SQL จากโปรเจกต์ — ผลลัพธ์คงที่ (ไม่มีเวลา/สุ่ม) เพื่อเทียบ diff ได้
 ///
@@ -73,7 +74,7 @@ abstract class DdlGenerator {
   String generate(Project p) {
     final names = constraintNames(p);
     final blocks = <String>[
-      '-- ${flat(p.name)} (${dialect.label}) — สร้างโดย NSL Modeler',
+      tr('-- {0} ({1}) — สร้างโดย NSL Modeler', [flat(p.name), dialect.label]),
     ];
     if (preamble != null) blocks.add(preamble!);
 
@@ -93,7 +94,7 @@ abstract class DdlGenerator {
       for (final r in p.relations) {
         final fk = _resolve(p, r);
         if (fk == null) {
-          fks.add('-- ข้าม FK: ไม่พบตารางหรือคอลัมน์ที่อ้างถึง');
+          fks.add(tr('-- ข้าม FK: ไม่พบตารางหรือคอลัมน์ที่อ้างถึง'));
           continue;
         }
         fks.add('ALTER TABLE ${quote(fk.child.name)} ADD ${_foreignKeyClause(fk, names[r.id]!)};');
@@ -111,7 +112,7 @@ abstract class DdlGenerator {
   String createIndexStatement(TableModel t, IndexModel i) {
     final cols = [for (final id in i.columnIds) t.columnById(id)];
     if (cols.isEmpty || cols.contains(null)) {
-      return '-- ข้าม INDEX ${flat(i.name)}: ไม่พบคอลัมน์';
+      return tr('-- ข้าม INDEX {0}: ไม่พบคอลัมน์', [flat(i.name)]);
     }
     return 'CREATE ${i.unique ? 'UNIQUE ' : ''}INDEX ${quote(i.name)} '
         'ON ${quote(t.name)} (${cols.map((c) => quote(c!.name)).join(', ')});';
@@ -126,7 +127,7 @@ abstract class DdlGenerator {
   }
 
   String createTable(Project p, TableModel t, Map<String, String> names) {
-    if (t.columns.isEmpty) return '-- ข้ามตาราง ${flat(t.name)}: ไม่มีคอลัมน์';
+    if (t.columns.isEmpty) return tr('-- ข้ามตาราง {0}: ไม่มีคอลัมน์', [flat(t.name)]);
 
     final pk = t.columns.where((c) => c.isPrimaryKey).toList();
     final items = <String>[

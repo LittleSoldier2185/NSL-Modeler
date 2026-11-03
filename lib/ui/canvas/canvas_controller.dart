@@ -22,7 +22,10 @@ class CardMetrics {
 class CanvasController extends ChangeNotifier {
   static const minScale = 0.25;
   static const maxScale = 2.0;
-  static const worldSize = 20000.0;
+  /// ชั้นวาด (world) กว้าง [worldSize] และจุด (0,0) ของโปรเจกต์อยู่ที่ ([worldOrigin],[worldOrigin])
+  /// เพื่อให้วางของที่พิกัดติดลบได้ (widget ที่อยู่นอกขอบ Stack จะคลิกไม่ได้)
+  static const worldSize = 30000.0;
+  static const worldOrigin = 10000.0;
 
   double _scale = 1;
   Offset _offset = Offset.zero;
@@ -44,6 +47,78 @@ class CanvasController extends ChangeNotifier {
 
   void toggleDockCollapsed() {
     _dockCollapsed = !_dockCollapsed;
+    notifyListeners();
+  }
+
+  /// โน้ตที่เพิ่งวางใหม่และต้องเข้าโหมดพิมพ์ทันที (NoteCard อ่านค่านี้ตอนถูกสร้างแล้วล้าง)
+  String? pendingNoteEditId;
+
+  /// กลุ่มที่เพิ่งสร้างและต้องเข้าโหมดพิมพ์ชื่อทันที (GroupCard รับไปทำแล้วล้างค่า)
+  String? pendingGroupEditId;
+
+  void requestGroupEdit(String id) {
+    pendingGroupEditId = id;
+    notifyListeners();
+  }
+
+  /// ขอให้โน้ตเข้าโหมดพิมพ์ (จากเมนูคลิกขวา / วางโน้ตใหม่) — NoteCard ที่เกี่ยวข้องรับไปทำแล้วล้างค่า
+  void requestNoteEdit(String id) {
+    pendingNoteEditId = id;
+    notifyListeners();
+  }
+
+  // ---- กรอบเลือก (ลากซ้ายบนพื้นว่าง) ----
+  Rect? _marquee;
+  Offset? _marqueeAnchor;
+  Set<String> _marqueeBase = const {};
+
+  /// กรอบเลือกที่กำลังลากอยู่ (พิกัดจอของ canvas) — null = ไม่ได้ลาก
+  Rect? get marquee => _marquee;
+
+  /// ตารางที่เลือกอยู่ก่อนเริ่มลาก (ใช้เมื่อกด Ctrl/Shift เพื่อเลือกเพิ่ม)
+  Set<String> get marqueeBase => _marqueeBase;
+
+  void beginMarquee(Offset local, {Set<String> base = const {}}) {
+    _marqueeAnchor = local;
+    _marquee = Rect.fromPoints(local, local);
+    _marqueeBase = base;
+    notifyListeners();
+  }
+
+  void updateMarquee(Offset local) {
+    final a = _marqueeAnchor;
+    if (a == null) return;
+    _marquee = Rect.fromPoints(a, local);
+    notifyListeners();
+  }
+
+  void endMarquee() {
+    if (_marquee == null) return;
+    _marquee = null;
+    _marqueeAnchor = null;
+    _marqueeBase = const {};
+    notifyListeners();
+  }
+
+  /// ตารางที่ทับกับกรอบเลือก (กรอบเป็นพิกัดจอ -> แปลงเป็นพิกัดโปรเจกต์)
+  Set<String> tablesInMarquee(Project p) {
+    final m = _marquee;
+    if (m == null) return const {};
+    final world = Rect.fromPoints(toWorld(m.topLeft), toWorld(m.bottomRight));
+    return {
+      for (final t in p.tables)
+        if (world.overlaps(Rect.fromLTWH(t.x, t.y, t.width, tableHeight(t)))) t.id,
+    };
+  }
+
+  bool _panning = false;
+
+  /// กำลังเลื่อนมุมมองอยู่ (ลากปุ่มกลาง / ลากพื้นว่าง) — ใช้เปลี่ยนเคอร์เซอร์เป็นรูปมือกำ
+  bool get panning => _panning;
+
+  void setPanning(bool v) {
+    if (_panning == v) return;
+    _panning = v;
     notifyListeners();
   }
 

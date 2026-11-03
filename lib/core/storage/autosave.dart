@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../models/project.dart';
+import '../l10n/l10n.dart';
 
 /// งานที่ auto-save ไว้ เพื่อกู้คืนหลังโปรแกรมปิดผิดปกติ
 class AutosaveInfo {
@@ -50,7 +51,7 @@ class FileAutosaveStore implements AutosaveStore {
     AutosaveInfo info;
     try {
       final j = jsonDecode(await f.readAsString()) as Map<String, dynamic>;
-      if (j['format'] != 'nsl-autosave') throw const FormatException('ไม่ใช่ไฟล์ autosave');
+      if (j['format'] != 'nsl-autosave') throw FormatException(tr('ไม่ใช่ไฟล์ autosave'));
       info = AutosaveInfo(
         Project.fromJson(j['project'] as Map<String, dynamic>),
         DateTime.parse(j['savedAt'] as String).toLocal(),

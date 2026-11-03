@@ -4,12 +4,15 @@ import 'package:provider/provider.dart';
 
 import '../core/models/enums.dart';
 import '../state/project_controller.dart';
+import '../core/layout/diagram_geometry.dart';
 import 'canvas/canvas_controller.dart';
+import 'create_table_dialog.dart';
 import 'file_actions.dart';
 import 'palette/command_palette.dart';
 import 'prompt_dialog.dart';
 import 'shortcuts.dart';
 import 'shortcuts_help.dart';
+import '../core/l10n/l10n.dart';
 
 /// การทำงานจริงของคำสั่งทั้งหมดใน [Cmd] — ใช้ร่วมกันระหว่างคีย์ลัด เมนู และ command palette
 class AppActions {
@@ -47,9 +50,12 @@ class AppActions {
         Cmd.selectAll: c.selectAllTables,
         Cmd.delete: deleteSelection,
         Cmd.rename: rename,
+        Cmd.toolSelect: () => cv.setTool(CanvasTool.select),
         Cmd.toolTable: () => cv.setTool(CanvasTool.table),
         Cmd.toolFk: () => cv.setTool(CanvasTool.fk),
         Cmd.toolNote: () => cv.setTool(CanvasTool.note),
+        Cmd.createTableForm: createTableFromForm,
+        Cmd.groupSelected: groupSelected,
         Cmd.escape: escape,
         Cmd.fit: () => cv.fit(c.project),
         Cmd.zoom100: cv.resetZoom,
@@ -76,6 +82,26 @@ class AppActions {
     ..clearSnackBars()
     ..showSnackBar(SnackBar(content: Text(msg), duration: const Duration(seconds: 2)));
 
+  /// สร้างตารางแบบฟอร์มคอลัมน์ทั้งหมดในหน้าเดียว (เหมือน phpMyAdmin) แล้ววางกลางจอ
+  Future<void> createTableFromForm() async {
+    final t = await showCreateTableDialog(context, newId: c.newId);
+    if (t == null) return;
+    final center = cv.toWorld(cv.viewport.center(Offset.zero));
+    final at = Offset(snapToGrid(center.dx - t.width / 2), snapToGrid(center.dy - tableHeight(t) / 2));
+    final added = c.addBuiltTable(t, x: at.dx < 0 ? 40 : at.dx, y: at.dy < 0 ? 60 : at.dy);
+    if (context.mounted) cv.focusTable(added);
+  }
+
+  /// Ctrl+G: จัดตารางที่เลือกเป็นกลุ่ม (สร้างกรอบครอบ แล้วเข้าโหมดพิมพ์ชื่อทันที)
+  void groupSelected() {
+    final g = c.groupSelectedTables();
+    if (g == null) {
+      _toast(tr('เลือกตารางก่อน จึงจะจัดกลุ่มได้'));
+      return;
+    }
+    cv.requestGroupEdit(g.id);
+  }
+
   /// Ctrl+C: คัดลอกตารางที่เลือก (+ FK ระหว่างกัน) ลงคลิปบอร์ดของระบบ
   Future<void> copy() async {
     final text = c.copySelectionText();
@@ -83,7 +109,7 @@ class AppActions {
     await Clipboard.setData(ClipboardData(text: text));
     _lastPasted = null;
     _pasteCount = 0;
-    if (context.mounted) _toast('คัดลอก ${c.selectionCount} ตาราง');
+    if (context.mounted) _toast(tr('คัดลอก {0} ตาราง', [c.selectionCount]));
   }
 
   /// Ctrl+V: วางตารางจากคลิปบอร์ด (วางซ้ำจะเลื่อนทีละขั้น)
@@ -97,7 +123,7 @@ class AppActions {
     if (pasted.isEmpty) {
       _pasteCount = 0;
       _lastPasted = null;
-      if (context.mounted) _toast('ไม่มีตารางของ NSL Modeler ในคลิปบอร์ด');
+      if (context.mounted) _toast(tr('ไม่มีตารางของ NSL Modeler ในคลิปบอร์ด'));
       return;
     }
     if (context.mounted) cv.focusTable(pasted.last);
@@ -111,6 +137,12 @@ class AppActions {
 
   /// Delete: ลบคอลัมน์ที่เลือก (ถ้าเลือกตารางเดียวและมีคอลัมน์ที่เลือก) ไม่เช่นนั้นลบตารางที่เลือกทั้งหมด
   void deleteSelection() {
+    // เลือกกลุ่มอยู่ = ลบกลุ่ม (ตารางข้างในไม่ถูกลบ)
+    final g = c.selectedGroup;
+    if (g != null) {
+      c.removeGroup(g.id);
+      return;
+    }
     final t = c.selectedTable;
     final col = c.selectedColumn;
     if (t != null && col != null && c.selectionCount == 1) {
@@ -131,15 +163,20 @@ class AppActions {
 
   /// F2: เปลี่ยนชื่อคอลัมน์ที่เลือก (ถ้ามี) หรือตารางที่เลือก
   Future<void> rename() async {
+    final g = c.selectedGroup;
+    if (g != null) {
+      cv.requestGroupEdit(g.id); // F2 บนกลุ่ม = พิมพ์ชื่อบนแถบชื่อ
+      return;
+    }
     final t = c.selectedTable;
     if (t == null) return;
     final col = c.selectedColumn;
     final current = col?.name ?? t.name;
     final name = await promptText(
       context,
-      title: col != null ? 'เปลี่ยนชื่อคอลัมน์' : 'เปลี่ยนชื่อตาราง',
+      title: col != null ? tr('เปลี่ยนชื่อคอลัมน์') : tr('เปลี่ยนชื่อตาราง'),
       initial: current,
-      label: col != null ? '${t.name}.' : 'ชื่อตาราง',
+      label: col != null ? '${t.name}.' : tr('ชื่อตาราง'),
     );
     if (name == null || name.isEmpty || name == current) return;
     if (col != null) {

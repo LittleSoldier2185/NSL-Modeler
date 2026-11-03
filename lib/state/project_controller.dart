@@ -2,6 +2,9 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
+import '../core/layout/diagram_geometry.dart';
+import '../core/models/group_model.dart';
+
 import '../core/clipboard/table_clipboard.dart';
 import '../core/layout/auto_layout.dart';
 import '../core/models/column_model.dart';
@@ -95,7 +98,8 @@ class ProjectController extends ChangeNotifier {
 
   // ---------- ไฟล์ ----------
 
-  void newProject() => _replace(Project(), null, dirty: false);
+  void newProject({double boardWidth = kDefaultBoardWidth, double boardHeight = kDefaultBoardHeight}) =>
+      _replace(Project(boardWidth: boardWidth, boardHeight: boardHeight), null, dirty: false);
 
   void loadProject(Project p, String? path) => _replace(p, path, dirty: false);
 
@@ -111,6 +115,7 @@ class ProjectController extends ChangeNotifier {
     _dirty = dirty;
     _issues = null;
     _selectedTableId = null;
+    _selectedGroupId = null;
     _extra.clear();
     _selectedColumnId = null;
     _undo.clear();
@@ -149,22 +154,323 @@ class ProjectController extends ChangeNotifier {
 
   // ---------- gesture (ลาก) : นับเป็น 1 ขั้น undo ----------
 
-  void beginGesture() => _gestureBefore ??= _snapshot();
+  void beginGesture() {
+    if (_gestureBefore != null) return;
+    _gestureBefore = _snapshot();
+    _dragOrigin = null;
+  }
+
+  /// ตำแหน่งเริ่มลากของตารางที่เลือก + ระยะที่ลากสะสม (ไว้ปัดเข้าช่องตารางโดยไม่สะสมความคลาดเคลื่อน)
+  Map<String, (double, double)>? _dragOrigin;
+  double _rawDx = 0, _rawDy = 0;
+
+  /// กำลังลากอยู่ (ตั้งแต่ beginGesture ถึง endGesture)
+  bool get gestureActive => _gestureBefore != null;
 
   void endGesture() {
     final before = _gestureBefore;
     _gestureBefore = null;
+    _dragOrigin = null;
+    _groupOrigin = null;
+    _resizeOrigin = null;
     if (before != null && before != _snapshot()) {
       _push(before);
       _dirty = true;
       _issues = null;
-      notifyListeners();
     }
+    if (before != null) notifyListeners(); // ให้ hint ตอนลากหายไป
+  }
+
+  /// ตั้งข้อมูลตั้งต้นของตาราง (แทนที่ทั้งชุด) เป็น undo ขั้นเดียว — ไม่เปลี่ยนถ้าเหมือนเดิม
+  void setSeedRows(String tableId, List<Map<String, String?>> rows) {
+    final t = _project.tableById(tableId);
+    if (t == null) return;
+    final next = [for (final r in rows) Map<String, String?>.of(r)];
+    bool same() {
+      if (next.length != t.seedRows.length) return false;
+      for (var i = 0; i < next.length; i++) {
+        final a = next[i], b = t.seedRows[i];
+        if (a.length != b.length) return false;
+        for (final k in a.keys) {
+          if (!b.containsKey(k) || b[k] != a[k]) return false;
+        }
+      }
+      return true;
+    }
+
+    if (same()) return;
+    _edit(() => t.seedRows = next);
+  }
+
+  /// ตั้งสีตาราง (null = สีเริ่มต้น) ให้ทุกตารางใน [ids] เป็น undo ขั้นเดียว
+  void setTablesColor(Iterable<String> ids, int? index) {
+    if (index != null && (index < 0 || index >= kTableColors.length)) return;
+    final ts = [for (final id in ids) if (_project.tableById(id) != null) _project.tableById(id)!];
+    if (ts.isEmpty || ts.every((t) => t.colorIndex == index && t.customColor == null)) return;
+    _edit(() {
+      for (final t in ts) {
+        t.colorIndex = index;
+        t.customColor = null; // เลือกสีสำเร็จรูป/ล้างสี = เลิกใช้สีกำหนดเอง
+      }
+    });
+  }
+
+  /// ตั้งสีกำหนดเอง (ARGB) ให้ทุกตารางใน [ids] เป็น undo ขั้นเดียว (null = ล้างสี)
+  void setTablesCustomColor(Iterable<String> ids, int? argb) {
+    if (argb != null && (argb < 0 || argb > 0xFFFFFFFF)) return;
+    final ts = [for (final id in ids) if (_project.tableById(id) != null) _project.tableById(id)!];
+    if (ts.isEmpty || ts.every((t) => t.customColor == argb && (argb != null || t.colorIndex == null))) return;
+    _edit(() {
+      for (final t in ts) {
+        t.customColor = argb;
+        if (argb != null || t.customColor == null) t.colorIndex = null;
+      }
+    });
+  }
+
+  /// ตั้งฟอนต์ของตาราง (null = ฟอนต์หลักของแอป) ให้ทุกตารางใน [ids] เป็น undo ขั้นเดียว
+  void setTablesFont(Iterable<String> ids, String? family) {
+    final f = family == null || family.trim().isEmpty ? null : family.trim();
+    final ts = [for (final id in ids) if (_project.tableById(id) != null) _project.tableById(id)!];
+    if (ts.isEmpty || ts.every((t) => t.fontFamily == f)) return;
+    _edit(() {
+      for (final t in ts) {
+        t.fontFamily = f;
+      }
+    });
+  }
+
+  /// สีเส้นของความสัมพันธ์เดียว (null = ใช้สีเริ่มต้น)
+  void setRelationColor(String id, int? argb) {
+    final r = _project.relations.where((r) => r.id == id).firstOrNull;
+    if (r == null || r.color == argb) return;
+    if (argb != null && (argb < 0 || argb > 0xFFFFFFFF)) return;
+    _edit(() => r.color = argb);
+  }
+
+  /// สีเส้นเริ่มต้นของทั้งโปรเจกต์ (null = สีตามธีม)
+  void setLineColor(int? argb) {
+    if (_project.lineColor == argb) return;
+    if (argb != null && (argb < 0 || argb > 0xFFFFFFFF)) return;
+    _edit(() => _project.lineColor = argb);
+  }
+
+  // ---------- กลุ่ม ----------
+
+  /// ระยะเผื่อรอบตารางตอนจัดกลุ่มจากตารางที่เลือก (ด้านบนเผื่อแถบชื่อเพิ่ม)
+  static const double _groupPad = 28;
+
+  String _nextGroupName() {
+    final used = _project.groups.map((g) => g.name.toLowerCase()).toSet();
+    var i = 1;
+    while (used.contains('group $i')) {
+      i++;
+    }
+    return 'Group $i';
+  }
+
+  GroupModel addGroup({
+    double x = 40,
+    double y = 40,
+    double width = kGroupDefaultWidth,
+    double height = kGroupDefaultHeight,
+    String? name,
+  }) {
+    final g = GroupModel(
+      id: newId('g'),
+      name: name ?? _nextGroupName(),
+      x: x,
+      y: y,
+      width: width,
+      height: height,
+      colorIndex: _project.groups.length % kGroupColors.length,
+    );
+    _edit(() => _project.groups.add(g));
+    return g;
+  }
+
+  /// จัดกลุ่มจากตารางที่เลือกอยู่: สร้างกรอบครอบตารางเหล่านั้นพร้อมระยะเผื่อ (undo ขั้นเดียว)
+  /// คืน null ถ้าไม่มีตารางที่เลือก
+  GroupModel? groupSelectedTables() {
+    final ts = [for (final id in selectedTableIds) if (_project.tableById(id) != null) _project.tableById(id)!];
+    if (ts.isEmpty) return null;
+    var l = ts.first.x, t = ts.first.y, r = ts.first.x + ts.first.width, b = ts.first.y + tableHeight(ts.first);
+    for (final e in ts) {
+      l = l < e.x ? l : e.x;
+      t = t < e.y ? t : e.y;
+      r = r > e.x + e.width ? r : e.x + e.width;
+      b = b > e.y + tableHeight(e) ? b : e.y + tableHeight(e);
+    }
+    return addGroup(
+      x: l - _groupPad,
+      y: t - _groupPad - kGroupHeader,
+      width: (r - l) + _groupPad * 2,
+      height: (b - t) + _groupPad * 2 + kGroupHeader,
+    );
+  }
+
+  void renameGroup(String id, String name) {
+    final g = _project.groupById(id);
+    if (g == null || g.name == name) return;
+    _edit(() => g.name = name);
+  }
+
+  void setGroupColor(String id, int index) {
+    final g = _project.groupById(id);
+    if (g == null || (g.colorIndex == index && g.customColor == null) || index < 0 || index >= kGroupColors.length) return;
+    _edit(() {
+      g.colorIndex = index;
+      g.customColor = null; // เลือกสีสำเร็จรูป = เลิกใช้สีกำหนดเอง
+    });
+  }
+
+  /// ตั้งสีกำหนดเองของกลุ่ม (ARGB); null = กลับไปใช้สีสำเร็จรูปเดิม
+  void setGroupCustomColor(String id, int? argb) {
+    final g = _project.groupById(id);
+    if (g == null || g.customColor == argb) return;
+    if (argb != null && (argb < 0 || argb > 0xFFFFFFFF)) return;
+    _edit(() => g.customColor = argb);
+  }
+
+  /// ลบกลุ่ม (ตาราง/โน้ตข้างในไม่ถูกลบ)
+  void removeGroup(String id) {
+    if (_project.groupById(id) == null) return;
+    if (_selectedGroupId == id) _selectedGroupId = null;
+    _edit(() => _project.groups.removeWhere((g) => g.id == id));
+  }
+
+  /// เลือกตารางทั้งหมดที่อยู่ในกลุ่ม
+  void selectGroupMembers(String id) {
+    final g = _project.groupById(id);
+    if (g == null) return;
+    setTableSelection(groupMembers(_project, g).tables);
+  }
+
+  // --- ลากกลุ่ม: สมาชิกเลื่อนตาม ---
+  Map<String, (double, double)>? _groupOrigin; // 'g:id' / 't:id' / 'n:id' -> ตำแหน่งตอนเริ่มลาก
+  double _groupRawDx = 0, _groupRawDy = 0;
+
+  /// เริ่มลากกลุ่ม: จดสมาชิก ณ ตอนนี้ไว้ (ครอบด้วย endGesture เป็น undo ขั้นเดียว)
+  void beginGroupDrag(String id) {
+    final g = _project.groupById(id);
+    if (g == null) return;
+    selectGroup(id); // กลุ่มที่กำลังลากถือว่าถูกเลือก
+    beginGesture();
+    final m = groupMembers(_project, g);
+    _groupOrigin = {
+      'g:$id': (g.x, g.y),
+      for (final tid in m.tables) 't:$tid': (_project.tableById(tid)!.x, _project.tableById(tid)!.y),
+      for (final nid in m.notes) ...{
+        'n:$nid': (
+          _project.notes.firstWhere((n) => n.id == nid).x,
+          _project.notes.firstWhere((n) => n.id == nid).y,
+        ),
+      },
+      for (final gid in m.groups) 'g:$gid': (_project.groupById(gid)!.x, _project.groupById(gid)!.y),
+    };
+    _groupRawDx = 0;
+    _groupRawDy = 0;
+  }
+
+  /// ลากกลุ่มไป (dx,dy) จากครั้งก่อน; [grid] != null = ปัดตำแหน่งกลุ่มเข้าช่อง แล้วสมาชิกเลื่อนด้วยระยะเท่ากัน
+  void moveGroupBy(String id, double dx, double dy, {double? grid}) {
+    final origin = _groupOrigin;
+    final g = _project.groupById(id);
+    if (origin == null || g == null) return;
+    _groupRawDx += dx;
+    _groupRawDy += dy;
+    final o = origin['g:$id']!;
+    var nx = o.$1 + _groupRawDx, ny = o.$2 + _groupRawDy;
+    if (grid != null) {
+      nx = snapToGrid(nx, grid);
+      ny = snapToGrid(ny, grid);
+    }
+    nx = nx.clamp(kWorldMin, kWorldMax).toDouble();
+    ny = ny.clamp(kWorldMin, kWorldMax).toDouble();
+    final sx = nx - o.$1, sy = ny - o.$2;
+    for (final e in origin.entries) {
+      final kind = e.key.substring(0, 1);
+      final key = e.key.substring(2);
+      final x = (e.value.$1 + sx).clamp(kWorldMin, kWorldMax).toDouble();
+      final y = (e.value.$2 + sy).clamp(kWorldMin, kWorldMax).toDouble();
+      switch (kind) {
+        case 'g':
+          final t = _project.groupById(key);
+          if (t != null) {
+            t.x = x;
+            t.y = y;
+          }
+        case 't':
+          final t = _project.tableById(key);
+          if (t != null) {
+            t.x = x;
+            t.y = y;
+          }
+        case 'n':
+          final n = _project.notes.where((n) => n.id == key).firstOrNull;
+          if (n != null) {
+            n.x = x;
+            n.y = y;
+          }
+      }
+    }
+    notifyListeners();
+  }
+
+  (double, double)? _resizeOrigin;
+  double _resizeRawW = 0, _resizeRawH = 0;
+
+  /// เริ่มปรับขนาดกลุ่มจากมุมขวาล่าง (ครอบด้วย endGesture เป็น undo ขั้นเดียว)
+  void beginGroupResize(String id) {
+    final g = _project.groupById(id);
+    if (g == null) return;
+    beginGesture();
+    _resizeOrigin = (g.width, g.height);
+    _resizeRawW = 0;
+    _resizeRawH = 0;
+  }
+
+  /// ปรับขนาดกลุ่ม (live ระหว่างลาก) คิดจากขนาดตอนเริ่ม + ระยะสะสม — ไม่เล็กกว่าขนาดต่ำสุด
+  void resizeGroupBy(String id, double dw, double dh, {double? grid}) {
+    final g = _project.groupById(id);
+    final o = _resizeOrigin;
+    if (g == null || o == null) return;
+    _resizeRawW += dw;
+    _resizeRawH += dh;
+    var w = o.$1 + _resizeRawW, h = o.$2 + _resizeRawH;
+    if (grid != null) {
+      w = snapToGrid(g.x + w, grid) - g.x;
+      h = snapToGrid(g.y + h, grid) - g.y;
+    }
+    g.width = w < kGroupMinWidth ? kGroupMinWidth : w;
+    g.height = h < kGroupMinHeight ? kGroupMinHeight : h;
+    notifyListeners();
   }
 
   // ---------- selection ----------
 
+  String? _selectedGroupId;
+
+  /// กลุ่มที่ถูกเลือกอยู่ (null = ไม่มี) — เลือกกลุ่มแล้วจะไม่มีตารางที่ถูกเลือก และกลับกัน
+  String? get selectedGroupId =>
+      _selectedGroupId != null && _project.groupById(_selectedGroupId!) != null ? _selectedGroupId : null;
+
+  GroupModel? get selectedGroup => selectedGroupId == null ? null : _project.groupById(selectedGroupId!);
+
+  void selectGroup(String? id) {
+    if (id != null && _project.groupById(id) == null) return;
+    if (_selectedGroupId == id && (id == null || selectedTableIds.isEmpty)) return;
+    _selectedGroupId = id;
+    if (id != null) {
+      _selectedTableId = null;
+      _selectedColumnId = null;
+      _extra.clear();
+    }
+    notifyListeners();
+  }
+
   void selectTable(String? id, {String? columnId}) {
+    _selectedGroupId = null;
     _selectedTableId = id;
     _extra.clear();
     _selectedColumnId = columnId;
@@ -186,6 +492,7 @@ class ProjectController extends ChangeNotifier {
   /// Ctrl/Shift+คลิก: เพิ่ม/เอาตารางออกจากที่เลือก (ตารางที่เพิ่งเพิ่มกลายเป็นตัวหลักที่แผงขวาแสดง)
   void toggleTableSelection(String id) {
     if (_project.tableById(id) == null) return;
+    _selectedGroupId = null;
     if (isTableSelected(id)) {
       if (id == _selectedTableId) {
         _selectedTableId = _extra.isEmpty ? null : _extra.first;
@@ -202,9 +509,30 @@ class ProjectController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// ตั้งชุดตารางที่เลือกทั้งหมด (ใช้ตอนลากกรอบเลือก) — ไม่แตะ undo
+  void setTableSelection(Iterable<String> ids) {
+    final valid = [for (final id in ids) if (_project.tableById(id) != null) id];
+    if (valid.isEmpty) {
+      clearSelection();
+      return;
+    }
+    final next = valid.toSet();
+    _selectedGroupId = null;
+    if (next.length == selectedTableIds.length && next.containsAll(selectedTableIds)) return;
+    // คงตัวหลักเดิมไว้ถ้ายังอยู่ในชุดใหม่ (แผงขวาจะได้ไม่กระโดด)
+    final primary = _selectedTableId != null && next.contains(_selectedTableId) ? _selectedTableId! : valid.first;
+    _selectedTableId = primary;
+    _extra
+      ..clear()
+      ..addAll(next.where((id) => id != primary));
+    _selectedColumnId = null;
+    notifyListeners();
+  }
+
   /// Ctrl+A
   void selectAllTables() {
     if (_project.tables.isEmpty) return;
+    _selectedGroupId = null;
     final keepPrimary = _selectedTableId != null && _project.tableById(_selectedTableId!) != null;
     _selectedTableId = keepPrimary ? _selectedTableId : _project.tables.first.id;
     _extra
@@ -215,7 +543,8 @@ class ProjectController extends ChangeNotifier {
   }
 
   void clearSelection() {
-    if (_selectedTableId == null && _extra.isEmpty) return;
+    if (_selectedTableId == null && _extra.isEmpty && _selectedGroupId == null) return;
+    _selectedGroupId = null;
     _selectedTableId = null;
     _selectedColumnId = null;
     _extra.clear();
@@ -223,6 +552,17 @@ class ProjectController extends ChangeNotifier {
   }
 
   // ---------- โปรเจกต์ ----------
+
+  /// เปลี่ยนขนาดกระดานขั้นต่ำ (undo ได้)
+  void setBoardSize(double width, double height) {
+    final w = width.clamp(kMinBoardSide, kMaxBoardSide).toDouble();
+    final h = height.clamp(kMinBoardSide, kMaxBoardSide).toDouble();
+    if (w == _project.boardWidth && h == _project.boardHeight) return;
+    _edit(() {
+      _project.boardWidth = w;
+      _project.boardHeight = h;
+    });
+  }
 
   void setName(String name) => _edit(() => _project.name = name);
 
@@ -291,6 +631,7 @@ class ProjectController extends ChangeNotifier {
     for (final c in copy.columns) {
       idMap[c.id] = c.id = newId('c');
     }
+    copy.remapSeedColumns(idMap);
     for (final i in copy.indexes) {
       i.id = newId('i');
       i.columnIds = i.columnIds.map((c) => idMap[c] ?? c).toList();
@@ -317,16 +658,41 @@ class ProjectController extends ChangeNotifier {
 
   /// จัดตำแหน่งตารางอัตโนมัติ (undo ขั้นเดียว) — คืน false ถ้าไม่มีตารางหรือไม่มีอะไรเปลี่ยน
   bool autoLayoutTables() {
-    final pos = autoLayout(_project);
+    final result = autoLayoutAll(_project);
+    final pos = result.tables;
     final moves = [
       for (final t in _project.tables)
         if (pos[t.id] != null && (pos[t.id]!.x != t.x || pos[t.id]!.y != t.y)) t,
     ];
-    if (moves.isEmpty) return false;
+
+    // กลุ่ม: ตารางสมาชิกถูกจัดภายในกลุ่มแล้ว -> ปรับกรอบกลุ่มให้ครอบพอดี และเลื่อนโน้ตที่อยู่ในกลุ่มตามกลุ่ม
+    final groupMoves = <(GroupModel, GroupRect, List<NoteModel>)>[];
+    for (final g in _project.groups) {
+      final r = result.groups[g.id];
+      if (r == null) continue;
+      final notes = [
+        for (final nid in groupMembers(_project, g).notes) _project.notes.firstWhere((n) => n.id == nid),
+      ];
+      if (r.x != g.x || r.y != g.y || r.width != g.width || r.height != g.height) {
+        groupMoves.add((g, r, notes));
+      }
+    }
+    if (moves.isEmpty && groupMoves.isEmpty) return false;
     _edit(() {
       for (final t in moves) {
         t.x = pos[t.id]!.x;
         t.y = pos[t.id]!.y;
+      }
+      for (final (g, r, notes) in groupMoves) {
+        final dx = r.x - g.x, dy = r.y - g.y;
+        for (final n in notes) {
+          n.x += dx;
+          n.y += dy;
+        }
+        g.x = r.x;
+        g.y = r.y;
+        g.width = r.width;
+        g.height = r.height;
       }
     });
     return true;
@@ -343,11 +709,38 @@ class ProjectController extends ChangeNotifier {
 
   // ---------- ปฏิบัติการกับตารางที่เลือกหลายตัว ----------
 
-  /// ตำแหน่งตารางอยู่ในช่วง 0..19600 (world ของ canvas กว้าง 20000)
-  static double _clampXY(double v) => v < 0 ? 0 : (v > 19600 ? 19600 : v);
+  /// ตำแหน่งตารางอยู่ในช่วง [kWorldMin]..[kWorldMax] (ติดลบได้ กระดานจะขยายไปทางซ้าย/บน)
+  static double _clampXY(double v) => v < kWorldMin ? kWorldMin : (v > kWorldMax ? kWorldMax : v);
 
   /// ย้ายตารางที่เลือกทั้งหมดแบบ live ระหว่างลาก — ครอบด้วย beginGesture/endGesture
-  void moveSelectedBy(double dx, double dy) {
+  ///
+  /// [grid] != null = ปัดตำแหน่งเข้าช่องตารางขนาดนั้น: คิดจากตำแหน่งตอนเริ่มลาก + ระยะสะสม
+  /// ตารางทั้งกลุ่มจึงเลื่อนพร้อมกันและรักษาระยะห่างสัมพัทธ์ของกัน (ตัวที่ไม่ตรงช่องก็เลื่อนเป็นช่องเท่ากัน)
+  void moveSelectedBy(double dx, double dy, {double? grid}) {
+    if (grid != null) {
+      if (!gestureActive || _dragOrigin == null) {
+        _dragOrigin = {
+          for (final id in selectedTableIds)
+            if (_project.tableById(id) != null) id: (_project.tableById(id)!.x, _project.tableById(id)!.y),
+        };
+        _rawDx = 0;
+        _rawDy = 0;
+      }
+      _rawDx += dx;
+      _rawDy += dy;
+      // เลื่อนทั้งกลุ่มด้วยระยะที่ปัดแล้วเท่ากัน (ยึดตารางที่เลือกเป็นหลักเป็นตัวอ้างอิง)
+      final ref = _dragOrigin!.values.isEmpty ? (0.0, 0.0) : _dragOrigin!.values.first;
+      final sx = snapToGrid(ref.$1 + _rawDx, grid) - ref.$1;
+      final sy = snapToGrid(ref.$2 + _rawDy, grid) - ref.$2;
+      for (final e in _dragOrigin!.entries) {
+        final t = _project.tableById(e.key);
+        if (t == null) continue;
+        t.x = _clampXY(e.value.$1 + sx);
+        t.y = _clampXY(e.value.$2 + sy);
+      }
+      notifyListeners();
+      return;
+    }
     for (final id in selectedTableIds) {
       final t = _project.tableById(id);
       if (t == null) continue;
@@ -424,9 +817,11 @@ class ProjectController extends ChangeNotifier {
       used.add(name.toLowerCase());
       t.x = _clampXY(t.x + offset);
       t.y = _clampXY(t.y + offset);
+      final tColMap = <String, String>{};
       for (final c in t.columns) {
-        colMap[c.id] = c.id = newId('c');
+        colMap[c.id] = tColMap[c.id] = c.id = newId('c');
       }
+      t.remapSeedColumns(tColMap);
       for (final ix in t.indexes) {
         ix.id = newId('i');
         ix.columnIds = [for (final c in ix.columnIds) colMap[c] ?? c];
@@ -499,6 +894,22 @@ class ProjectController extends ChangeNotifier {
   }
 
   /// สร้างตารางใหม่จากรายการคอลัมน์ (เทมเพลต)
+  /// เพิ่มตารางที่สร้างเสร็จแล้ว (จากฟอร์มสร้างตาราง) เป็น undo ขั้นเดียว ชื่อซ้ำจะต่อท้ายเลขให้
+  TableModel addBuiltTable(TableModel t, {double x = 40, double y = 40}) {
+    t
+      ..x = x
+      ..y = y;
+    if (_project.tables.any((e) => e.name.toLowerCase() == t.name.toLowerCase())) {
+      t.name = _uniqueTableName(t.name);
+    }
+    _edit(() => _project.tables.add(t));
+    _selectedTableId = t.id;
+    _extra.clear();
+    _selectedColumnId = null;
+    notifyListeners();
+    return t;
+  }
+
   TableModel addTableWith(String baseName, List<ColumnModel> cols,
       {double x = 40, double y = 40}) {
     final t = TableModel(id: newId('t'), name: baseName, x: x, y: y, columns: cols);
@@ -518,6 +929,7 @@ class ProjectController extends ChangeNotifier {
     if (t == null || t.columnById(columnId) == null) return;
     _edit(() {
       t.columns.removeWhere((c) => c.id == columnId);
+      t.dropSeedColumn(columnId);
       for (final i in t.indexes) {
         i.columnIds.remove(columnId);
       }

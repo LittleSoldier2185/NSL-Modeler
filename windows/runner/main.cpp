@@ -2,6 +2,8 @@
 #include <flutter/flutter_view_controller.h>
 #include <windows.h>
 
+#include <algorithm>
+
 #include "flutter_window.h"
 #include "utils.h"
 
@@ -25,9 +27,19 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   project.set_dart_entrypoint_arguments(std::move(command_line_arguments));
 
   FlutterWindow window(project);
-  Win32Window::Point origin(10, 10);
-  Win32Window::Size size(1280, 720);
-  if (!window.Create(L"nsl_modeler", origin, size)) {
+  // Start at 1440x900 (at most 92% of the work area), centered.
+  RECT work_area;
+  SystemParametersInfo(SPI_GETWORKAREA, 0, &work_area, 0);
+  const double scale = GetDpiForSystem() / 96.0;
+  const int area_w = static_cast<int>((work_area.right - work_area.left) / scale);
+  const int area_h = static_cast<int>((work_area.bottom - work_area.top) / scale);
+  const int width = (std::min)(1440, static_cast<int>(area_w * 0.92));
+  const int height = (std::min)(900, static_cast<int>(area_h * 0.92));
+  Win32Window::Point origin(
+      static_cast<int>(work_area.left / scale) + (area_w - width) / 2,
+      static_cast<int>(work_area.top / scale) + (area_h - height) / 2);
+  Win32Window::Size size(width, height);
+  if (!window.Create(L"NSL Modeler", origin, size)) {
     return EXIT_FAILURE;
   }
   window.SetQuitOnClose(true);

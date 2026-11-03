@@ -2,21 +2,31 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../core/l10n/l10n.dart';
 import '../core/storage/autosave.dart';
+import '../state/app_settings.dart';
 import '../state/autosave_coordinator.dart';
 import '../state/project_controller.dart';
 import 'app_actions.dart';
 import 'canvas/canvas_controller.dart';
 import 'canvas/canvas_view.dart';
+import 'language_dialog.dart';
+import 'panel_splitter.dart';
 import 'left_panel.dart';
 import 'recovery_dialog.dart';
 import 'right_panel.dart';
 import 'shortcuts.dart';
 import 'sql_dock.dart';
+import 'file_actions.dart';
+import 'theme.dart';
+import 'window_chrome.dart';
 import 'top_bar.dart';
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key, this.recovery});
+  const HomePage({super.key, this.recovery, this.onRecoveryOffered});
+
+  /// เรียกเมื่อเริ่มถามกู้คืนแล้ว (ตัวแอปจะไม่ส่ง recovery มาซ้ำเมื่อสลับธีม/ภาษา)
+  final VoidCallback? onRecoveryOffered;
 
   /// งานค้างจาก auto-save ครั้งก่อน — ถ้ามีจะถามกู้คืนตอนเปิดหน้านี้
   final AutosaveInfo? recovery;
@@ -31,8 +41,33 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    if (widget.recovery != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _offerRecovery(widget.recovery!));
+    // ปิดหน้าต่างด้วยปุ่มบนแถบบน: ถามบันทึกก่อนถ้ามีการแก้ค้างอยู่
+    WindowChrome.closeHandler = () async {
+      if (!mounted) return;
+      if (await FileActions.confirmDiscard(context, context.read<ProjectController>())) {
+        await WindowChrome.backend?.destroy();
+      }
+    };
+    WidgetsBinding.instance.addPostFrameCallback((_) => _startup());
+  }
+
+  /// เปิดครั้งแรก: ถามภาษาก่อน (เลือกแล้วแอปจะสร้างหน้าใหม่ แล้วหน้าใหม่ค่อยถามกู้คืนต่อ)
+  Future<void> _startup() async {
+    if (!mounted) return;
+    final settings = context.read<AppSettings>();
+    if (settings.needsLanguagePrompt) {
+      final lang = await showDialog<Lang>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const LanguageDialog(),
+      );
+      if (lang != null) settings.setLang(lang);
+      return;
+    }
+    final rec = widget.recovery;
+    if (rec != null) {
+      widget.onRecoveryOffered?.call();
+      await _offerRecovery(rec);
     }
   }
 
@@ -56,6 +91,7 @@ class _HomePageState extends State<HomePage> {
 
   @override
   void dispose() {
+    WindowChrome.closeHandler = null;
     _focus.dispose();
     super.dispose();
   }
@@ -74,6 +110,99 @@ class _HomePageState extends State<HomePage> {
     return KeyEventResult.handled;
   }
 
+  // เนื้อหาของแต่ละส่วนสร้างครั้งเดียว: ระหว่างลากขอบ ListenableBuilder แค่สร้างกล่องขนาดใหม่
+  // (Flutter ข้ามการสร้างลูกที่เป็นวิดเจ็ตตัวเดิม) จึงไม่ต้องสร้าง canvas / ข้อความ SQL ใหม่ทุกเฟรม
+  static const _leftPanel = LeftPanel();
+  static const _rightPanel = RightPanel();
+  static const _sqlDock = SqlDock();
+  late final Widget _canvas = CanvasView(focusNode: _focus);
+
+  // ขนาดแผง ณ ตอนเริ่มลากขอบ (ลากแบบสัมบูรณ์: ขนาด = ขนาดเริ่ม + ระยะเมาส์ที่เคลื่อน)
+  double _startLeft = 0, _startRight = 0, _startDock = 0;
+
+  /// พื้นที่ใต้แถบบน: แผงซ้าย | canvas + แผง SQL | แผงขวา พร้อมแถบลากขอบ (วางทับรอยต่อ ไม่กินพื้นที่)
+  Widget _body(BuildContext context) {
+    final settings = context.read<AppSettings>();
+    final layout = settings.layout;
+    return LayoutBuilder(
+      builder: (context, box) => ListenableBuilder(
+        listenable: layout,
+        builder: (context, _) {
+          final (leftW, rightW) = layout.effectiveWidths(box.maxWidth);
+          final dockH = layout.effectiveDock(box.maxHeight);
+          final collapsed = context.select<CanvasController, bool>((cv) => cv.dockCollapsed);
+          return Stack(children: [
+            Row(children: [
+              SizedBox(width: leftW, child: _leftPanel),
+              Expanded(
+                child: CustomPaint(
+                  foregroundPainter: const _EdgeShadow(),
+                  child: Column(children: [
+                    Expanded(child: _canvas),
+                    SizedBox(height: collapsed ? 44 : dockH, child: _sqlDock),
+                  ]),
+                ),
+              ),
+              SizedBox(width: rightW, child: _rightPanel),
+            ]),
+            Positioned(
+              left: leftW - 4,
+              top: 0,
+              bottom: 0,
+              width: 8,
+              child: PanelSplitter(
+                key: const ValueKey('splitter-left'),
+                vertical: true,
+                onStart: () => _startLeft = leftW,
+                onUpdate: (total) => layout.setLeft(_startLeft + total),
+                onEnd: settings.commitLayout,
+                onReset: () {
+                  layout.resetLeft();
+                  settings.commitLayout();
+                },
+              ),
+            ),
+            Positioned(
+              right: rightW - 4,
+              top: 0,
+              bottom: 0,
+              width: 8,
+              child: PanelSplitter(
+                key: const ValueKey('splitter-right'),
+                vertical: true,
+                onStart: () => _startRight = rightW,
+                onUpdate: (total) => layout.setRight(_startRight - total),
+                onEnd: settings.commitLayout,
+                onReset: () {
+                  layout.resetRight();
+                  settings.commitLayout();
+                },
+              ),
+            ),
+            if (!collapsed)
+              Positioned(
+                left: leftW,
+                right: rightW,
+                bottom: dockH - 4,
+                height: 8,
+                child: PanelSplitter(
+                  key: const ValueKey('splitter-dock'),
+                  vertical: false,
+                  onStart: () => _startDock = dockH,
+                  onUpdate: (total) => layout.setDock(_startDock - total),
+                  onEnd: settings.commitLayout,
+                  onReset: () {
+                    layout.resetDock();
+                    settings.commitLayout();
+                  },
+                ),
+              ),
+          ]);
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => Focus(
         focusNode: _focus,
@@ -82,19 +211,32 @@ class _HomePageState extends State<HomePage> {
         child: Scaffold(
           body: Column(children: [
             const TopBar(),
-            Expanded(
-              child: Row(children: [
-                const LeftPanel(),
-                Expanded(
-                  child: Column(children: [
-                    Expanded(child: CanvasView(focusNode: _focus)),
-                    const SqlDock(),
-                  ]),
-                ),
-                const RightPanel(),
-              ]),
-            ),
+            Expanded(child: _body(context)),
           ]),
         ),
       );
+}
+
+/// เงาขอบด้านในของพื้นที่ canvas: ตกจากแถบบนและแผงซ้าย/ขวา ทำให้แผงดูลอยเหนือพื้นงาน
+/// (วาดเป็น foreground เพราะแผงข้างเคียงถูกวาดก่อน canvas เงาของมันเองจึงถูกบัง; ไม่รับ pointer)
+class _EdgeShadow extends CustomPainter {
+  const _EdgeShadow();
+
+  static const _depth = 14.0;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final a = C.isDark ? 0.34 : 0.10;
+    final c0 = C.palette.shadow.withValues(alpha: a);
+    final c1 = C.palette.shadow.withValues(alpha: 0);
+    Paint strip(Offset from, Offset to) => Paint()
+      ..shader = LinearGradient(colors: [c0, c1]).createShader(Rect.fromPoints(from, to));
+    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, _depth), strip(Offset.zero, const Offset(0, _depth)));
+    canvas.drawRect(Rect.fromLTWH(0, 0, _depth, size.height), strip(Offset.zero, const Offset(_depth, 0)));
+    canvas.drawRect(Rect.fromLTWH(size.width - _depth, 0, _depth, size.height),
+        Paint()..shader = LinearGradient(colors: [c1, c0]).createShader(Rect.fromLTWH(size.width - _depth, 0, _depth, 0)));
+  }
+
+  @override
+  bool shouldRepaint(_EdgeShadow old) => true;
 }

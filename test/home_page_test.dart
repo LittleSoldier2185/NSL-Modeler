@@ -22,6 +22,9 @@ void main() {
     expect(find.text('column_1'), findsWidgets);
     expect(find.text('ลบคอลัมน์นี้'), findsOneWidget);
 
+    // แผงขวาเลื่อนได้และสูงขึ้นแล้ว (ช่องหมายเหตุหลายบรรทัด + สีตาราง) จึงเลื่อนให้เห็นปุ่มก่อนกด
+    await tester.ensureVisible(find.text('ลบคอลัมน์นี้'));
+    await tester.pump();
     await tester.tap(find.text('ลบคอลัมน์นี้'));
     await tester.pump();
     expect(find.text('column_1'), findsNothing);

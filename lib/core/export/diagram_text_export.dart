@@ -3,6 +3,7 @@ import '../models/column_model.dart';
 import '../models/enums.dart';
 import '../models/project.dart';
 import '../models/relation_model.dart';
+import '../l10n/l10n.dart';
 
 /// ---------- Mermaid (erDiagram) ----------
 ///
@@ -85,7 +86,7 @@ String _mermaidType(ColumnModel c) => switch (c.type) {
 /// ---------- DBML (dbdiagram.io) ----------
 String exportDbml(Project p) {
   final b = StringBuffer();
-  b.writeln('// ${p.name.replaceAll(RegExp(r'\s+'), ' ')} — สร้างโดย NSL Modeler');
+  b.writeln(tr('// {0} — สร้างโดย NSL Modeler', [p.name.replaceAll(RegExp(r'\s+'), ' ')]));
   for (final t in p.tables) {
     b.writeln();
     b.writeln('Table ${_dbmlId(t.name)} {');

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../core/validate/issue.dart';
 import 'theme.dart';
+import '../core/l10n/l10n.dart';
 
 /// การ์ดแสดงปัญหา 1 รายการ สีตามระดับความรุนแรง (ตามดีไซน์: เหลือง = เตือน, ฟ้า = คำแนะนำ)
 class IssueCard extends StatelessWidget {
@@ -10,7 +11,7 @@ class IssueCard extends StatelessWidget {
   final VoidCallback? onTap;
 
   static (Color bg, Color fg, IconData icon) style(Severity s) => switch (s) {
-        Severity.error => (const Color(0xFFFDE8E8), const Color(0xFF7A1F1F), Icons.error_outline),
+        Severity.error => (C.dangerBg, C.dangerText, Icons.error_outline),
         Severity.warning => (C.warnBg, C.warnText, Icons.warning_amber_rounded),
         Severity.info => (C.infoBg, C.infoText, Icons.lightbulb_outline),
       };
@@ -48,9 +49,9 @@ class IssueCard extends StatelessWidget {
 String issueSummary(List<Issue> issues) {
   int n(Severity s) => issues.where((i) => i.severity == s).length;
   final parts = [
-    if (n(Severity.error) > 0) '${n(Severity.error)} ข้อผิดพลาด',
-    if (n(Severity.warning) > 0) '${n(Severity.warning)} คำเตือน',
-    if (n(Severity.info) > 0) '${n(Severity.info)} คำแนะนำ',
+    if (n(Severity.error) > 0) tr('{0} ข้อผิดพลาด', [n(Severity.error)]),
+    if (n(Severity.warning) > 0) tr('{0} คำเตือน', [n(Severity.warning)]),
+    if (n(Severity.info) > 0) tr('{0} คำแนะนำ', [n(Severity.info)]),
   ];
-  return parts.isEmpty ? 'ไม่พบปัญหา' : parts.join(' · ');
+  return parts.isEmpty ? tr('ไม่พบปัญหา') : parts.join(' · ');
 }

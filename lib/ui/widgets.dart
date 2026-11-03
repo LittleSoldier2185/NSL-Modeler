@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 
 import 'theme.dart';
 
+/// ความสูงมาตรฐานของช่องกรอก/ดรอปดาวน์ในแผงข้าง (ให้เรียงกันแล้วสมส่วน)
+const double kFieldHeight = 36;
+
 /// ช่องกรอกที่บันทึกค่าตอนกด Enter หรือออกจากช่อง (ไม่สร้างประวัติ undo ทุกตัวอักษร)
 /// ใส่ key ที่ผูกกับ id ของข้อมูล เพื่อให้ค่าในช่องรีเซ็ตเมื่อเปลี่ยนรายการที่เลือก
 class CommitField extends StatefulWidget {
@@ -11,8 +14,11 @@ class CommitField extends StatefulWidget {
     required this.onCommit,
     this.hint,
     this.mono = false,
-    this.height = 34,
+    this.height = kFieldHeight,
     this.label,
+    this.fontSize = 13,
+    this.minLines,
+    this.maxLines,
   });
 
   final String value;
@@ -21,6 +27,11 @@ class CommitField extends StatefulWidget {
   final bool mono;
   final double height;
   final String? label;
+  final double fontSize;
+
+  /// ไม่ null = ช่องหลายบรรทัด (สูงตามจำนวนบรรทัด Enter ขึ้นบรรทัดใหม่ บันทึกเมื่อออกจากช่อง)
+  final int? minLines;
+  final int? maxLines;
 
   @override
   State<CommitField> createState() => _CommitFieldState();
@@ -56,25 +67,32 @@ class _CommitFieldState extends State<CommitField> {
 
   @override
   Widget build(BuildContext context) {
+    final multi = widget.minLines != null;
+    // ความสูงช่องบรรทัดเดียวกำหนดผ่าน InputDecoration.constraints (SizedBox ครอบ TextField ไม่ทำให้กรอบสูงตาม
+    // ช่องจึงเตี้ยกว่าดรอปดาวน์ข้างเคียง)
     final field = SizedBox(
-      height: widget.height,
       child: TextField(
         controller: _ctl,
         focusNode: _focus,
-        onSubmitted: (_) => _commit(),
-        style: (widget.mono ? monoStyle : const TextStyle()).copyWith(fontSize: 13, color: C.text),
+        onSubmitted: multi ? null : (_) => _commit(),
+        minLines: multi ? widget.minLines : null,
+        maxLines: multi ? widget.maxLines : 1,
+        keyboardType: multi ? TextInputType.multiline : null,
+        textAlignVertical: multi ? TextAlignVertical.top : TextAlignVertical.center,
+        style: (widget.mono ? monoStyle : const TextStyle()).copyWith(fontSize: widget.fontSize, color: C.text),
         decoration: InputDecoration(
+          constraints: multi ? null : BoxConstraints.tightFor(height: widget.height),
           hintText: widget.hint,
-          hintStyle: const TextStyle(fontSize: 13, color: C.muted),
+          hintStyle: TextStyle(fontSize: widget.fontSize, color: C.muted),
           isDense: true,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+          contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: multi ? 10 : 0),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(6),
-            borderSide: const BorderSide(color: C.inputBorder),
+            borderSide: BorderSide(color: C.inputBorder),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(6),
-            borderSide: const BorderSide(color: C.primary, width: 1.5),
+            borderSide: BorderSide(color: C.primary, width: 1.5),
           ),
         ),
       ),
@@ -93,7 +111,7 @@ class LabeledField extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(label, style: const TextStyle(fontSize: 12, color: C.muted, fontWeight: FontWeight.w500)),
+          Text(label, style: TextStyle(fontSize: 12, color: C.muted, fontWeight: FontWeight.w500)),
           const SizedBox(height: 5),
           child,
         ],
@@ -107,7 +125,7 @@ class Dropdown<T> extends StatelessWidget {
     required this.items,
     required this.onChanged,
     required this.labelOf,
-    this.height = 34,
+    this.height = kFieldHeight,
   });
 
   final T value;
@@ -119,7 +137,8 @@ class Dropdown<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
         height: height,
-        padding: const EdgeInsets.symmetric(horizontal: 8),
+        padding: const EdgeInsets.only(left: 10, right: 6),
+        alignment: Alignment.center,
         decoration: BoxDecoration(
           border: Border.all(color: C.inputBorder),
           borderRadius: BorderRadius.circular(6),
@@ -129,9 +148,14 @@ class Dropdown<T> extends StatelessWidget {
             value: value,
             isExpanded: true,
             isDense: true,
-            style: const TextStyle(fontSize: 13, color: C.text, fontFamily: kThai),
+            style: TextStyle(fontSize: 13, color: C.text, fontFamily: kThai),
             items: [
-              for (final i in items) DropdownMenuItem(value: i, child: Text(labelOf(i))),
+              // บรรทัดเดียวเสมอ (เช่น NO ACTION ในแผงแคบ ย่อด้วย … ไม่ตัดขึ้นบรรทัดใหม่จนกล่องสูงไม่เท่ากัน)
+              for (final i in items)
+                DropdownMenuItem(
+                  value: i,
+                  child: Text(labelOf(i), maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis),
+                ),
             ],
             onChanged: (v) {
               if (v != null) onChanged(v);
@@ -155,7 +179,7 @@ class SmallButton extends StatelessWidget {
         label: Text(label),
         style: OutlinedButton.styleFrom(
           foregroundColor: C.primary,
-          side: const BorderSide(color: C.border),
+          side: BorderSide(color: C.border),
           minimumSize: const Size(0, 28),
           padding: EdgeInsets.symmetric(horizontal: icon == null ? 10 : 8),
           textStyle: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),

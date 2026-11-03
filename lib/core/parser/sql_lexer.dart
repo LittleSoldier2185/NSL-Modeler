@@ -1,3 +1,5 @@
+import '../l10n/l10n.dart';
+
 /// ตัดคำ SQL สำหรับตัว import — รองรับ quote ของทั้ง 4 dialect:
 /// `x` (MySQL), "x" (PostgreSQL/SQLite), [x] (SQL Server), 'str', N'str', คอมเมนต์ `--` และ `/* */`
 enum Tk { word, ident, string, number, symbol }
@@ -81,7 +83,7 @@ LexResult lexSql(String s, {bool backslashEscapes = false}) {
       }
       if (!closed) {
         line = startLine;
-        return fail('คอมเมนต์ /* ไม่ปิด');
+        return fail(tr('คอมเมนต์ /* ไม่ปิด'));
       }
       continue;
     }
@@ -126,7 +128,7 @@ LexResult lexSql(String s, {bool backslashEscapes = false}) {
       }
       if (!closed) {
         line = startLine;
-        return fail('สตริงไม่ปิด');
+        return fail(tr('สตริงไม่ปิด'));
       }
       out.add(Tok(Tk.string, buf.toString(), startLine, start, i));
       continue;
@@ -169,7 +171,7 @@ LexResult lexSql(String s, {bool backslashEscapes = false}) {
         }
         if (!closed) {
           line = startLine;
-          return fail('ชื่อที่ quote ไม่ปิด');
+          return fail(tr('ชื่อที่ quote ไม่ปิด'));
         }
         out.add(Tok(Tk.ident, buf.toString(), startLine, start, i));
         continue;

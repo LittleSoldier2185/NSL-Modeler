@@ -19,7 +19,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.13.7
+  sdk: ^3.13.5
 
 # Dependencies specify other packages that your package needs in order to work.
 # To automatically upgrade your package dependencies to the latest versions
@@ -37,7 +37,6 @@ dependencies:
   provider: ^6.1.5+1
   file_picker: ^13.3.2
   path_provider: ^2.1.6
-  window_manager: ^0.6.0
 
 dev_dependencies:
   flutter_test:
@@ -73,6 +72,20 @@ flutter:
 
   # For details regarding adding assets from package dependencies, see
   # https://flutter.dev/to/asset-from-package
+
+  # ฟอนต์หลักของแอป: Noto Sans Thai (Google Fonts, สัญญาอนุญาต SIL OFL ดู assets/fonts/OFL.txt)
+  # แพ็กมากับแอปเพื่อให้หน้าตาเหมือนกันทุกเครื่องและใช้ออฟไลน์ได้ ครอบคลุมอักษรไทยและ ASCII/ละตินทั้งหมด
+  fonts:
+    - family: Noto Sans Thai
+      fonts:
+        - asset: assets/fonts/NotoSansThai-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/NotoSansThai-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/NotoSansThai-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/NotoSansThai-Bold.ttf
+          weight: 700
 
   # To add custom fonts to your application, add a fonts section here,
   # in this "flutter" section. Each entry in this list should have a

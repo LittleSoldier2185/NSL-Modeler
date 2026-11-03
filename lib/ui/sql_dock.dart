@@ -11,12 +11,14 @@ import '../state/project_controller.dart';
 import 'canvas/canvas_controller.dart';
 import 'issue_widgets.dart';
 import 'sql_view.dart';
+import '../core/l10n/l10n.dart';
 
 const _bg = Color(0xFF0F172A);
 const _line = Color(0xFF1E293B);
 const _accent = Color(0xFF5EEAD4);
 
 class SqlDock extends StatefulWidget {
+  /// ความสูงกำหนดโดยกล่องที่ห่อ (หน้าหลักห่อด้วย SizedBox: ตอนย่อ 44 ตอนขยายตามที่ผู้ใช้ลากปรับ)
   const SqlDock({super.key});
 
   @override
@@ -52,7 +54,6 @@ class _SqlDockState extends State<SqlDock> {
     final lines = sql.endsWith('\n') ? sql.substring(0, sql.length - 1).split('\n') : sql.split('\n');
 
     return Container(
-      height: cv.dockCollapsed ? 44 : 248,
       color: _bg,
       child: Column(children: [
         _header(c, cv, dialect, sql),
@@ -98,8 +99,8 @@ class _SqlDockState extends State<SqlDock> {
   Widget _issues(ProjectController c) {
     final issues = c.issues;
     if (issues.isEmpty) {
-      return const Center(
-        child: Text('✓ ไม่พบปัญหา — พร้อม Export',
+      return Center(
+        child: Text(tr('✓ ไม่พบปัญหา — พร้อม Export'),
             style: TextStyle(color: Color(0xFF7DD3C0), fontSize: 13)),
       );
     }
@@ -130,13 +131,25 @@ class _SqlDockState extends State<SqlDock> {
         padding: const EdgeInsets.symmetric(horizontal: 12),
         decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: _line))),
         child: Row(children: [
-          _tab(cv, DockTab.sql, 'SQL Preview'),
-          _tab(cv, DockTab.issues, 'ปัญหา', badge: badge),
-          const Spacer(),
-          // หน้าต่างแคบ: ย่อกลุ่มปุ่ม dialect ลงแทนการล้น
+          // หน้าต่างแคบ: ย่อแท็บและกลุ่มปุ่ม dialect ลงแทนการล้น
+          // (flex สูงเพื่อให้สองกลุ่มนี้ได้พื้นที่ก่อน Spacer — ไม่งั้น Spacer แบ่งพื้นที่ครึ่งหนึ่งทั้งที่ว่างเปล่า)
           Flexible(
+            flex: 1000,
             child: FittedBox(
               fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                _tab(cv, DockTab.sql, 'SQL Preview'),
+                _tab(cv, DockTab.issues, tr('ปัญหา'), badge: badge),
+              ]),
+            ),
+          ),
+          const Spacer(),
+          Flexible(
+            flex: 1000,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerRight,
               child: _dialectSwitch(c, dialect),
             ),
           ),
@@ -152,10 +165,10 @@ class _SqlDockState extends State<SqlDock> {
                 textStyle: const TextStyle(fontSize: 12.5),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
               ),
-              child: Text(_copied ? 'คัดลอกแล้ว ✓' : 'คัดลอก'),
+              child: Text(_copied ? tr('คัดลอกแล้ว ✓') : tr('คัดลอก')),
             ),
           IconButton(
-            tooltip: cv.dockCollapsed ? 'ขยายแผง SQL' : 'ย่อแผง SQL',
+            tooltip: cv.dockCollapsed ? tr('ขยายแผง SQL') : tr('ย่อแผง SQL'),
             onPressed: cv.toggleDockCollapsed,
             icon: Icon(cv.dockCollapsed ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
                 color: const Color(0xFFCBD5E1)),
