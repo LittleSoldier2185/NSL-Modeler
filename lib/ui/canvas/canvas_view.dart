@@ -7,6 +7,7 @@ import '../../state/app_settings.dart';
 import '../../state/project_controller.dart';
 import '../theme.dart';
 import '../../core/layout/diagram_geometry.dart';
+import '../../core/models/project.dart';
 import 'canvas_controller.dart';
 import 'context_menu.dart';
 import 'group_card.dart';
@@ -97,13 +98,16 @@ class CanvasView extends StatelessWidget {
                     }
                     final add = HardwareKeyboard.instance.isControlPressed || HardwareKeyboard.instance.isShiftPressed;
                     cv.beginMarquee(d.localPosition, base: add ? c.selectedTableIds : const {});
+                    cv.marqueeBaseGroups = add ? c.attachedGroupIds : const {};
                   },
                   onPanUpdate: (d) {
                     if (cv.panning) {
                       cv.panBy(d.delta);
                     } else if (cv.marquee != null) {
                       cv.updateMarquee(d.localPosition);
-                      c.setTableSelection({...cv.marqueeBase, ...cv.tablesInMarquee(c.project)});
+                      // กรอบที่ครอบกลุ่มทั้งกลุ่ม = กรอบกลุ่มติดไปกับตารางที่เลือกด้วย
+                      c.setTableSelection({...cv.marqueeBase, ...cv.tablesInMarquee(c.project)},
+                          groups: {...cv.marqueeBaseGroups, ...cv.groupsInMarquee(c.project)});
                     }
                   },
                   onPanEnd: (_) {
@@ -147,9 +151,12 @@ class CanvasView extends StatelessWidget {
                       // กลุ่มอยู่ล่างสุด (ใต้เส้น FK และตาราง)
                       for (final g in c.project.groups) GroupCard(key: ValueKey('group-${g.id}'), group: g),
                       Positioned.fill(
-                        child: CustomPaint(
-                          painter: RelationPainter(c.project, c.selectedTableId,
-                              origin: CanvasController.worldOrigin, focusRelationId: _focusRelation(c)),
+                        child: _RelationLayer(
+                          project: c.project,
+                          selectedTableId: c.selectedTableId,
+                          focusRelationId: _focusRelation(c),
+                          showFlow: context.select<AppSettings, bool>((s) => s.showFlow),
+                          animate: context.select<AppSettings, bool>((s) => s.flowAnimation),
                         ),
                       ),
                       for (final t in c.project.tables) TableCard(key: ValueKey('table-${t.id}'), table: t),
@@ -193,7 +200,7 @@ class CanvasView extends StatelessWidget {
       ? Offset(snapToGrid(w.dx), snapToGrid(w.dy))
       : w;
 
-  /// เส้นที่ควรเน้น: คอลัมน์ FK ที่เลือกอยู่ (ฝั่งลูก) ชี้ไปที่ความสัมพันธ์ไหน
+  /// เส้นที่ควรเน้น (ดู [_RelationLayer]) คอลัมน์ FK ที่เลือกอยู่ (ฝั่งลูก) ชี้ไปที่ความสัมพันธ์ไหน
   String? _focusRelation(ProjectController c) {
     final col = c.selectedColumnId;
     final tid = c.selectedTableId;
@@ -424,3 +431,75 @@ class _ZoomBar extends StatelessWidget {
 
 /// กด Space ค้างอยู่ -> ลากพื้นว่างเพื่อเลื่อนมุมมองแทนการลากกรอบเลือก
 bool get _spaceDown => HardwareKeyboard.instance.isLogicalKeyPressed(LogicalKeyboardKey.space);
+
+/// ชั้นเส้น FK: ถ้าเปิดอนิเมชัน และมีเส้นที่เด่นอยู่ (ตารางที่เลือก/เส้นที่เลือก) จะมี Ticker วิ่งให้เส้นประไหลตามทิศทางข้อมูล
+/// ไม่มีอะไรเด่น = ไม่วิ่ง (ไม่ปลุกเฟรมโดยเปล่าประโยชน์ และไม่กินแบตเตอรี่)
+class _RelationLayer extends StatefulWidget {
+  const _RelationLayer({
+    required this.project,
+    required this.selectedTableId,
+    required this.focusRelationId,
+    required this.showFlow,
+    required this.animate,
+  });
+
+  final Project project;
+  final String? selectedTableId;
+  final String? focusRelationId;
+  final bool showFlow;
+  final bool animate;
+
+  @override
+  State<_RelationLayer> createState() => _RelationLayerState();
+}
+
+class _RelationLayerState extends State<_RelationLayer> with SingleTickerProviderStateMixin {
+  /// หนึ่งรอบของเส้นประ
+  static const _cycle = Duration(milliseconds: 900);
+
+  late final AnimationController _ctl = AnimationController(vsync: this, duration: _cycle);
+
+  bool get _wantAnimation =>
+      widget.animate && (widget.selectedTableId != null || widget.focusRelationId != null) && widget.project.relations.isNotEmpty;
+
+  void _sync() {
+    if (_wantAnimation) {
+      if (!_ctl.isAnimating) _ctl.repeat();
+    } else if (_ctl.isAnimating) {
+      _ctl.stop();
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _sync();
+  }
+
+  @override
+  void didUpdateWidget(_RelationLayer old) {
+    super.didUpdateWidget(old);
+    _sync();
+  }
+
+  @override
+  void dispose() {
+    _ctl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+        animation: _ctl,
+        builder: (context, _) => CustomPaint(
+          painter: RelationPainter(
+            widget.project,
+            widget.selectedTableId,
+            origin: CanvasController.worldOrigin,
+            focusRelationId: widget.focusRelationId,
+            flow: widget.showFlow,
+            flowPhase: _wantAnimation ? _ctl.value : null,
+          ),
+        ),
+      );
+}

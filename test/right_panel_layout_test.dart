@@ -17,7 +17,7 @@ void main() {
   late AppSettings settings;
 
   Future<void> boot(WidgetTester tester, {Lang lang = Lang.th}) async {
-    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.physicalSize = const Size(1440, 936); // +36 = แถบแท็บแผนภาพ
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     settings = AppSettings(lang: lang);

@@ -8,6 +8,8 @@ import '../core/models/group_model.dart';
 import '../core/clipboard/table_clipboard.dart';
 import '../core/layout/auto_layout.dart';
 import '../core/models/column_model.dart';
+import '../core/models/dfd_model.dart';
+import '../core/models/diagram.dart';
 import '../core/models/enums.dart';
 import '../core/models/index_model.dart';
 import '../core/models/note_model.dart';
@@ -42,8 +44,8 @@ class ProjectController extends ChangeNotifier {
   bool get dirty => _dirty;
   String? get selectedTableId => _selectedTableId;
   String? get selectedColumnId => _selectedColumnId;
-  bool get canUndo => _undo.isNotEmpty;
-  bool get canRedo => _redo.isNotEmpty;
+  bool get canUndo => activeDiagram.kind == DiagramKind.er ? _undo.isNotEmpty : (_dfdUndo[activeDiagramId]?.isNotEmpty ?? false);
+  bool get canRedo => activeDiagram.kind == DiagramKind.er ? _redo.isNotEmpty : (_dfdRedo[activeDiagramId]?.isNotEmpty ?? false);
 
   List<Issue>? _issues;
 
@@ -63,7 +65,7 @@ class ProjectController extends ChangeNotifier {
   String newId(String prefix) =>
       '$prefix${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}${_idCounter++}';
 
-  String _snapshot() => jsonEncode(_project.toJson());
+  String _snapshot() => jsonEncode(_project.toJson(withDfd: false));
 
   void _push(String snap) {
     _undo.add(snap);
@@ -81,6 +83,7 @@ class ProjectController extends ChangeNotifier {
   }
 
   void _fixSelection() {
+    _attached.removeWhere((id) => _project.groupById(id) == null);
     _extra.removeWhere((id) => _project.tableById(id) == null);
     if (_selectedTableId != null && _project.tableById(_selectedTableId!) == null) {
       // ตัวหลักหาย: ถ้ายังเหลือที่เลือกอยู่ ให้ตัวอื่นขึ้นมาเป็นตัวหลัก
@@ -111,15 +114,20 @@ class ProjectController extends ChangeNotifier {
 
   void _replace(Project p, String? path, {required bool dirty}) {
     _project = p;
+    _activeDiagramId = kErDiagramId;
     _filePath = path;
     _dirty = dirty;
     _issues = null;
     _selectedTableId = null;
     _selectedGroupId = null;
+    _attached.clear();
     _extra.clear();
     _selectedColumnId = null;
     _undo.clear();
     _redo.clear();
+    _dfdUndo.clear();
+    _dfdRedo.clear();
+    _dfdGestureBefore = null;
     _gestureBefore = null;
     notifyListeners();
   }
@@ -130,12 +138,157 @@ class ProjectController extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ---------- แท็บแผนภาพ ----------
+  //
+  // การเพิ่ม/ลบ/เปลี่ยนชื่อ/เรียงแท็บไม่เข้าประวัติ undo (เหมือนแท็บเอกสารของโปรแกรมกราฟิก — ลบแท็บมีกล่องยืนยัน)
+  // และ undo/redo ของเนื้อหาไม่ย้อนรายการแท็บ
+
+  String _activeDiagramId = kErDiagramId;
+
+  /// แท็บที่เปิดอยู่ (ถ้าแท็บนั้นหายไปจะกลับเป็น ER)
+  DiagramTab get activeDiagram => _project.diagramById(_activeDiagramId) ?? _project.diagramById(kErDiagramId)!;
+
+  String get activeDiagramId => activeDiagram.id;
+
+  void selectDiagram(String id) {
+    if (_project.diagramById(id) == null || id == _activeDiagramId) return;
+    _activeDiagramId = id;
+    notifyListeners();
+  }
+
+  void _tabsChanged() {
+    _dirty = true;
+    notifyListeners();
+  }
+
+  /// เพิ่มแผนภาพใหม่ต่อท้ายและเปิดทันที (ตอนนี้เพิ่มได้เฉพาะ DFD — ER มีอันเดียว) ชื่อซ้ำจะต่อเลขให้
+  DiagramTab? addDiagram(DiagramKind kind, {String? name}) {
+    if (kind == DiagramKind.er) return null;
+    final base = cleanDiagramName(name ?? '');
+    final tab = DiagramTab(
+      id: newId('d'),
+      name: _project.uniqueDiagramName(base.isEmpty ? 'DFD' : base),
+      kind: kind,
+    );
+    _project.diagrams.add(tab);
+    _project.dfd[tab.id] = DfdDiagram();
+    _activeDiagramId = tab.id;
+    _tabsChanged();
+    return tab;
+  }
+
+  /// เปลี่ยนชื่อแท็บ — คืน false ถ้าชื่อว่าง/ซ้ำกับแท็บอื่น (ไม่สนตัวพิมพ์)
+  bool renameDiagram(String id, String name) {
+    final t = _project.diagramById(id);
+    final n = cleanDiagramName(name);
+    if (t == null || n.isEmpty) return false;
+    if (_project.diagrams.any((d) => d.id != id && d.name.toLowerCase() == n.toLowerCase())) return false;
+    if (t.name == n) return true;
+    t.name = n;
+    _tabsChanged();
+    return true;
+  }
+
+  /// ลบแท็บ (ลบ ER ไม่ได้) — ถ้าเป็นแท็บที่เปิดอยู่ จะย้ายไปแท็บข้างเคียง
+  bool deleteDiagram(String id) {
+    final i = _project.diagrams.indexWhere((d) => d.id == id);
+    if (i < 0 || _project.diagrams[i].kind == DiagramKind.er) return false;
+    _project.diagrams.removeAt(i);
+    _project.dfd.remove(id);
+    _dfdUndo.remove(id);
+    _dfdRedo.remove(id);
+    if (_activeDiagramId == id) {
+      _activeDiagramId = _project.diagrams[i > 0 ? i - 1 : 0].id;
+    }
+    _tabsChanged();
+    return true;
+  }
+
+  /// ย้ายแท็บไปตำแหน่ง [toIndex] (ตำแหน่งในรายการหลังเอาแท็บนั้นออกแล้ว)
+  void moveDiagram(String id, int toIndex) {
+    final from = _project.diagrams.indexWhere((d) => d.id == id);
+    if (from < 0) return;
+    final to = toIndex.clamp(0, _project.diagrams.length - 1);
+    if (to == from) return;
+    final t = _project.diagrams.removeAt(from);
+    _project.diagrams.insert(to, t);
+    _tabsChanged();
+  }
+
   // ---------- undo / redo ----------
 
+  // --- ประวัติของแท็บ DFD: แยกต่อแท็บ (snapshot เฉพาะเนื้อหาของแท็บนั้น) ---
+  final Map<String, List<String>> _dfdUndo = {};
+  final Map<String, List<String>> _dfdRedo = {};
+  String? _dfdGestureBefore;
+  String? _dfdGestureId;
+
+  String _dfdSnapshot(String id) => jsonEncode(_project.dfdOf(id).toJson());
+
+  void _dfdPush(String id, String snap) {
+    final u = _dfdUndo.putIfAbsent(id, () => []);
+    u.add(snap);
+    if (u.length > _maxHistory) u.removeAt(0);
+    _dfdRedo[id]?.clear();
+  }
+
+  /// แก้เนื้อหา DFD ของแท็บที่เปิดอยู่แบบมีประวัติ (undo ขั้นเดียว)
+  void dfdEdit(void Function(DfdDiagram d) change) {
+    if (activeDiagram.kind != DiagramKind.dfd) return;
+    final id = activeDiagramId;
+    _dfdPush(id, _dfdSnapshot(id));
+    change(_project.dfdOf(id));
+    _dirty = true;
+    notifyListeners();
+  }
+
+  /// แก้ DFD แบบสดระหว่างลาก — ครอบด้วย dfdBeginGesture / dfdEndGesture (undo ขั้นเดียว)
+  void dfdLive(void Function(DfdDiagram d) change) {
+    if (activeDiagram.kind != DiagramKind.dfd) return;
+    change(_project.dfdOf(activeDiagramId));
+    notifyListeners();
+  }
+
+  void dfdBeginGesture() {
+    if (_dfdGestureBefore != null || activeDiagram.kind != DiagramKind.dfd) return;
+    _dfdGestureId = activeDiagramId;
+    _dfdGestureBefore = _dfdSnapshot(activeDiagramId);
+  }
+
+  void dfdEndGesture() {
+    final before = _dfdGestureBefore, id = _dfdGestureId;
+    _dfdGestureBefore = null;
+    _dfdGestureId = null;
+    if (before == null || id == null || _project.diagramById(id) == null) return;
+    if (before != _dfdSnapshot(id)) {
+      _dfdPush(id, before);
+      _dirty = true;
+    }
+    notifyListeners();
+  }
+
+  void _dfdUndoRedo(bool undo) {
+    final id = activeDiagramId;
+    final from = (undo ? _dfdUndo : _dfdRedo)[id];
+    if (from == null || from.isEmpty) return;
+    (undo ? _dfdRedo : _dfdUndo).putIfAbsent(id, () => []).add(_dfdSnapshot(id));
+    _project.dfd[id] = DfdDiagram.fromJson(jsonDecode(from.removeLast()));
+    _dirty = true;
+    notifyListeners();
+  }
+
   void undo() {
+    if (activeDiagram.kind == DiagramKind.dfd) {
+      _dfdUndoRedo(true);
+      return;
+    }
     if (_undo.isEmpty) return;
     _redo.add(_snapshot());
-    _project = Project.fromJson(jsonDecode(_undo.removeLast()) as Map<String, dynamic>);
+    final tabs = _project.diagrams; // undo ไม่ย้อนรายการแท็บ/เนื้อหา DFD
+    final dfd = _project.dfd;
+    _project = Project.fromJson(jsonDecode(_undo.removeLast()) as Map<String, dynamic>)
+      ..diagrams = tabs
+      ..dfd = dfd;
     _dirty = true;
     _issues = null;
     _fixSelection();
@@ -143,9 +296,17 @@ class ProjectController extends ChangeNotifier {
   }
 
   void redo() {
+    if (activeDiagram.kind == DiagramKind.dfd) {
+      _dfdUndoRedo(false);
+      return;
+    }
     if (_redo.isEmpty) return;
     _undo.add(_snapshot());
-    _project = Project.fromJson(jsonDecode(_redo.removeLast()) as Map<String, dynamic>);
+    final tabs = _project.diagrams;
+    final dfd = _project.dfd;
+    _project = Project.fromJson(jsonDecode(_redo.removeLast()) as Map<String, dynamic>)
+      ..diagrams = tabs
+      ..dfd = dfd;
     _dirty = true;
     _issues = null;
     _fixSelection();
@@ -158,6 +319,7 @@ class ProjectController extends ChangeNotifier {
     if (_gestureBefore != null) return;
     _gestureBefore = _snapshot();
     _dragOrigin = null;
+    _attOrigin = null;
   }
 
   /// ตำแหน่งเริ่มลากของตารางที่เลือก + ระยะที่ลากสะสม (ไว้ปัดเข้าช่องตารางโดยไม่สะสมความคลาดเคลื่อน)
@@ -171,6 +333,7 @@ class ProjectController extends ChangeNotifier {
     final before = _gestureBefore;
     _gestureBefore = null;
     _dragOrigin = null;
+    _attOrigin = null;
     _groupOrigin = null;
     _resizeOrigin = null;
     if (before != null && before != _snapshot()) {
@@ -449,6 +612,15 @@ class ProjectController extends ChangeNotifier {
 
   // ---------- selection ----------
 
+  /// กลุ่มที่ "ติด" ไปกับตารางที่เลือก (กรอบเลือกที่ครอบกลุ่มทั้งกลุ่ม): ลากตารางแล้วกรอบกลุ่มและโน้ตข้างในเลื่อนตาม
+  /// ต่างจาก [selectedGroupId] ที่เป็นการคลิกเลือกกลุ่มเดี่ยว ๆ
+  final Set<String> _attached = {};
+
+  Set<String> get attachedGroupIds => {for (final id in _attached) if (_project.groupById(id) != null) id};
+
+  /// กลุ่มทั้งหมดที่ถือว่าถูกเลือก: ที่คลิกเลือก + ที่ติดไปกับตารางที่เลือก
+  Set<String> get selectedGroupIds => {?selectedGroupId, ...attachedGroupIds};
+
   String? _selectedGroupId;
 
   /// กลุ่มที่ถูกเลือกอยู่ (null = ไม่มี) — เลือกกลุ่มแล้วจะไม่มีตารางที่ถูกเลือก และกลับกัน
@@ -461,6 +633,7 @@ class ProjectController extends ChangeNotifier {
     if (id != null && _project.groupById(id) == null) return;
     if (_selectedGroupId == id && (id == null || selectedTableIds.isEmpty)) return;
     _selectedGroupId = id;
+    _attached.clear();
     if (id != null) {
       _selectedTableId = null;
       _selectedColumnId = null;
@@ -471,6 +644,7 @@ class ProjectController extends ChangeNotifier {
 
   void selectTable(String? id, {String? columnId}) {
     _selectedGroupId = null;
+    _attached.clear();
     _selectedTableId = id;
     _extra.clear();
     _selectedColumnId = columnId;
@@ -493,6 +667,7 @@ class ProjectController extends ChangeNotifier {
   void toggleTableSelection(String id) {
     if (_project.tableById(id) == null) return;
     _selectedGroupId = null;
+    _attached.clear();
     if (isTableSelected(id)) {
       if (id == _selectedTableId) {
         _selectedTableId = _extra.isEmpty ? null : _extra.first;
@@ -510,15 +685,28 @@ class ProjectController extends ChangeNotifier {
   }
 
   /// ตั้งชุดตารางที่เลือกทั้งหมด (ใช้ตอนลากกรอบเลือก) — ไม่แตะ undo
-  void setTableSelection(Iterable<String> ids) {
+  void setTableSelection(Iterable<String> ids, {Iterable<String> groups = const []}) {
     final valid = [for (final id in ids) if (_project.tableById(id) != null) id];
     if (valid.isEmpty) {
       clearSelection();
       return;
     }
     final next = valid.toSet();
+    final nextGroups = {for (final g in groups) if (_project.groupById(g) != null) g};
     _selectedGroupId = null;
-    if (next.length == selectedTableIds.length && next.containsAll(selectedTableIds)) return;
+    final sameGroups = nextGroups.length == _attached.length && _attached.containsAll(nextGroups);
+    if (next.length == selectedTableIds.length && next.containsAll(selectedTableIds)) {
+      if (!sameGroups) {
+        _attached
+          ..clear()
+          ..addAll(nextGroups);
+        notifyListeners();
+      }
+      return;
+    }
+    _attached
+      ..clear()
+      ..addAll(nextGroups);
     // คงตัวหลักเดิมไว้ถ้ายังอยู่ในชุดใหม่ (แผงขวาจะได้ไม่กระโดด)
     final primary = _selectedTableId != null && next.contains(_selectedTableId) ? _selectedTableId! : valid.first;
     _selectedTableId = primary;
@@ -533,6 +721,9 @@ class ProjectController extends ChangeNotifier {
   void selectAllTables() {
     if (_project.tables.isEmpty) return;
     _selectedGroupId = null;
+    _attached
+      ..clear()
+      ..addAll(_project.groups.map((g) => g.id)); // เลือกทั้งหมด = กรอบกลุ่มติดไปด้วย
     final keepPrimary = _selectedTableId != null && _project.tableById(_selectedTableId!) != null;
     _selectedTableId = keepPrimary ? _selectedTableId : _project.tables.first.id;
     _extra
@@ -543,8 +734,9 @@ class ProjectController extends ChangeNotifier {
   }
 
   void clearSelection() {
-    if (_selectedTableId == null && _extra.isEmpty && _selectedGroupId == null) return;
+    if (_selectedTableId == null && _extra.isEmpty && _selectedGroupId == null && _attached.isEmpty) return;
     _selectedGroupId = null;
+    _attached.clear();
     _selectedTableId = null;
     _selectedColumnId = null;
     _extra.clear();
@@ -719,6 +911,7 @@ class ProjectController extends ChangeNotifier {
   void moveSelectedBy(double dx, double dy, {double? grid}) {
     if (grid != null) {
       if (!gestureActive || _dragOrigin == null) {
+        _attOrigin = _captureAttached();
         _dragOrigin = {
           for (final id in selectedTableIds)
             if (_project.tableById(id) != null) id: (_project.tableById(id)!.x, _project.tableById(id)!.y),
@@ -738,6 +931,7 @@ class ProjectController extends ChangeNotifier {
         t.x = _clampXY(e.value.$1 + sx);
         t.y = _clampXY(e.value.$2 + sy);
       }
+      _applyAttached(sx, sy);
       notifyListeners();
       return;
     }
@@ -747,7 +941,70 @@ class ProjectController extends ChangeNotifier {
       t.x = _clampXY(t.x + dx);
       t.y = _clampXY(t.y + dy);
     }
+    _shiftAttached(dx, dy);
     notifyListeners();
+  }
+
+  // --- กลุ่มที่ติดไปกับตารางที่เลือก: เลื่อนพร้อมกัน (พร้อมโน้ตที่อยู่ข้างในกลุ่ม) ---
+  Map<String, (double, double)>? _attOrigin;
+
+  /// ตำแหน่งตอนนี้ของกลุ่มที่ติดไป + โน้ตข้างใน ('g:id' / 'n:id')
+  Map<String, (double, double)> _captureAttached() {
+    final out = <String, (double, double)>{};
+    for (final gid in attachedGroupIds) {
+      final g = _project.groupById(gid)!;
+      out['g:$gid'] = (g.x, g.y);
+      for (final nid in groupMembers(_project, g).notes) {
+        final n = _project.notes.where((n) => n.id == nid).firstOrNull;
+        if (n != null) out['n:$nid'] = (n.x, n.y);
+      }
+    }
+    return out;
+  }
+
+  /// เลื่อนกลุ่ม/โน้ตที่จดไว้ตอนเริ่มลากไป (sx, sy) จากตำแหน่งเริ่มลาก
+  void _applyAttached(double sx, double sy) {
+    final o = _attOrigin;
+    if (o == null) return;
+    for (final e in o.entries) {
+      final x = _clampXY(e.value.$1 + sx), y = _clampXY(e.value.$2 + sy);
+      final key = e.key.substring(2);
+      if (e.key.startsWith('g:')) {
+        final g = _project.groupById(key);
+        if (g != null) {
+          g.x = x;
+          g.y = y;
+        }
+      } else {
+        final n = _project.notes.where((n) => n.id == key).firstOrNull;
+        if (n != null) {
+          n.x = x;
+          n.y = y;
+        }
+      }
+    }
+  }
+
+  /// เลื่อนกลุ่ม/โน้ตที่ติดไปด้วยระยะ (dx, dy) จากตำแหน่งปัจจุบัน
+  void _shiftAttached(double dx, double dy) {
+    final cur = _captureAttached();
+    for (final e in cur.entries) {
+      final x = _clampXY(e.value.$1 + dx), y = _clampXY(e.value.$2 + dy);
+      final key = e.key.substring(2);
+      if (e.key.startsWith('g:')) {
+        final g = _project.groupById(key);
+        if (g != null) {
+          g.x = x;
+          g.y = y;
+        }
+      } else {
+        final n = _project.notes.where((n) => n.id == key).firstOrNull;
+        if (n != null) {
+          n.x = x;
+          n.y = y;
+        }
+      }
+    }
   }
 
   /// ขยับตารางที่เลือกด้วยปุ่มลูกศร (undo หนึ่งขั้นต่อหนึ่งการกด) — คืน false ถ้าไม่มีอะไรเลือก/ขยับไม่ได้
@@ -755,6 +1012,7 @@ class ProjectController extends ChangeNotifier {
     final ts = [for (final id in selectedTableIds) if (_project.tableById(id) != null) _project.tableById(id)!];
     if (ts.isEmpty || ts.every((t) => _clampXY(t.x + dx) == t.x && _clampXY(t.y + dy) == t.y)) return false;
     _edit(() {
+      _shiftAttached(dx, dy); // จับตำแหน่งกลุ่ม/โน้ตก่อนขยับตาราง (สมาชิกของกลุ่มคิดจากตำแหน่งเดิม)
       for (final t in ts) {
         t.x = _clampXY(t.x + dx);
         t.y = _clampXY(t.y + dy);

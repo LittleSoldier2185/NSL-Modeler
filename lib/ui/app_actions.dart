@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../core/models/diagram.dart';
 import '../core/models/enums.dart';
 import '../state/project_controller.dart';
 import '../core/layout/diagram_geometry.dart';
@@ -10,6 +11,7 @@ import 'create_table_dialog.dart';
 import 'file_actions.dart';
 import 'palette/command_palette.dart';
 import 'prompt_dialog.dart';
+import 'dfd/dfd_actions.dart';
 import 'shortcuts.dart';
 import 'shortcuts_help.dart';
 import '../core/l10n/l10n.dart';
@@ -42,6 +44,7 @@ class AppActions {
         Cmd.exportText: () => FileActions.exportText(context, c),
         Cmd.importSql: () => FileActions.importSqlFile(context, c),
         Cmd.compare: () => FileActions.compareWithFile(context, c),
+        Cmd.connectDb: () => FileActions.connectDatabase(context, c),
         Cmd.undo: c.undo,
         Cmd.redo: c.redo,
         Cmd.copy: copy,
@@ -74,9 +77,21 @@ class AppActions {
         Cmd.dialectSqlite: () => c.setDialect(Dialect.sqlite),
         Cmd.dialectMssql: () => c.setDialect(Dialect.mssql),
         Cmd.help: () => showShortcutsHelp(context),
+        // ใช้เฉพาะแท็บ DFD (ดู DfdActions) — บนแท็บ ER ไม่ทำอะไร
+        Cmd.dfdEntity: () {},
+        Cmd.dfdProcess: () {},
+        Cmd.dfdStore: () {},
       };
 
-  void run(Cmd cmd) => map[cmd]!();
+  /// ทำงานตามคำสั่ง: แท็บ DFD ใช้ชุดคำสั่งของ DFD, แท็บ ER ใช้ชุดเดิม (และเมินคำสั่งของ DFD)
+  void run(Cmd cmd) {
+    if (c.activeDiagram.kind == DiagramKind.dfd) {
+      DfdActions(context).run(cmd);
+      return;
+    }
+    if (DfdActions.dfdOnly.contains(cmd)) return;
+    map[cmd]!();
+  }
 
   void _toast(String msg) => ScaffoldMessenger.of(context)
     ..clearSnackBars()

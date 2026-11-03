@@ -121,12 +121,12 @@ void main() {
       final (c, cv) = await pump(tester);
       cv.setTool(CanvasTool.table);
       await tester.pump();
-      // กลางพื้นที่ canvas ประมาณ (248 + 436, 52 + 400)
+      // กลางพื้นที่ canvas ประมาณ (248 + 436, 52 + 36 + 400) — 36 = แถบแท็บแผนภาพ
       await tester.tapAt(const Offset(700, 400));
       await tester.pump();
       expect(c.project.tables.length, 1);
       final t = c.project.tables.single;
-      final w = cv.toWorld(const Offset(700 - 248, 400 - 52));
+      final w = cv.toWorld(const Offset(700 - 248, 400 - 52 - 36));
       expect(t.x, snapToGrid(w.dx));
       expect(t.y, snapToGrid(w.dy));
       expect((t.x - w.dx).abs(), lessThanOrEqualTo(kGridSize / 2));

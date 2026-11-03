@@ -104,9 +104,9 @@ void main() {
 
   testWidgets('ลากพื้นที่ว่างบนแถบบน = ย้ายหน้าต่าง; ดับเบิลคลิก = ขยาย/คืนขนาด', (tester) async {
     // หน้าต่างกว้างพอให้มีที่ว่างบนแถบ (ที่ 1440 กลุ่มปุ่มขวากินพื้นที่ที่เหลือหมด)
-    await boot(tester, size: const Size(1900, 900));
+    await boot(tester, size: const Size(2600, 900));
     // จุดว่างบนแถบ = ซ้ายของกลุ่มปุ่มขวา
-    final blank = tester.getTopLeft(find.byTooltip('ย้อนกลับ (Ctrl+Z)')) + const Offset(-30, 20);
+    final blank = tester.getTopRight(find.byKey(const ValueKey('top-search'))) + const Offset(6, 8);
     final g = await tester.startGesture(blank, kind: PointerDeviceKind.mouse);
     await g.moveBy(const Offset(40, 0));
     await g.up();

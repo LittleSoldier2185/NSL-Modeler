@@ -74,8 +74,21 @@ class PanelLayout extends ChangeNotifier {
 
 /// การตั้งค่าของแอป (ภาษา, ธีม, ขนาดแผง) เก็บเป็น settings.json ในโฟลเดอร์ข้อมูลแอป
 class AppSettings extends ChangeNotifier {
-  AppSettings({Lang? lang, bool dark = false, bool snapToGrid = true, PanelLayout? layout, this.file})
-      : layout = layout ?? PanelLayout(),
+  AppSettings({
+    Lang? lang,
+    bool dark = false,
+    bool snapToGrid = true,
+    bool showFlow = true,
+    bool flowAnimation = false,
+    String? lastSeenVersion,
+    PanelLayout? layout,
+    this.file,
+  })  : layout = layout ?? PanelLayout(),
+        _lastSeen = lastSeenVersion,
+        // ignore: prefer_initializing_formals
+        _showFlow = showFlow,
+        // ignore: prefer_initializing_formals
+        _flowAnim = flowAnimation,
         _lang = lang ?? Lang.th,
         _langChosen = lang != null,
         // ignore: prefer_initializing_formals
@@ -93,12 +106,35 @@ class AppSettings extends ChangeNotifier {
   bool _langChosen;
   bool _dark;
   bool _snap;
+  bool _showFlow;
+  bool _flowAnim;
+  String? _lastSeen;
 
   Lang get lang => _lang;
   bool get dark => _dark;
 
   /// ลาก/วางตารางแล้วปัดเข้าช่องตาราง (กด Alt ค้างตอนลากเพื่อข้ามชั่วคราว)
   bool get snapToGrid => _snap;
+
+  /// แสดงเครื่องหมายทิศทางข้อมูลกลางเส้น FK (วงกลมลูกศรชี้จากตารางแม่ PK ไปหาตารางลูก FK)
+  bool get showFlow => _showFlow;
+
+  /// ให้เส้นของตารางที่เลือกมีเส้นประวิ่งตามทิศทางข้อมูล (เปิดเป็นค่าเริ่มต้นในแอปจริง; ตอนสร้างแบบไม่ผ่านไฟล์ = ปิด
+  /// เพราะอนิเมชันที่วิ่งไม่หยุดทำให้เทสต์ที่รอ pumpAndSettle ไม่จบ)
+  bool get flowAnimation => _flowAnim;
+
+  /// รุ่นของโปรแกรมที่ผู้ใช้เปิดดู patch note ไปแล้วล่าสุด (null = ยังไม่เคย)
+  String? get lastSeenVersion => _lastSeen;
+
+  /// มี patch note ของรุ่นปัจจุบันที่ยังไม่เคยเปิดดู (ใช้แสดงจุดบนปุ่ม "มีอะไรใหม่")
+  bool hasUnseenNotes(String currentVersion) => _lastSeen != currentVersion;
+
+  void markNotesSeen(String version) {
+    if (_lastSeen == version) return;
+    _lastSeen = version;
+    _save();
+    notifyListeners();
+  }
 
   /// true = ผู้ใช้ยังไม่เคยเลือกภาษา (เปิดโปรแกรมครั้งแรก) -> ต้องถามก่อน
   bool get needsLanguagePrompt => !_langChosen;
@@ -112,12 +148,15 @@ class AppSettings extends ChangeNotifier {
           lang: Lang.fromCode(m['lang'] as String?),
           dark: m['theme'] == 'dark',
           snapToGrid: m['snap'] != false,
+          showFlow: m['flow'] != false,
+          flowAnimation: m['flowAnim'] != false,
+          lastSeenVersion: m['seen'] as String?,
           layout: PanelLayout.fromJson(m['layout']),
           file: file,
         );
       }
     } catch (_) {}
-    return AppSettings(file: file);
+    return AppSettings(file: file, flowAnimation: true);
   }
 
   void setLang(Lang l) {
@@ -147,6 +186,20 @@ class AppSettings extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setShowFlow(bool v) {
+    if (_showFlow == v) return;
+    _showFlow = v;
+    _save();
+    notifyListeners();
+  }
+
+  void setFlowAnimation(bool v) {
+    if (_flowAnim == v) return;
+    _flowAnim = v;
+    _save();
+    notifyListeners();
+  }
+
   void _save() {
     final f = file;
     if (f == null) return;
@@ -156,6 +209,9 @@ class AppSettings extends ChangeNotifier {
         if (_langChosen) 'lang': _lang.code,
         'theme': _dark ? 'dark' : 'light',
         'snap': _snap,
+        'flow': _showFlow,
+        'flowAnim': _flowAnim,
+        if (_lastSeen != null) 'seen': _lastSeen,
         'layout': layout.toJson(),
       }));
     } catch (_) {

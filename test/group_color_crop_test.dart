@@ -26,6 +26,7 @@ Project laid() {
 }
 
 void main() {
+  groupAttachTests();
   group('สีกลุ่มกำหนดเอง', () {
     test('บันทึก/เปิดกลับ; ไฟล์ที่ไม่มีสีเองไม่มีฟิลด์ fill; ค่าผิดปกติถูกทิ้ง', () {
       final g = GroupModel(id: 'g', name: 'g', colorIndex: 2);
@@ -134,6 +135,140 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('color-ok')));
       await tester.pumpAndSettle();
       expect(c.project.groups.single.customColor, 0xFF22BB33);
+    });
+  });
+}
+
+void groupAttachTests() {
+  group('กรอบเลือกครอบกลุ่ม = กลุ่มติดไปกับตาราง', () {
+    ProjectController make() {
+      final c = ProjectController(laid());
+      return c;
+    }
+
+    test('ลากตารางที่เลือก: กรอบกลุ่มที่ติดไปและโน้ตข้างในเลื่อนด้วย; undo ขั้นเดียวคืนทั้งหมด', () {
+      final c = make();
+      final g = c.addGroup(x: 60, y: 60); // ครอบ users (100,100)
+      c.project.groups.single
+        ..width = 400
+        ..height = 300;
+      final n = c.addNote(x: 300, y: 300); // โน้ตอยู่ในกลุ่ม
+      c.undo(); // ไม่ได้ต้องการประวัติ — ล้างแล้วสร้างใหม่ให้แน่ใจ
+      c.redo();
+      c.setTableSelection({'tu'}, groups: {g.id});
+      expect(c.attachedGroupIds, {g.id});
+      final tx = tb(c.project, 'tu').x, gx = c.project.groups.single.x, nx = c.project.notes.single.x;
+      c.beginGesture();
+      c.moveSelectedBy(30, 40);
+      c.endGesture();
+      expect(tb(c.project, 'tu').x, tx + 30);
+      expect(c.project.groups.single.x, gx + 30);
+      expect(c.project.groups.single.y, 60 + 40);
+      expect(c.project.notes.single.x, nx + 30);
+      c.undo();
+      expect(c.project.groups.single.x, gx);
+      expect(tb(c.project, 'tu').x, tx);
+      expect(n.id, c.project.notes.single.id);
+    });
+
+    test('ลากแบบ snap: กลุ่มเลื่อนด้วยระยะเท่ากับตาราง (รักษาระยะห่าง)', () {
+      final c = make();
+      final g = c.addGroup(x: 60, y: 60);
+      c.setTableSelection({'tu'}, groups: {g.id});
+      final dxBefore = tb(c.project, 'tu').x - c.project.groups.single.x;
+      c.beginGesture();
+      c.moveSelectedBy(33, 27, grid: 20);
+      c.moveSelectedBy(5, 5, grid: 20);
+      c.endGesture();
+      expect(tb(c.project, 'tu').x - c.project.groups.single.x, dxBefore);
+      expect(tb(c.project, 'tu').y - c.project.groups.single.y, 40);
+    });
+
+    test('ปุ่มลูกศร (nudge) ขยับกลุ่มที่ติดไปด้วย', () {
+      final c = make();
+      final g = c.addGroup(x: 60, y: 60);
+      c.setTableSelection({'tu'}, groups: {g.id});
+      c.nudgeSelected(10, 0);
+      expect(c.project.groups.single.x, 70);
+    });
+
+    test('ไม่ได้ติดไป (เลือกตารางเฉย ๆ) = กลุ่มอยู่ที่เดิม; เลือกใหม่/คลิก/ล้าง = เลิกติด', () {
+      final c = make();
+      final g = c.addGroup(x: 60, y: 60);
+      c.setTableSelection({'tu'});
+      c.beginGesture();
+      c.moveSelectedBy(30, 0);
+      c.endGesture();
+      expect(c.project.groups.single.x, 60);
+
+      c.setTableSelection({'tu'}, groups: {g.id});
+      c.selectTable('to');
+      expect(c.attachedGroupIds, isEmpty);
+      c.setTableSelection({'tu'}, groups: {g.id});
+      c.clearSelection();
+      expect(c.attachedGroupIds, isEmpty);
+      c.setTableSelection({'tu'}, groups: {g.id});
+      c.selectGroup(g.id);
+      expect(c.attachedGroupIds, isEmpty);
+    });
+
+    test('Ctrl+A เลือกกลุ่มทุกกลุ่มติดไปด้วย; export เฉพาะที่เลือกพากลุ่มที่ติดไป', () {
+      final c = make();
+      final g = c.addGroup(x: 60, y: 60);
+      c.selectAllTables();
+      expect(c.attachedGroupIds, {g.id});
+      c.setTableSelection({'to'}, groups: {g.id}); // กลุ่มว่างที่ติดไป
+      final src = cropToSelection(c.project, c.selectedTableIds, groupIds: c.attachedGroupIds);
+      expect(src.groups.map((x) => x.id), [g.id]);
+    });
+  });
+
+  group('กรอบเลือกบนจอ', () {
+    testWidgets('ลากกรอบครอบกลุ่มทั้งกลุ่ม = กลุ่มติดไป; ครอบไม่หมด = ไม่ติด; ลากตารางแล้วกลุ่มตามไป', (tester) async {
+      tester.view.physicalSize = const Size(1440, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(const NslModelerApp());
+      final c = tester.element(find.byType(HomePage)).read<ProjectController>();
+      c.loadProject(laid(), null);
+      tb(c.project, 'tu')
+        ..x = 140
+        ..y = 140;
+      final g = c.addGroup(x: 100, y: 100);
+      c.project.groups.single
+        ..width = 330
+        ..height = 300;
+      await tester.pump();
+      final origin = tester.getTopLeft(find.byKey(const ValueKey('table-tu'))) - const Offset(140, 140);
+      Offset at(double x, double y) => origin + Offset(x, y);
+
+      // ครอบไม่หมด: ลากจากด้านล่างขวาเข้ามาแค่บางส่วนของกลุ่ม
+      var gs = await tester.startGesture(at(520, 330), kind: PointerDeviceKind.mouse);
+      await gs.moveTo(at(120, 120));
+      await gs.up();
+      await tester.pump();
+      expect(c.attachedGroupIds, isEmpty);
+
+      // ครอบทั้งกลุ่ม
+      gs = await tester.startGesture(at(560, 480), kind: PointerDeviceKind.mouse);
+      await gs.moveTo(at(60, 60));
+      await tester.pump();
+      expect(c.selectedTableIds, contains('tu'));
+      expect(c.attachedGroupIds, {g.id});
+      await gs.up();
+      await tester.pump();
+      expect(c.attachedGroupIds, {g.id}); // ปล่อยเมาส์แล้วยังติดอยู่
+
+      // ลากตาราง users: กลุ่มตามไปด้วย
+      final before = c.project.groups.single.x;
+      final tg = await tester.startGesture(
+          tester.getTopLeft(find.byKey(const ValueKey('table-tu'))) + const Offset(60, 16),
+          kind: PointerDeviceKind.mouse);
+      await tg.moveBy(const Offset(40, 0));
+      await tg.moveBy(const Offset(40, 0));
+      await tg.up();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(c.project.groups.single.x, greaterThan(before + 30));
     });
   });
 }

@@ -13,7 +13,7 @@ Future<void> showShortcutsHelp(BuildContext context) => showDialog<void>(
 class ShortcutsHelpDialog extends StatelessWidget {
   const ShortcutsHelpDialog({super.key});
 
-  static const groupOrder = ['ไฟล์', 'แก้ไข', 'Canvas', 'ทั่วไป'];
+  static const groupOrder = ['ไฟล์', 'แก้ไข', 'Canvas', 'DFD', 'ทั่วไป'];
 
   @override
   Widget build(BuildContext context) {

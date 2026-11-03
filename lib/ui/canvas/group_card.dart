@@ -112,7 +112,7 @@ class _GroupCardState extends State<GroupCard> {
     final c = context.read<ProjectController>();
     final cv = context.read<CanvasController>();
     final color = Color(group.colorValue);
-    final selected = c.selectedGroupId == group.id;
+    final selected = c.selectedGroupId == group.id || c.attachedGroupIds.contains(group.id);
     final nameStyle = TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: C.isDark ? color : _darken(color));
 
     return Positioned(

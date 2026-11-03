@@ -2,7 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/layout/diagram_geometry.dart' show noteHeight;
+import '../../core/models/dfd_model.dart';
+import '../../core/models/diagram.dart';
 import '../../core/models/enums.dart';
+import '../../core/validate/dfd_validator.dart';
+import '../../state/dfd_controller.dart';
+import '../dfd/dfd_panels.dart' show dfdKindName;
 import '../../core/search/fuzzy.dart';
 import '../../state/project_controller.dart';
 import '../canvas/canvas_controller.dart';
@@ -10,10 +16,21 @@ import '../export/text_export_dialog.dart';
 import '../app_actions.dart';
 import '../file_actions.dart';
 import '../shortcuts.dart';
+import '../whats_new_dialog.dart';
 import '../theme.dart';
 import '../../core/l10n/l10n.dart';
 
-enum PaletteKind { command, table, column }
+enum PaletteKind { command, table, column, group, note, dfdNode, dfdFlow, issue }
+
+/// ตัวนำหน้าที่จำกัดชนิดของผลค้น: @ ตาราง/กลุ่ม · # คอลัมน์ · : วัตถุและเส้นของ DFD · ! ปัญหา · > คำสั่ง · ~ โน้ต
+const Map<String, Set<PaletteKind>> kPalettePrefixes = {
+  '@': {PaletteKind.table, PaletteKind.group},
+  '#': {PaletteKind.column},
+  ':': {PaletteKind.dfdNode, PaletteKind.dfdFlow},
+  '!': {PaletteKind.issue},
+  '>': {PaletteKind.command},
+  '~': {PaletteKind.note},
+};
 
 class PaletteEntry {
   const PaletteEntry({
@@ -69,6 +86,7 @@ List<PaletteEntry> buildPaletteEntries(BuildContext context) {
         () => FileActions.exportText(context, c, kind: TextExportKind.sample)),
     byCmd(tr('นำเข้าจากไฟล์ .sql…'), 'import sql create table', Cmd.importSql),
     byCmd(tr('เปรียบเทียบกับไฟล์เก่า (Migration)…'), tr('diff migration alter compare เทียบ'), Cmd.compare),
+    byCmd(tr('เชื่อมต่อฐานข้อมูล MySQL…'), 'database connect mysql mariadb db เชื่อมต่อ ฐานข้อมูล', Cmd.connectDb),
     byCmd(tr('ย้อนกลับ'), 'undo', Cmd.undo),
     byCmd(tr('ทำซ้ำ'), 'redo', Cmd.redo),
     byCmd(tr('คัดลอกตารางที่เลือก'), 'copy', Cmd.copy),
@@ -97,19 +115,92 @@ List<PaletteEntry> buildPaletteEntries(BuildContext context) {
     cmd(tr('แสดงปัญหาที่ตรวจพบ'), tr('issues problems validate ตรวจสอบ'), () => cv.showDock(DockTab.issues)),
     byCmd(tr('ค้นหาตาราง / คอลัมน์'), 'search find', Cmd.find),
     byCmd(tr('ดูคีย์ลัดทั้งหมด'), 'shortcuts help keyboard', Cmd.help),
+    cmd(tr('มีอะไรใหม่ (Patch note)'), 'whats new patch note changelog release version อัปเดต รุ่น', () => showWhatsNew(context)),
+    cmd(tr('เกี่ยวกับ NSL Modeler'), 'about version เวอร์ชัน รุ่น', () => showAbout(context)),
   ];
 
+
+  /// กระโดดไปแท็บ ER ก่อน (ถ้าอยู่แท็บ DFD) แล้วทำต่อ
+  void inEr(VoidCallback f) {
+    c.selectDiagram(kErDiagramId);
+    f();
+  }
+
   final objects = <PaletteEntry>[
+    for (final g in c.project.groups)
+      PaletteEntry(
+        kind: PaletteKind.group,
+        title: g.name.isEmpty ? tr('(กลุ่มไม่มีชื่อ)') : g.name,
+        subtitle: tr('กลุ่ม'),
+        search: g.name,
+        run: () => inEr(() {
+          c.selectGroup(g.id);
+          cv.centerOn(Offset(g.x + g.width / 2, g.y + g.height / 2), atLeastScale: 0.5);
+        }),
+      ),
+    for (final n in c.project.notes)
+      if (n.text.trim().isNotEmpty)
+        PaletteEntry(
+          kind: PaletteKind.note,
+          title: n.text.trim().split('\n').first,
+          subtitle: tr('โน้ต'),
+          search: n.text,
+          run: () => inEr(() => cv.centerOn(Offset(n.x + n.width / 2, n.y + noteHeight(n) / 2), atLeastScale: 0.6)),
+        ),
+    for (final i in c.issues)
+      PaletteEntry(
+        kind: PaletteKind.issue,
+        title: i.title,
+        subtitle: i.message,
+        search: '${i.title} ${i.message} ${i.code}',
+        run: () => inEr(() {
+          final t = i.tableId == null ? null : c.project.tableById(i.tableId!);
+          if (t == null) {
+            cv.showDock(DockTab.issues);
+            return;
+          }
+          c.selectTable(t.id, columnId: i.columnId);
+          cv.focusTable(t);
+        }),
+      ),
+    // ---- แผนภาพ DFD ทุกแท็บ: วัตถุ เส้นข้อมูล และปัญหาของแท็บที่เปิดอยู่ ----
+    for (final tab in c.project.diagrams.where((t) => t.kind == DiagramKind.dfd)) ...[
+      for (final n in c.project.dfdOf(tab.id).nodes)
+        PaletteEntry(
+          kind: PaletteKind.dfdNode,
+          title: n.title.isEmpty ? tr('(ไม่มีชื่อ)') : n.title,
+          subtitle: '${tab.name} · ${dfdKindName(n.kind)}',
+          search: '${n.title} ${tab.name}',
+          run: () => _gotoDfd(context, tab.id, node: n.id),
+        ),
+      for (final f in c.project.dfdOf(tab.id).flows)
+        PaletteEntry(
+          kind: PaletteKind.dfdFlow,
+          title: f.label.isEmpty ? tr('(ไม่มีชื่อ)') : f.label,
+          subtitle: '${tab.name} · ${c.project.dfdOf(tab.id).nodeById(f.fromId)?.title ?? '?'} → ${c.project.dfdOf(tab.id).nodeById(f.toId)?.title ?? '?'}',
+          search: '${f.label} ${tab.name} ${c.project.dfdOf(tab.id).nodeById(f.fromId)?.title ?? ''} ${c.project.dfdOf(tab.id).nodeById(f.toId)?.title ?? ''}',
+          run: () => _gotoDfd(context, tab.id, flow: f.id),
+        ),
+    ],
+    if (c.activeDiagram.kind == DiagramKind.dfd)
+      for (final i in validateDfd(c.project.dfdOf(c.activeDiagramId)))
+        PaletteEntry(
+          kind: PaletteKind.issue,
+          title: i.title,
+          subtitle: i.message,
+          search: '${i.title} ${i.message} ${i.code}',
+          run: () => _gotoDfd(context, c.activeDiagramId, node: i.tableId, flow: i.relationId),
+        ),
     for (final t in c.project.tables) ...[
       PaletteEntry(
         kind: PaletteKind.table,
         title: t.name,
         subtitle: tr('ตาราง · {0} คอลัมน์{1}', [t.columns.length, t.comment.isEmpty ? '' : ' · ${t.comment}']),
         search: '${t.name} ${t.comment}',
-        run: () {
+        run: () => inEr(() {
           c.selectTable(t.id);
           cv.focusTable(t);
-        },
+        }),
       ),
       for (final col in t.columns)
         PaletteEntry(
@@ -117,22 +208,61 @@ List<PaletteEntry> buildPaletteEntries(BuildContext context) {
           title: '${t.name}.${col.name}',
           subtitle: tr('คอลัมน์ · {0}{1}', [typeLabel(col), col.comment.isEmpty ? '' : ' · ${col.comment}']),
           search: '${t.name}.${col.name} ${col.comment}',
-          run: () {
+          run: () => inEr(() {
             c.selectTable(t.id, columnId: col.id);
             cv.focusTable(t);
-          },
+          }),
         ),
     ],
   ];
   return [...commands, ...objects];
 }
 
-/// คำที่ค้นไว้ → รายการที่แสดง (ค้นว่าง: คำสั่งก่อน แล้วตาราง ไม่แสดงคอลัมน์ทั้งหมดเพื่อไม่ให้ยาวเกิน)
-List<PaletteEntry> paletteResults(List<PaletteEntry> all, String query, {int limit = 60}) {
-  if (query.trim().isEmpty) {
-    return all.where((e) => e.kind != PaletteKind.column).take(limit).toList();
+/// เปิดแท็บ DFD [tabId] แล้วเลือกวัตถุ/เส้นที่ต้องการและเลื่อนไปให้เห็น (รอเฟรมถัดไปเพื่อให้แคนวาสของแท็บนั้นสร้างเสร็จและรู้ขนาด)
+void _gotoDfd(BuildContext context, String tabId, {String? node, String? flow}) {
+  final c = context.read<ProjectController>();
+  final d = context.read<DfdController>();
+  c.selectDiagram(tabId);
+  void apply() {
+    if (node != null) {
+      d.selectNode(node);
+      d.reveal(node, d.viewport);
+    } else if (flow != null) {
+      d.selectFlow(flow);
+      final f = d.diagram.flowById(flow);
+      final r = f == null ? null : dfdRoutes(d.diagram)[flow];
+      if (r != null) {
+        final (x, y) = dfdLabelAnchor(r);
+        d.revealPoint(Offset(x, y), d.viewport);
+      }
+    }
   }
-  return fuzzyRank(all, query, (e) => e.search).take(limit).toList();
+
+  apply();
+  WidgetsBinding.instance.addPostFrameCallback((_) => apply());
+}
+
+/// แยกตัวนำหน้า (@ # : ! > ~) ออกจากคำค้น — คืนชุดชนิดที่จำกัด (null = ไม่จำกัด) และคำค้นที่เหลือ
+({Set<PaletteKind>? kinds, String query}) parsePaletteQuery(String raw) {
+  final t = raw.trimLeft();
+  if (t.isNotEmpty && kPalettePrefixes.containsKey(t[0])) {
+    return (kinds: kPalettePrefixes[t[0]], query: t.substring(1).trim());
+  }
+  return (kinds: null, query: raw);
+}
+
+/// คำที่ค้นไว้ → รายการที่แสดง
+/// ค้นว่าง: คำสั่ง ตาราง กลุ่ม (ไม่แสดงคอลัมน์/วัตถุ DFD/ปัญหาทั้งหมดเพื่อไม่ให้ยาวเกิน)
+/// ขึ้นต้นด้วย @ # : ! > ~ = ค้นเฉพาะชนิดนั้น (ตัวนำหน้าอย่างเดียว = แสดงทั้งหมดของชนิดนั้น)
+List<PaletteEntry> paletteResults(List<PaletteEntry> all, String query, {int limit = 60}) {
+  final p = parsePaletteQuery(query);
+  final pool = p.kinds == null ? all : all.where((e) => p.kinds!.contains(e.kind)).toList();
+  if (p.query.trim().isEmpty) {
+    if (p.kinds != null) return pool.take(limit).toList();
+    const hiddenWhenEmpty = {PaletteKind.column, PaletteKind.dfdNode, PaletteKind.dfdFlow, PaletteKind.issue, PaletteKind.note};
+    return pool.where((e) => !hiddenWhenEmpty.contains(e.kind)).take(limit).toList();
+  }
+  return fuzzyRank(pool, p.query, (e) => e.search).take(limit).toList();
 }
 
 Future<void> showCommandPalette(BuildContext context) async {
@@ -224,7 +354,7 @@ class _CommandPaletteState extends State<CommandPalette> {
                   onSubmitted: (_) => _pick(_index),
                   style: const TextStyle(fontSize: 15),
                   decoration: InputDecoration(
-                    hintText: tr('พิมพ์คำสั่ง หรือชื่อตาราง / คอลัมน์…'),
+                    hintText: tr('พิมพ์คำสั่ง ชื่อตาราง คอลัมน์ วัตถุ DFD…'),
                     prefixIcon: Icon(Icons.search),
                     border: InputBorder.none,
                     contentPadding: EdgeInsets.symmetric(vertical: 16),
@@ -256,6 +386,11 @@ class _CommandPaletteState extends State<CommandPalette> {
                   Text(tr('Enter ทำงาน'), style: TextStyle(fontSize: 11.5, color: C.muted)),
                   SizedBox(width: 14),
                   Text(tr('Esc ปิด'), style: TextStyle(fontSize: 11.5, color: C.muted)),
+                  const Spacer(),
+                  Flexible(
+                    child: Text(tr('@ ตาราง · # คอลัมน์ · : DFD · ! ปัญหา · > คำสั่ง · ~ โน้ต'),
+                        overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11.5, color: C.muted)),
+                  ),
                 ]),
               ),
             ]),
@@ -270,6 +405,11 @@ class _CommandPaletteState extends State<CommandPalette> {
       PaletteKind.command => Icons.bolt_outlined,
       PaletteKind.table => Icons.table_rows_outlined,
       PaletteKind.column => Icons.view_column_outlined,
+      PaletteKind.group => Icons.dashboard_customize_outlined,
+      PaletteKind.note => Icons.sticky_note_2_outlined,
+      PaletteKind.dfdNode => Icons.account_tree_outlined,
+      PaletteKind.dfdFlow => Icons.arrow_right_alt_rounded,
+      PaletteKind.issue => Icons.warning_amber_rounded,
     };
     return MouseRegion(
       onEnter: (_) => setState(() => _index = i),
@@ -285,7 +425,7 @@ class _CommandPaletteState extends State<CommandPalette> {
               child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(e.title,
                     overflow: TextOverflow.ellipsis,
-                    style: (e.kind == PaletteKind.command ? const TextStyle() : monoStyle)
+                    style: (const {PaletteKind.table, PaletteKind.column}.contains(e.kind) ? monoStyle : const TextStyle())
                         .copyWith(fontSize: 13.5, fontWeight: FontWeight.w500)),
                 if (e.subtitle != null)
                   Text(e.subtitle!,

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../core/l10n/l10n.dart';
+import '../core/models/diagram.dart';
 import '../core/storage/autosave.dart';
 import '../state/app_settings.dart';
 import '../state/autosave_coordinator.dart';
@@ -10,6 +11,10 @@ import '../state/project_controller.dart';
 import 'app_actions.dart';
 import 'canvas/canvas_controller.dart';
 import 'canvas/canvas_view.dart';
+import 'dfd/dfd_panels.dart';
+import 'dfd/dfd_view.dart';
+import 'diagram_tabs.dart';
+import 'status_bar.dart';
 import 'language_dialog.dart';
 import 'panel_splitter.dart';
 import 'left_panel.dart';
@@ -106,6 +111,7 @@ class _HomePageState extends State<HomePage> {
     final s = matchShortcut(e, HardwareKeyboard.instance);
     if (s == null || s.cmd == null) return KeyEventResult.ignored;
     if (_typing && !s.global) return KeyEventResult.ignored;
+    // คำสั่งถูกส่งต่อให้ AppActions: แท็บ DFD ใช้ชุดคำสั่งของ DFD (คำสั่งแก้ตารางไม่แตะ ER ที่ซ่อนอยู่)
     AppActions(context).run(s.cmd!);
     return KeyEventResult.handled;
   }
@@ -116,6 +122,9 @@ class _HomePageState extends State<HomePage> {
   static const _rightPanel = RightPanel();
   static const _sqlDock = SqlDock();
   late final Widget _canvas = CanvasView(focusNode: _focus);
+  static const _dfdLeft = DfdLeftPanel();
+  static const _dfdRight = DfdRightPanel();
+  late final Widget _dfdCanvas = DfdCanvas(focusNode: _focus);
 
   // ขนาดแผง ณ ตอนเริ่มลากขอบ (ลากแบบสัมบูรณ์: ขนาด = ขนาดเริ่ม + ระยะเมาส์ที่เคลื่อน)
   double _startLeft = 0, _startRight = 0, _startDock = 0;
@@ -131,19 +140,23 @@ class _HomePageState extends State<HomePage> {
           final (leftW, rightW) = layout.effectiveWidths(box.maxWidth);
           final dockH = layout.effectiveDock(box.maxHeight);
           final collapsed = context.select<CanvasController, bool>((cv) => cv.dockCollapsed);
+          // แท็บ DFD: แผงซ้าย/ขวาและพื้นที่วาดของแผนภาพนั้น (ไม่มีแผง SQL)
+          final isEr = context.select<ProjectController, DiagramKind>((c) => c.activeDiagram.kind) == DiagramKind.er;
           return Stack(children: [
             Row(children: [
-              SizedBox(width: leftW, child: _leftPanel),
+              SizedBox(width: leftW, child: isEr ? _leftPanel : _dfdLeft),
               Expanded(
                 child: CustomPaint(
                   foregroundPainter: const _EdgeShadow(),
-                  child: Column(children: [
-                    Expanded(child: _canvas),
-                    SizedBox(height: collapsed ? 44 : dockH, child: _sqlDock),
-                  ]),
+                  child: isEr
+                      ? Column(children: [
+                          Expanded(child: _canvas),
+                          SizedBox(height: collapsed ? 44 : dockH, child: _sqlDock),
+                        ])
+                      : _dfdCanvas,
                 ),
               ),
-              SizedBox(width: rightW, child: _rightPanel),
+              SizedBox(width: rightW, child: isEr ? _rightPanel : _dfdRight),
             ]),
             Positioned(
               left: leftW - 4,
@@ -179,7 +192,7 @@ class _HomePageState extends State<HomePage> {
                 },
               ),
             ),
-            if (!collapsed)
+            if (!collapsed && isEr)
               Positioned(
                 left: leftW,
                 right: rightW,
@@ -211,7 +224,9 @@ class _HomePageState extends State<HomePage> {
         child: Scaffold(
           body: Column(children: [
             const TopBar(),
+            const DiagramTabBar(),
             Expanded(child: _body(context)),
+            const StatusBar(),
           ]),
         ),
       );

@@ -6,7 +6,9 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../core/export/dfd_svg.dart';
 import '../core/export/seed_data.dart';
+import '../core/models/diagram.dart';
 import '../core/export/selection_crop.dart';
 import '../core/export/sql_export.dart';
 import '../core/layout/diagram_geometry.dart';
@@ -14,7 +16,10 @@ import '../core/parser/sql_decode.dart';
 import '../core/parser/sql_importer.dart';
 import '../core/models/project.dart';
 import '../core/export/svg_export.dart';
+import '../state/app_settings.dart';
 import 'board_size_dialog.dart';
+import 'export/dfd_png.dart';
+import 'db_connect_dialog.dart';
 import 'export/diagram_png.dart';
 import 'export/export_image_dialog.dart';
 import 'export/text_export_dialog.dart';
@@ -126,6 +131,35 @@ class FileActions {
     }
   }
 
+  /// เชื่อมต่อ MySQL/MariaDB (อ่านอย่างเดียว) แล้วนำโครงสร้างเข้ามาเป็นแผนภาพ หรือเทียบกับแผนภาพปัจจุบันเพื่อสร้าง migration
+  static Future<void> connectDatabase(BuildContext context, ProjectController c) async {
+    final out = await showDialog<DbConnectOutcome>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => DbConnectDialog(projectDialect: c.project.dialect),
+    );
+    if (out == null || !context.mounted) return;
+    if (out.action == DbAction.compare) {
+      // ฝั่งฐานข้อมูลคือ "ของเก่า" แผนภาพปัจจุบันคือ "ของใหม่": สคริปต์ที่ได้ทำให้ฐานข้อมูลตรงกับแผนภาพ
+      await showDialog<void>(
+        context: context,
+        builder: (_) => MigrationDialog(old: out.read.import.project, neu: c.project, oldLabel: out.label),
+      );
+      return;
+    }
+    if (!await confirmDiscard(context, c) || !context.mounted) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => ImportPreviewDialog(result: out.read.import, fileName: out.label),
+    );
+    if (ok != true) return;
+    c.loadImported(out.read.import.project);
+    if (!context.mounted) return;
+    final cv = context.read<CanvasController>();
+    cv.fit(c.project);
+    if (out.read.import.notes.any((n) => n.warning)) cv.showDock(DockTab.issues);
+  }
+
   /// เลือกไฟล์ .erd เก่ามาเทียบกับโปรเจกต์ปัจจุบัน -> หน้าต่างรายการเปลี่ยนแปลง + สคริปต์ migration
   static Future<void> compareWithFile(BuildContext context, ProjectController c) async {
     final f = await FilePicker.pickFile(
@@ -197,6 +231,7 @@ class FileActions {
 
   /// Export แผนภาพเป็น PNG หรือ SVG (ทั้งแผนภาพ ไม่ขึ้นกับว่าตอนนี้ซูม/เลื่อนอยู่ตรงไหน)
   static Future<void> exportImage(BuildContext context, ProjectController c, {ImageArea? initialArea}) async {
+    if (c.activeDiagram.kind == DiagramKind.dfd) return _exportDfdImage(context, c);
     final p = c.project;
     if (p.tables.isEmpty && p.notes.isEmpty) {
       _toast(context, tr('ยังไม่มีตารางให้ Export เป็นภาพ'));
@@ -206,6 +241,7 @@ class FileActions {
     final gid = c.selectedGroupId;
     final selGroup = gid == null ? null : p.groupById(gid);
     final selected = {...c.selectedTableIds, if (selGroup != null) ...groupMembers(p, selGroup).tables};
+    final showFlow = context.read<AppSettings>().showFlow;
     final opts = await showDialog<ImageExportOptions>(
       context: context,
       builder: (_) =>
@@ -220,7 +256,7 @@ class FileActions {
     switch (opts.area) {
       case ImageArea.selection:
         // กรอบกลุ่มที่เกี่ยวข้องติดไปด้วย (ดู cropToSelection)
-        src = cropToSelection(p, selected, groupId: gid);
+        src = cropToSelection(p, selected, groupId: gid, groupIds: c.attachedGroupIds);
         includeNotes = false;
       case ImageArea.board:
         bounds = boardBounds(p);
@@ -231,9 +267,9 @@ class FileActions {
       late final Uint8List bytes;
       var note = '';
       if (opts.format == ImageFormat.svg) {
-        bytes = Uint8List.fromList(utf8.encode(exportSvg(src, includeNotes: includeNotes, bounds: bounds, dark: opts.dark)!));
+        bytes = Uint8List.fromList(utf8.encode(exportSvg(src, includeNotes: includeNotes, bounds: bounds, dark: opts.dark, flowMarkers: showFlow)!));
       } else {
-        final png = await exportPng(src, scale: opts.scale, includeNotes: includeNotes, bounds: bounds, dark: opts.dark);
+        final png = await exportPng(src, scale: opts.scale, includeNotes: includeNotes, bounds: bounds, dark: opts.dark, flowMarkers: showFlow);
         if (png == null) return;
         bytes = png.bytes;
         if (png.scale < opts.scale) note = tr(' (ลดสเกลเหลือ {0}x เพราะภาพใหญ่เกินไป)', [png.scale.toStringAsFixed(1)]);
@@ -241,6 +277,45 @@ class FileActions {
       final uri = await FilePicker.saveFile(
         dialogTitle: tr('Export ภาพ {0}', [opts.format.name.toUpperCase()]),
         fileName: imageFileName(p.name, opts.format),
+        bytes: bytes,
+      );
+      if (uri == null) return;
+      var path = uri.toFilePath();
+      if (!path.toLowerCase().endsWith('.${opts.format.name}')) path = '$path.${opts.format.name}';
+      await File(path).writeAsBytes(bytes);
+      if (context.mounted) _toast(context, tr('Export แล้ว: {0}{1}', [path, note]));
+    } catch (e) {
+      if (context.mounted) _toast(context, tr('Export ภาพไม่ได้: {0}', [e]));
+    }
+  }
+
+  /// Export แผนภาพ DFD ที่เปิดอยู่เป็น PNG/SVG (ตัดเฉพาะส่วนที่มีวัตถุ)
+  static Future<void> _exportDfdImage(BuildContext context, ProjectController c) async {
+    final tab = c.activeDiagram;
+    final d = c.project.dfdOf(tab.id);
+    if (d.nodes.isEmpty) {
+      _toast(context, tr('ยังไม่มีวัตถุให้ Export เป็นภาพ'));
+      return;
+    }
+    final opts = await showDialog<ImageExportOptions>(
+      context: context,
+      builder: (_) => const ExportImageDialog(hasNotes: false, showArea: false),
+    );
+    if (opts == null || !context.mounted) return;
+    try {
+      late final Uint8List bytes;
+      var note = '';
+      if (opts.format == ImageFormat.svg) {
+        bytes = Uint8List.fromList(utf8.encode(exportDfdSvg(d, dark: opts.dark, title: tab.name)!));
+      } else {
+        final png = await exportDfdPng(d, scale: opts.scale, dark: opts.dark);
+        if (png == null) return;
+        bytes = png.bytes;
+        if (png.scale < opts.scale) note = tr(' (ลดสเกลเหลือ {0}x เพราะภาพใหญ่เกินไป)', [png.scale.toStringAsFixed(1)]);
+      }
+      final uri = await FilePicker.saveFile(
+        dialogTitle: tr('Export ภาพ {0}', [opts.format.name.toUpperCase()]),
+        fileName: '${safeName(tab.name)}_dfd.${opts.format.name}',
         bytes: bytes,
       );
       if (uri == null) return;

@@ -13,13 +13,14 @@ const double kCropGroupPad = 24;
 /// - ถ้าเลือกครบทุกตารางในกลุ่ม กรอบเท่าเดิม; ถ้าเลือกแค่บางตัว กรอบหดให้พอดีกับตารางที่เลือก (ไม่เหลือที่ว่างของตารางที่ไม่ได้เลือก)
 /// - [groupId] = กลุ่มที่ถูกเลือกอยู่ ติดไปด้วยเสมอ (กลุ่มว่างก็ได้)
 /// โน้ตไม่ติดไป
-Project cropToSelection(Project p, Set<String> tableIds, {String? groupId}) {
+Project cropToSelection(Project p, Set<String> tableIds, {String? groupId, Set<String> groupIds = const {}}) {
   final tables = [for (final t in p.tables) if (tableIds.contains(t.id)) t];
   final groups = <GroupModel>[];
   for (final g in p.groups) {
     final members = groupMembers(p, g).tables.where(tableIds.contains).toList();
     final all = groupMembers(p, g).tables;
-    if (members.isEmpty && g.id != groupId) continue;
+    final forced = g.id == groupId || groupIds.contains(g.id);
+    if (members.isEmpty && !forced) continue;
     var x = g.x, y = g.y, w = g.width, h = g.height;
     if (members.isNotEmpty && members.length < all.length) {
       var l = double.infinity, t = double.infinity, r = -double.infinity, b = -double.infinity;

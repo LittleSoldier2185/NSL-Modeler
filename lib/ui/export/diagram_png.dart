@@ -31,8 +31,9 @@ const int kMaxPngSide = 16000;
 /// [bounds] ระบุพื้นที่ที่จะส่งออกเอง (เช่นทั้งกระดาน) ถ้าไม่ระบุจะตัดเฉพาะส่วนที่มีตาราง/โน้ต
 ///
 /// [dark] = ภาพธีมมืด (ค่าเริ่มต้นเป็นธีมสว่างเสมอไม่ว่าแอปอยู่ธีมไหน)
+/// [flowMarkers] = วาดวงกลมลูกศรบอกทิศทางข้อมูลกลางเส้น FK (ไม่มีอนิเมชันในภาพ)
 Future<PngExport?> exportPng(Project p,
-    {double scale = 2, bool includeNotes = true, DiagramBounds? bounds, bool dark = false}) async {
+    {double scale = 2, bool includeNotes = true, DiagramBounds? bounds, bool dark = false, bool flowMarkers = false}) async {
   final content = diagramBounds(p, includeNotes: includeNotes);
   if (content == null) return null;
   final b = bounds ?? content;
@@ -53,7 +54,7 @@ Future<PngExport?> exportPng(Project p,
     for (final g in p.groups) {
       _drawGroup(canvas, g);
     }
-    RelationPainter(p, null).paint(canvas, size);
+    RelationPainter(p, null, flow: flowMarkers).paint(canvas, size);
     for (final t in p.tables) {
       _drawTable(canvas, p, t);
     }

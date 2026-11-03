@@ -8,6 +8,7 @@ import 'core/storage/autosave.dart';
 import 'core/l10n/l10n.dart';
 import 'state/app_settings.dart';
 import 'state/autosave_coordinator.dart';
+import 'state/dfd_controller.dart';
 import 'state/project_controller.dart';
 import 'ui/canvas/canvas_controller.dart';
 import 'ui/home_page.dart';
@@ -55,6 +56,7 @@ class _NslModelerAppState extends State<NslModelerApp> with WidgetsBindingObserv
   bool _recoveryPending = true;
   late final ProjectController _project = ProjectController();
   late final CanvasController _canvas = CanvasController();
+  late final DfdController _dfd = DfdController(_project);
   late final AutosaveCoordinator? _autosave =
       widget.autosave == null ? null : AutosaveCoordinator(_project, widget.autosave!);
 
@@ -80,6 +82,7 @@ class _NslModelerAppState extends State<NslModelerApp> with WidgetsBindingObserv
     _autosave?.dispose();
     _project.dispose();
     _canvas.dispose();
+    _dfd.dispose();
     super.dispose();
   }
 
@@ -93,6 +96,7 @@ class _NslModelerAppState extends State<NslModelerApp> with WidgetsBindingObserv
         ChangeNotifierProvider.value(value: _settings),
         ChangeNotifierProvider.value(value: _project),
         ChangeNotifierProvider.value(value: _canvas),
+        ChangeNotifierProvider.value(value: _dfd),
         Provider<AutosaveCoordinator?>.value(value: _autosave),
       ],
       child: MaterialApp(

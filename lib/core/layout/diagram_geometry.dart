@@ -568,6 +568,24 @@ DiagramBounds? diagramBounds(Project p, {bool includeNotes = true}) {
   return DiagramBounds(l! - 24, t! - 24, r! + 24 + (p.relations.isEmpty ? 0 : 40), b! + 24);
 }
 
+/// เครื่องหมายทิศทางข้อมูลกลางเส้น FK: จุดกึ่งกลางของช่วงที่ยาวที่สุด + ทิศ (หน่วย) ที่ชี้จากตารางแม่ (PK) ไปหาตารางลูก (FK)
+/// [route] เรียงจากคอลัมน์ FK (ลูก) ไปคอลัมน์ PK (แม่) จึงชี้ย้อนทิศของเส้น; เส้นสั้นกว่า [minLength] = ไม่วาง (null)
+({double x, double y, double dx, double dy})? relationFlowMarker(List<RoutePoint> route, {double minLength = 56}) {
+  var best = -1;
+  var bestLen = 0.0;
+  for (var i = 1; i < route.length; i++) {
+    final len = math.sqrt(math.pow(route[i].$1 - route[i - 1].$1, 2) + math.pow(route[i].$2 - route[i - 1].$2, 2));
+    if (len > bestLen) {
+      bestLen = len;
+      best = i;
+    }
+  }
+  if (best < 0 || bestLen < minLength) return null;
+  final a = route[best - 1], b = route[best];
+  // ทิศจากแม่ไปลูก = จาก b กลับไป a
+  return (x: (a.$1 + b.$1) / 2, y: (a.$2 + b.$2) / 2, dx: (a.$1 - b.$1) / bestLen, dy: (a.$2 - b.$2) / bestLen);
+}
+
 /// id ของความสัมพันธ์ที่เส้นอยู่ใกล้จุด ([x],[y] พิกัดโปรเจกต์) ภายใน [tolerance] พิกเซล — ใกล้สุดก่อน; ไม่มี = null
 String? relationAt(Project p, double x, double y, {double tolerance = 7}) {
   String? best;

@@ -10,7 +10,21 @@ import '../theme.dart';
 /// ถ้าคอลัมน์ FK เป็น PK/UNIQUE จะเป็น 1:1 (ขีดทั้งสองปลาย)
 /// เรขาคณิตมาจาก [relationGeometry] ซึ่ง SVG/PNG ใช้ตัวเดียวกัน
 class RelationPainter extends CustomPainter {
-  RelationPainter(this.project, this.highlightTableId, {this.origin = 0, this.focusRelationId});
+  RelationPainter(
+    this.project,
+    this.highlightTableId, {
+    this.origin = 0,
+    this.focusRelationId,
+    this.flow = false,
+    this.flowPhase,
+    super.repaint,
+  });
+
+  /// วาดเครื่องหมายทิศทางข้อมูล (วงกลมลูกศร) กลางเส้นทุกเส้น
+  final bool flow;
+
+  /// ไม่ null = เส้นประวิ่งตามทิศทางข้อมูลบนเส้นที่เด่นอยู่ (ตารางที่เลือก/เส้นที่เลือก); ค่าเป็นเฟส 0..1 ของรอบหนึ่ง
+  final double? flowPhase;
 
   final Project project;
   final String? highlightTableId;
@@ -64,6 +78,9 @@ class RelationPainter extends CustomPainter {
       paint.strokeJoin = StrokeJoin.round;
       canvas.drawPath(path, paint);
 
+      if (flowPhase != null && (active || focused) && !dimmed) _flowDashes(canvas, route, lineColor);
+      if (flow) _flowMarker(canvas, route, lineColor, dimmed ? 0.3 : 1);
+
       if (g.oneToOne) {
         _bar(canvas, paint, g.fx, g.fy, g.d0);
       } else {
@@ -72,6 +89,67 @@ class RelationPainter extends CustomPainter {
       final end = route.last;
       _parentEnd(canvas, paint, end.$1, end.$2, g.d1, g.mandatory, crowded: (slots[r.id]?.count ?? 1) > 1);
     }
+  }
+
+  /// เส้นประสีสว่างวิ่งบนเส้น จากตารางแม่ไปตารางลูก (เส้นรอบนอกจริงยังเป็นเส้นทึบเดิมอยู่ข้างใต้)
+  void _flowDashes(Canvas canvas, List<RoutePoint> route, Color color) {
+    const dash = 7.0, gap = 9.0, period = dash + gap;
+    final path = Path();
+    final reversed = route.reversed.toList(); // เริ่มที่แม่ จบที่ลูก
+    for (final (op, pts) in roundedRoute(reversed, radius: 9)) {
+      switch (op) {
+        case 'M':
+          path.moveTo(pts[0].$1, pts[0].$2);
+        case 'L':
+          path.lineTo(pts[0].$1, pts[0].$2);
+        case 'Q':
+          path.quadraticBezierTo(pts[0].$1, pts[0].$2, pts[1].$1, pts[1].$2);
+      }
+    }
+    final paint = Paint()
+      ..color = Color.lerp(color, C.isDark ? Colors.white : Colors.black, 0.55)!
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.4
+      ..strokeCap = StrokeCap.round;
+    final shift = (flowPhase! % 1) * period;
+    for (final m in path.computeMetrics()) {
+      for (var d = shift - period; d < m.length; d += period) {
+        final from = math.max(0.0, d), to = math.min(m.length, d + dash);
+        if (to > from) canvas.drawPath(m.extractPath(from, to), paint);
+      }
+    }
+  }
+
+  /// วงกลมลูกศรกลางเส้น ชี้จากตารางแม่ (PK) ไปหาตารางลูก (FK)
+  void _flowMarker(Canvas canvas, List<RoutePoint> route, Color color, double opacity) {
+    final m = relationFlowMarker(route);
+    if (m == null) return;
+    final c = Offset(m.x, m.y);
+    final stroke = color.withValues(alpha: opacity);
+    canvas.drawCircle(c, 9.5, Paint()..color = C.canvas);
+    canvas.drawCircle(
+      c,
+      9.5,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.6
+        ..color = stroke,
+    );
+    final ux = m.dx, uy = m.dy, nx = -m.dy, ny = m.dx;
+    final tip = Offset(c.dx + ux * 3.6, c.dy + uy * 3.6);
+    final chevron = Path()
+      ..moveTo(tip.dx - ux * 5 + nx * 4.6, tip.dy - uy * 5 + ny * 4.6)
+      ..lineTo(tip.dx, tip.dy)
+      ..lineTo(tip.dx - ux * 5 - nx * 4.6, tip.dy - uy * 5 - ny * 4.6);
+    canvas.drawPath(
+      chevron,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.8
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..color = stroke,
+    );
   }
 
   /// ปลายฝั่งแม่: "หนึ่งเดียว" = ขีดคู่ ; "ศูนย์หรือหนึ่ง" = ขีดเดียวแล้ววงกลมถัดออกไป

@@ -13,10 +13,10 @@ import '../l10n/l10n.dart';
 ///
 /// [bounds] ระบุพื้นที่ที่จะส่งออกเอง (เช่นทั้งกระดาน) ถ้าไม่ระบุจะตัดเฉพาะส่วนที่มีตาราง/โน้ต
 /// [dark] = ภาพธีมมืด (พื้น/การ์ด/ตัวอักษรใช้ชุดสีมืด) — ค่าเริ่มต้นเป็นธีมสว่างเสมอไม่ว่าแอปอยู่ธีมไหน
-String? exportSvg(Project p, {bool includeNotes = true, DiagramBounds? bounds, bool dark = false}) {
+String? exportSvg(Project p, {bool includeNotes = true, DiagramBounds? bounds, bool dark = false, bool flowMarkers = false}) {
   final b = diagramBounds(p, includeNotes: includeNotes);
   if (b == null) return null;
-  return _Svg(p, bounds ?? b, includeNotes, dark ? _dark : _light).build();
+  return _Svg(p, bounds ?? b, includeNotes, dark ? _dark : _light, flowMarkers).build();
 }
 
 /// ชุดสีของภาพ SVG (ฮีกซ์) — ธีมมืดตรงกับพาเลตต์มืดของแอป
@@ -81,7 +81,8 @@ const _sans = "'Noto Sans Thai','Leelawadee UI',Tahoma,'Segoe UI',sans-serif";
 const _mono = "'JetBrains Mono',Consolas,'Courier New',monospace";
 
 class _Svg {
-  _Svg(this.p, this.b, this.includeNotes, this.th);
+  _Svg(this.p, this.b, this.includeNotes, this.th, this.flowMarkers);
+  final bool flowMarkers;
   final Project p;
   final DiagramBounds b;
   final bool includeNotes;
@@ -169,6 +170,16 @@ class _Svg {
         _bar(end.$1 + g.d1 * 5, end.$2, g.d1, half: 8 * s);
       } else {
         out.writeln('<circle cx="${n(end.$1 + g.d1 * (s < 1 ? 13 : 17))}" cy="${n(end.$2)}" r="${n(4.5 * s)}" fill="$canvasHex"/>');
+      }
+      // เครื่องหมายทิศทางข้อมูล: วงกลมลูกศรกลางเส้น ชี้จากตารางแม่ไปหาตารางลูก (ตรงกับที่วาดบนจอ)
+      final m = flowMarkers ? relationFlowMarker(route) : null;
+      if (m != null) {
+        out.writeln('<circle cx="${n(m.x)}" cy="${n(m.y)}" r="9.5" fill="$canvasHex"/>');
+        final tx = m.x + m.dx * 3.6, ty = m.y + m.dy * 3.6;
+        final nx = -m.dy, ny = m.dx;
+        out.writeln('<path d="M${n(tx - m.dx * 5 + nx * 4.6)} ${n(ty - m.dy * 5 + ny * 4.6)} L${n(tx)} ${n(ty)} '
+            'L${n(tx - m.dx * 5 - nx * 4.6)} ${n(ty - m.dy * 5 - ny * 4.6)}" stroke-width="1.8" stroke-linejoin="round"/>');
+        out.writeln('<circle cx="${n(m.x)}" cy="${n(m.y)}" r="9.5"/>');
       }
       if (ownHex != lineHex) out.writeln('</g>');
     }

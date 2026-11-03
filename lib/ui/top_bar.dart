@@ -1,14 +1,20 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/l10n/l10n.dart';
+import '../core/models/diagram.dart';
 import '../state/app_settings.dart';
 import '../state/project_controller.dart';
 import 'app_actions.dart';
 import 'canvas/canvas_controller.dart';
 import 'file_actions.dart';
+import 'palette/command_palette.dart';
+import 'search_launcher.dart';
 import 'shortcuts.dart';
 import 'style_actions.dart';
+import 'whats_new_dialog.dart';
 import 'theme.dart';
 import 'window_chrome.dart';
 
@@ -18,15 +24,16 @@ class TopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.watch<ProjectController>();
-    final fileName = c.filePath == null
-        ? '${c.project.name}.erd'
-        : c.filePath!.split(RegExp(r'[\\/]')).last;
 
     // ใช้แถบของแอปเป็นแถบชื่อหน้าต่าง: ลากพื้นที่ว่างเพื่อย้ายหน้าต่าง ปุ่มควบคุมชิดมุมขวา
     final controls = WindowChrome.customControls;
+    final isEr = c.activeDiagram.kind == DiagramKind.er;
     return Container(
       height: 52,
-      padding: EdgeInsets.only(left: 16 + WindowChrome.leadingInset, right: controls ? 0 : 16),
+      padding: EdgeInsets.only(
+        left: 16 + WindowChrome.leadingInset,
+        right: controls ? 0 : 16,
+      ),
       decoration: BoxDecoration(
         color: C.surface,
         border: Border(bottom: BorderSide(color: C.border)),
@@ -34,18 +41,13 @@ class TopBar extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, box) => Row(
           children: [
-            Container(
-              width: 28,
-              height: 28,
-              decoration: BoxDecoration(
-                color: C.primary,
-                borderRadius: BorderRadius.circular(7),
-              ),
-              child: const Icon(
-                Icons.storage_rounded,
-                size: 16,
-                color: Colors.white,
-              ),
+            // โลโก้แอป (ไฟล์เดียวกับไอคอนของโปรแกรม)
+            Image.asset(
+              'assets/icon/app_icon.png',
+              key: const ValueKey('app-logo'),
+              width: 34,
+              height: 34,
+              filterQuality: FilterQuality.medium,
             ),
             const SizedBox(width: 10),
             const Text(
@@ -57,81 +59,48 @@ class TopBar extends StatelessWidget {
             const SizedBox(width: 8),
             ..._menus(context, c),
             const SizedBox(width: 8),
-            // ชื่อไฟล์ยาว/หน้าต่างแคบ: ชื่อย่อด้วย … ส่วนปุ่มทางขวาคงขนาดเดิม
-            // พื้นที่ว่างตรงกลางแถบ = ที่จับลากย้ายหน้าต่าง (ไม่ครอบทั้งแถบ เพราะ onDoubleTap ของตัวครอบ
-            // จะทำให้ปุ่มข้างในรอ ~300ms ก่อนรับการกด)
-            Expanded(
-              child: WindowDragArea(
-                child: SizedBox(
-                  height: double.infinity,
-                  child: Row(
-                children: [
-                  Flexible(
-                    child: Text(
-                      fileName,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.w500),
-                    ),
-                  ),
-                  // ช่องไฟเป็น Padding ในตัว Flexible (ไม่ใช่ SizedBox ตายตัว) เพื่อให้ยุบเหลือ 0 ได้เมื่อที่ไม่พอ
-                  if (c.dirty)
-                    Flexible(
-                      child: Padding(
-                        padding: const EdgeInsets.only(left: 8),
-                        child: Text(
-                          tr('● ยังไม่ได้บันทึก'),
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontSize: 12, color: C.muted),
-                          maxLines: 1,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-                ),
-              ),
-            ),
-            // กลุ่มปุ่มขวา: ได้พื้นที่ที่เหลือก่อนชื่อไฟล์ (flex สูง) ชิดขวาติดปุ่มควบคุมหน้าต่าง
-            // ไม่เกิน 50% ของแถบ ถ้าที่ไม่พอจะย่อสัดส่วนลงแทนการล้น
-            // ที่ว่างทางซ้ายของปุ่ม = ที่จับลากย้ายหน้าต่าง (วางเป็นชั้นล่างของ Stack: ปุ่มอยู่ชั้นบนจึงรับการกดทันที)
+            // กลุ่มปุ่มขวา: ชิดขวาติดปุ่มควบคุมหน้าต่าง ได้ขนาดตามจริง (ย่อสัดส่วนลงถ้าที่ไม่พอ)
+            // ที่ว่างทางซ้ายของกลุ่มปุ่ม = ช่องค้นหา + ที่จับลากย้ายหน้าต่าง
             Expanded(
               flex: 1000,
-              child: Stack(children: [
-            const Positioned.fill(child: WindowDragArea(child: SizedBox.expand())),
-            Align(
-              alignment: Alignment.centerRight,
-              child: ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: box.maxWidth * 0.5),
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerRight,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
+              child: _RightRegion(
+                groupBuilder: (showSearchIcon) => Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (showSearchIcon) ...[
                       _IconBtn(
-                        Icons.undo,
-                        tr('ย้อนกลับ (Ctrl+Z)'),
-                        c.canUndo ? c.undo : null,
+                        Icons.search_rounded,
+                        tr('ค้นหา / สั่งงาน (Ctrl+K)'),
+                        () => showCommandPalette(context),
                       ),
                       const SizedBox(width: 4),
-                      _IconBtn(
-                        Icons.redo,
-                        tr('ทำซ้ำ (Ctrl+Shift+Z)'),
-                        c.canRedo ? c.redo : null,
-                      ),
-                      const SizedBox(width: 4),
-                      Builder(
-                        builder: (context) {
-                          final s = context.watch<AppSettings>();
-                          return _IconBtn(
-                            s.dark
-                                ? Icons.light_mode_outlined
-                                : Icons.dark_mode_outlined,
-                            s.dark ? tr('ธีมสว่าง') : tr('ธีมมืด'),
-                            s.toggleDark,
-                          );
-                        },
-                      ),
+                    ],
+                    _IconBtn(
+                      Icons.undo,
+                      tr('ย้อนกลับ (Ctrl+Z)'),
+                      c.canUndo ? c.undo : null,
+                    ),
+                    const SizedBox(width: 4),
+                    _IconBtn(
+                      Icons.redo,
+                      tr('ทำซ้ำ (Ctrl+Shift+Z)'),
+                      c.canRedo ? c.redo : null,
+                    ),
+                    const SizedBox(width: 4),
+                    Builder(
+                      builder: (context) {
+                        final s = context.watch<AppSettings>();
+                        return _IconBtn(
+                          s.dark
+                              ? Icons.light_mode_outlined
+                              : Icons.dark_mode_outlined,
+                          s.dark ? tr('ธีมสว่าง') : tr('ธีมมืด'),
+                          s.toggleDark,
+                        );
+                      },
+                    ),
+                    // ปุ่มที่เกี่ยวกับ ER/SQL ซ่อนบนแท็บ DFD
+                    if (isEr) ...[
                       const SizedBox(width: 10),
                       SizedBox(
                         height: 34,
@@ -211,11 +180,9 @@ class TopBar extends StatelessWidget {
                         ),
                       ),
                     ],
-                  ),
+                  ],
                 ),
               ),
-            ),
-              ]),
             ),
             if (controls) ...[
               const SizedBox(width: 12),
@@ -250,6 +217,7 @@ class TopBar extends StatelessWidget {
           div,
           cmd(tr('นำเข้าจาก .sql…'), Cmd.importSql),
           cmd(tr('เปรียบเทียบกับไฟล์เก่า (Migration)…'), Cmd.compare),
+          cmd(tr('เชื่อมต่อฐานข้อมูล MySQL…'), Cmd.connectDb),
           div,
           cmd(tr('Export ภาพ (PNG / SVG)…'), Cmd.exportImage),
           cmd(tr('Export เอกสาร / DBML / ข้อมูลตัวอย่าง…'), Cmd.exportText),
@@ -306,13 +274,33 @@ class TopBar extends StatelessWidget {
             '',
             () => FileActions.changeBoardSize(context, c),
           ),
-          _item(tr('สีเส้นความสัมพันธ์…'), '', () => StyleActions.lineColor(context, c)),
+          _item(
+            tr('สีเส้นความสัมพันธ์…'),
+            '',
+            () => StyleActions.lineColor(context, c),
+          ),
           _item(
             '${context.read<AppSettings>().snapToGrid ? '✓ ' : '    '}${tr('จัดแนวตามตาราง (Snap)')}',
             '',
             () {
               final s = context.read<AppSettings>();
               s.setSnapToGrid(!s.snapToGrid);
+            },
+          ),
+          _item(
+            '${context.read<AppSettings>().showFlow ? '✓ ' : '    '}${tr('แสดงทิศทางข้อมูลบนเส้น FK')}',
+            '',
+            () {
+              final s = context.read<AppSettings>();
+              s.setShowFlow(!s.showFlow);
+            },
+          ),
+          _item(
+            '${context.read<AppSettings>().flowAnimation ? '✓ ' : '    '}${tr('เส้นของตารางที่เลือกเคลื่อนไหวตามทิศทางข้อมูล')}',
+            '',
+            () {
+              final s = context.read<AppSettings>();
+              s.setFlowAnimation(!s.flowAnimation);
             },
           ),
           div,
@@ -324,6 +312,8 @@ class TopBar extends StatelessWidget {
         label: tr('ช่วยเหลือ'),
         items: [
           cmd(tr('ดูคีย์ลัดทั้งหมด'), Cmd.help),
+          _item(tr('มีอะไรใหม่ (Patch note)…'), '', () => showWhatsNew(context)),
+          _item(tr('เกี่ยวกับ NSL Modeler…'), '', () => showAbout(context)),
           div,
           for (final l in Lang.values)
             _item(
@@ -403,6 +393,106 @@ class _IconBtn extends StatelessWidget {
         ),
         child: Icon(icon, size: 17),
       ),
+    ),
+  );
+}
+
+/// พื้นที่ขวาของแถบบน: [ที่ว่าง: ที่จับลากหน้าต่าง + ช่องค้นหา] [กลุ่มปุ่ม]
+/// กลุ่มปุ่มได้ขนาดตามจริงก่อน ที่ว่างที่เหลือเป็นของช่องค้นหา (จึงไม่ทับกันไม่ว่าฟอนต์/ภาษาจะกว้างแค่ไหน)
+/// ที่ว่างน้อยเกินไป = ซ่อนช่องค้นหา แล้วแสดงเป็นปุ่มแว่นขยายในกลุ่มปุ่มแทน
+class _RightRegion extends StatefulWidget {
+  const _RightRegion({required this.groupBuilder});
+
+  /// สร้างกลุ่มปุ่ม ([showSearchIcon] = ใส่ปุ่มแว่นขยายด้วย)
+  final Widget Function(bool showSearchIcon) groupBuilder;
+
+  @override
+  State<_RightRegion> createState() => _RightRegionState();
+}
+
+class _RightRegionState extends State<_RightRegion> {
+  /// ที่ว่างอย่างน้อยเท่านี้จึงโชว์ช่องค้นหา (ตอนปุ่มแว่นขยายอยู่ในกลุ่มปุ่ม ที่ว่างจะแคบลงอีก จึงไม่สั่นไปมา)
+  static const _minFieldArea = 220.0;
+  bool _showIcon = false;
+
+  /// ตำแหน่งซ้ายของพื้นที่ว่างบนหน้าจอ (วัดหลังวาง layout แล้ว) ใช้คำนวณให้ช่องค้นหาอยู่กลางแถบทั้งแถบ
+  final _areaKey = GlobalKey();
+  double? _areaLeft;
+
+  void _measure() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final box = _areaKey.currentContext?.findRenderObject() as RenderBox?;
+      if (!mounted || box == null || !box.attached || !box.hasSize) return;
+      final left = box.localToGlobal(Offset.zero).dx;
+      if (_areaLeft == null || (left - _areaLeft!).abs() > 0.5) {
+        setState(() => _areaLeft = left);
+      }
+    });
+  }
+
+  void _report(bool fieldShown) {
+    if (_showIcon == !fieldShown) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() => _showIcon = !fieldShown);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _measure();
+    return _buildRegion(context);
+  }
+
+  Widget _buildRegion(BuildContext context) => LayoutBuilder(
+    builder: (context, region) => Row(
+      children: [
+        Expanded(
+          child: Stack(
+            key: _areaKey,
+            children: [
+              const Positioned.fill(
+                child: WindowDragArea(child: SizedBox.expand()),
+              ),
+              Positioned.fill(
+                child: LayoutBuilder(
+                  builder: (context, area) {
+                    final show = area.maxWidth >= _minFieldArea;
+                    _report(show);
+                    if (!show) return const SizedBox.shrink();
+                    // อยู่กึ่งกลางของแถบชื่อหน้าต่างทั้งแถบ (ไม่ใช่กึ่งกลางของที่ว่างที่เหลือ) ถ้าที่ว่างไม่พอจะชิดเข้ามาในที่ว่าง
+                    final w = math.min(420.0, area.maxWidth - 24);
+                    final left = _areaLeft;
+                    final screenW = MediaQuery.sizeOf(context).width;
+                    var x = left == null
+                        ? (area.maxWidth - w) / 2
+                        : screenW / 2 - left - w / 2;
+                    x = x.clamp(12.0, math.max(12.0, area.maxWidth - w - 12));
+                    return Stack(
+                      children: [
+                        Positioned(
+                          left: x,
+                          top: 0,
+                          bottom: 0,
+                          width: w,
+                          child: const Center(child: SearchLauncher()),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+        ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: region.maxWidth),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerRight,
+            child: widget.groupBuilder(_showIcon),
+          ),
+        ),
+      ],
     ),
   );
 }

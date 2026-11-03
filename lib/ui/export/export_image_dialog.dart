@@ -30,8 +30,11 @@ class ImageExportOptions {
 
 /// เลือกรูปแบบภาพที่จะ export (PNG พร้อมสเกล หรือ SVG) — คืน null ถ้ายกเลิก
 class ExportImageDialog extends StatefulWidget {
-  const ExportImageDialog({super.key, required this.hasNotes, this.hasSelection = false, this.initialArea});
+  const ExportImageDialog({super.key, required this.hasNotes, this.hasSelection = false, this.initialArea, this.showArea = true});
   final bool hasNotes;
+
+  /// false = ซ่อนตัวเลือกพื้นที่ (แท็บ DFD ส่งออกเฉพาะส่วนที่มีวัตถุเสมอ)
+  final bool showArea;
 
   /// มีตารางที่เลือกอยู่ -> เปิดตัวเลือก "เฉพาะตารางที่เลือก"
   final bool hasSelection;
@@ -99,6 +102,7 @@ class _ExportImageDialogState extends State<ExportImageDialog> {
               selected: {_dark},
               onSelectionChanged: (s) => setState(() => _dark = s.first),
             ),
+            if (widget.showArea) ...[
             const SizedBox(height: 14),
             Text(tr('พื้นที่ที่ส่งออก'), style: TextStyle(fontSize: 12, color: C.muted, fontWeight: FontWeight.w500)),
             const SizedBox(height: 6),
@@ -122,7 +126,8 @@ class _ExportImageDialogState extends State<ExportImageDialog> {
               },
               style: TextStyle(fontSize: 12, color: C.muted),
             ),
-            if (widget.hasNotes && _area != ImageArea.selection)
+            ],
+            if (widget.showArea && widget.hasNotes && _area != ImageArea.selection)
               CheckboxListTile(
                 contentPadding: EdgeInsets.zero,
                 dense: true,

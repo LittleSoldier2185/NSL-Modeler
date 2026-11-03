@@ -72,6 +72,9 @@ class CanvasController extends ChangeNotifier {
   Offset? _marqueeAnchor;
   Set<String> _marqueeBase = const {};
 
+  /// กลุ่มที่ติดอยู่ก่อนเริ่มลากกรอบ (ลากกรอบแบบเพิ่ม Ctrl/Shift แล้วกลุ่มเดิมไม่หลุด)
+  Set<String> marqueeBaseGroups = const {};
+
   /// กรอบเลือกที่กำลังลากอยู่ (พิกัดจอของ canvas) — null = ไม่ได้ลาก
   Rect? get marquee => _marquee;
 
@@ -101,6 +104,17 @@ class CanvasController extends ChangeNotifier {
   }
 
   /// ตารางที่ทับกับกรอบเลือก (กรอบเป็นพิกัดจอ -> แปลงเป็นพิกัดโปรเจกต์)
+  /// กลุ่มที่อยู่ในกรอบเลือกทั้งกลุ่ม (กรอบครอบกรอบกลุ่มครบ) — กลุ่มพวกนี้ติดไปกับตารางที่เลือก
+  Set<String> groupsInMarquee(Project p) {
+    final m = _marquee;
+    if (m == null) return const {};
+    final world = Rect.fromPoints(toWorld(m.topLeft), toWorld(m.bottomRight));
+    return {
+      for (final g in p.groups)
+        if (world.left <= g.x && world.top <= g.y && world.right >= g.x + g.width && world.bottom >= g.y + g.height) g.id,
+    };
+  }
+
   Set<String> tablesInMarquee(Project p) {
     final m = _marquee;
     if (m == null) return const {};
