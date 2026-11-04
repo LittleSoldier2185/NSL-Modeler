@@ -28,7 +28,7 @@ class DfdCanvas extends StatefulWidget {
   State<DfdCanvas> createState() => _DfdCanvasState();
 }
 
-enum _Drag { none, move, marquee, pan }
+enum _Drag { none, move, marquee, pan, resize, boundary }
 
 class _DfdCanvasState extends State<DfdCanvas> {
   _Drag _drag = _Drag.none;
@@ -47,9 +47,9 @@ class _DfdCanvasState extends State<DfdCanvas> {
   bool get _spaceDown => HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.space);
 
   /// ชนิดที่คลิกโดน: วัตถุก่อน แล้วค่อยเส้น/ป้ายชื่อ
-  ({DfdNode? node, String? flow}) _hit(DfdController d, Offset world) {
+  ({DfdNode? node, String? flow, DfdBoundary? boundary}) _hit(DfdController d, Offset world) {
     final n = dfdNodeAt(d.diagram, world.dx, world.dy);
-    if (n != null) return (node: n, flow: null);
+    if (n != null) return (node: n, flow: null, boundary: null);
     final tol = 7 / d.scale;
     var flow = dfdFlowAt(d.diagram, world.dx, world.dy, tolerance: tol);
     if (flow == null) {
@@ -63,7 +63,8 @@ class _DfdCanvasState extends State<DfdCanvas> {
         }
       }
     }
-    return (node: null, flow: flow);
+    if (flow != null) return (node: null, flow: flow, boundary: null);
+    return (node: null, flow: null, boundary: dfdBoundaryAt(d.diagram, world.dx, world.dy, tol: tol));
   }
 
   Future<void> _tapUp(Offset local) async {
@@ -77,7 +78,7 @@ class _DfdCanvasState extends State<DfdCanvas> {
     switch (d.tool) {
       case DfdTool.select:
         final now = DateTime.now();
-        final id = hit.node?.id ?? hit.flow;
+        final id = hit.node?.id ?? hit.flow ?? hit.boundary?.id;
         final doubleTap = id != null && id == _lastTapId && now.difference(_lastTap).inMilliseconds < 400;
         _lastTap = now;
         _lastTapId = id;
@@ -87,6 +88,9 @@ class _DfdCanvasState extends State<DfdCanvas> {
         } else if (hit.flow != null) {
           d.selectFlow(hit.flow);
           if (doubleTap) await actions.editFlowLabel(d.diagram.flowById(hit.flow!)!);
+        } else if (hit.boundary != null) {
+          d.selectBoundary(hit.boundary!.id);
+          if (doubleTap) await actions.renameBoundary(hit.boundary!);
         } else {
           d.clearSelection();
         }
@@ -132,10 +136,23 @@ class _DfdCanvasState extends State<DfdCanvas> {
         MenuSpec(tr('สีวัตถุ…'), Icons.palette_outlined, () => actions.pickNodesColor(ids, current: n.color)),
         MenuSpec(tr('ใช้สีตามชนิด'), Icons.format_color_reset_outlined, () => d.setNodesColor(ids, null),
             enabled: ids.any((i) => d.diagram.nodeById(i)?.color != null)),
+        MenuSpec(tr('คัดลอก'), Icons.copy_rounded, actions.copy, shortcut: 'Ctrl+C'),
         MenuSpec(tr('ทำสำเนา'), Icons.file_copy_outlined, d.duplicateSelection, shortcut: 'Ctrl+D'),
+        MenuSpec(tr('ครอบด้วยขอบเขตระบบ'), Icons.crop_free_rounded, d.addBoundaryAround),
         null,
         MenuSpec(many ? tr('ลบ {0} วัตถุ', [ids.length]) : tr('ลบวัตถุ'), Icons.delete_outline, d.deleteSelection,
             shortcut: 'Del', danger: true),
+      ]);
+    } else if (hit.boundary != null) {
+      final b = hit.boundary!;
+      d.selectBoundary(b.id);
+      showContextMenu(context, t.globalPosition, [
+        MenuSpec(tr('เปลี่ยนชื่อ'), Icons.drive_file_rename_outline, () => actions.renameBoundary(b), shortcut: 'F2'),
+        MenuSpec(tr('สีขอบเขต…'), Icons.palette_outlined, () => actions.pickBoundaryColor(b)),
+        MenuSpec(tr('ใช้สีเริ่มต้น'), Icons.format_color_reset_outlined, () => d.setBoundaryColor(b.id, null),
+            enabled: b.color != null),
+        null,
+        MenuSpec(tr('ลบขอบเขต (ไม่ลบวัตถุข้างใน)'), Icons.delete_outline, d.deleteSelection, shortcut: 'Del', danger: true),
       ]);
     } else if (hit.flow != null) {
       final f = d.diagram.flowById(hit.flow!)!;
@@ -160,8 +177,16 @@ class _DfdCanvasState extends State<DfdCanvas> {
         MenuSpec(tr('วางผู้ใช้ภายนอกที่นี่'), Icons.crop_square_rounded, () => add(DfdKind.entity), shortcut: 'E'),
         MenuSpec(tr('วางกระบวนการที่นี่'), Icons.rounded_corner_rounded, () => add(DfdKind.process), shortcut: 'P'),
         MenuSpec(tr('วางที่เก็บข้อมูลที่นี่'), Icons.storage_rounded, () => add(DfdKind.store), shortcut: 'D'),
+        MenuSpec(tr('วางขอบเขตระบบที่นี่'), Icons.crop_free_rounded, () {
+          final b = d.addBoundaryAt(world.dx, world.dy, snap: snap);
+          if (b != null) actions.renameBoundary(b);
+        }),
         null,
+        MenuSpec(tr('วาง'), Icons.paste_rounded, actions.paste, shortcut: 'Ctrl+V'),
         MenuSpec(tr('เลือกทั้งหมด'), Icons.select_all_rounded, d.selectAll, shortcut: 'Ctrl+A', enabled: d.diagram.nodes.isNotEmpty),
+        MenuSpec(tr('จัดวางอัตโนมัติ'), Icons.grid_view_rounded, () {
+          if (d.autoLayout()) d.fit(d.viewport);
+        }, enabled: d.diagram.nodes.length > 1),
         MenuSpec(tr('พอดีหน้าจอ'), Icons.fit_screen_outlined, () => d.fit(d.viewport), shortcut: 'Ctrl+0'),
         MenuSpec(tr('Export ภาพ PNG / SVG'), Icons.image_outlined, () => actions.run(Cmd.exportImage)),
       ]);
@@ -179,7 +204,19 @@ class _DfdCanvasState extends State<DfdCanvas> {
       return;
     }
     final world = d.toWorld(s.localPosition);
+    final handle = d.handleAt(world);
+    if (handle != null) {
+      d.beginResize(handle);
+      _drag = _Drag.resize;
+      return;
+    }
     final hit = _hit(d, world);
+    if (hit.node == null && hit.flow == null && hit.boundary != null) {
+      d.selectBoundary(hit.boundary!.id);
+      d.beginBoundaryMove();
+      _drag = _Drag.boundary;
+      return;
+    }
     if (hit.node != null) {
       if (!d.selectedNodeIds.contains(hit.node!.id)) d.selectNode(hit.node!.id, add: _ctrlOrShift);
       d.beginMove();
@@ -201,6 +238,10 @@ class _DfdCanvasState extends State<DfdCanvas> {
         d.panBy(u.delta);
       case _Drag.move:
         d.moveBy(u.delta.dx / d.scale, u.delta.dy / d.scale, grid: context.read<AppSettings>().snapToGrid ? kGridSize : null);
+      case _Drag.boundary:
+        d.moveBoundaryBy(u.delta.dx / d.scale, u.delta.dy / d.scale, grid: context.read<AppSettings>().snapToGrid ? kGridSize : null);
+      case _Drag.resize:
+        d.resizeBy(u.delta.dx / d.scale, u.delta.dy / d.scale, grid: context.read<AppSettings>().snapToGrid ? kGridSize : null);
       case _Drag.marquee:
         setState(() => _marqueeEnd = u.localPosition);
         final a = d.toWorld(_marqueeStart!), b = d.toWorld(_marqueeEnd!);
@@ -218,6 +259,8 @@ class _DfdCanvasState extends State<DfdCanvas> {
   void _panEnd() {
     final d = context.read<DfdController>();
     if (_drag == _Drag.move) d.endMove();
+    if (_drag == _Drag.resize) d.endResize();
+    if (_drag == _Drag.boundary) d.endBoundaryMove();
     setState(() {
       _drag = _Drag.none;
       _marqueeStart = null;
@@ -278,6 +321,7 @@ class _DfdCanvasState extends State<DfdCanvas> {
                     scale: d.scale,
                     selectedNodes: d.selectedNodeIds,
                     selectedFlow: d.selectedFlowId,
+                    selectedBoundary: d.selectedBoundaryId,
                     linkSource: d.linkSource,
                     linkCursor: _cursor.value,
                     marquee: marquee,

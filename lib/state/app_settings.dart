@@ -72,6 +72,18 @@ class PanelLayout extends ChangeNotifier {
   }
 }
 
+/// ความเร็วของเส้นประที่วิ่งบนเส้น FK (เวลาต่อหนึ่งรอบ)
+enum FlowSpeed {
+  slow(Duration(milliseconds: 1600)),
+  normal(Duration(milliseconds: 900)),
+  fast(Duration(milliseconds: 450));
+
+  const FlowSpeed(this.cycle);
+  final Duration cycle;
+
+  static FlowSpeed fromName(Object? n) => values.where((v) => v.name == n).firstOrNull ?? normal;
+}
+
 /// การตั้งค่าของแอป (ภาษา, ธีม, ขนาดแผง) เก็บเป็น settings.json ในโฟลเดอร์ข้อมูลแอป
 class AppSettings extends ChangeNotifier {
   AppSettings({
@@ -80,6 +92,8 @@ class AppSettings extends ChangeNotifier {
     bool snapToGrid = true,
     bool showFlow = true,
     bool flowAnimation = false,
+    bool flowAlways = false,
+    FlowSpeed flowSpeed = FlowSpeed.normal,
     String? lastSeenVersion,
     PanelLayout? layout,
     this.file,
@@ -89,6 +103,10 @@ class AppSettings extends ChangeNotifier {
         _showFlow = showFlow,
         // ignore: prefer_initializing_formals
         _flowAnim = flowAnimation,
+        // ignore: prefer_initializing_formals
+        _flowAlways = flowAlways,
+        // ignore: prefer_initializing_formals
+        _flowSpeed = flowSpeed,
         _lang = lang ?? Lang.th,
         _langChosen = lang != null,
         // ignore: prefer_initializing_formals
@@ -108,6 +126,8 @@ class AppSettings extends ChangeNotifier {
   bool _snap;
   bool _showFlow;
   bool _flowAnim;
+  bool _flowAlways;
+  FlowSpeed _flowSpeed;
   String? _lastSeen;
 
   Lang get lang => _lang;
@@ -122,6 +142,11 @@ class AppSettings extends ChangeNotifier {
   /// ให้เส้นของตารางที่เลือกมีเส้นประวิ่งตามทิศทางข้อมูล (เปิดเป็นค่าเริ่มต้นในแอปจริง; ตอนสร้างแบบไม่ผ่านไฟล์ = ปิด
   /// เพราะอนิเมชันที่วิ่งไม่หยุดทำให้เทสต์ที่รอ pumpAndSettle ไม่จบ)
   bool get flowAnimation => _flowAnim;
+
+  /// true = เส้นประวิ่งบนเส้น FK ทุกเส้นตลอดเวลา (ใช้เมื่อ [flowAnimation] เปิด) ; false = เฉพาะเส้นของตารางที่เลือก
+  bool get flowAlways => _flowAlways;
+
+  FlowSpeed get flowSpeed => _flowSpeed;
 
   /// รุ่นของโปรแกรมที่ผู้ใช้เปิดดู patch note ไปแล้วล่าสุด (null = ยังไม่เคย)
   String? get lastSeenVersion => _lastSeen;
@@ -150,13 +175,15 @@ class AppSettings extends ChangeNotifier {
           snapToGrid: m['snap'] != false,
           showFlow: m['flow'] != false,
           flowAnimation: m['flowAnim'] != false,
+          flowAlways: m['flowAll'] != false,
+          flowSpeed: FlowSpeed.fromName(m['flowSpeed']),
           lastSeenVersion: m['seen'] as String?,
           layout: PanelLayout.fromJson(m['layout']),
           file: file,
         );
       }
     } catch (_) {}
-    return AppSettings(file: file, flowAnimation: true);
+    return AppSettings(file: file, flowAnimation: true, flowAlways: true);
   }
 
   void setLang(Lang l) {
@@ -200,6 +227,20 @@ class AppSettings extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setFlowAlways(bool v) {
+    if (_flowAlways == v) return;
+    _flowAlways = v;
+    _save();
+    notifyListeners();
+  }
+
+  void setFlowSpeed(FlowSpeed v) {
+    if (_flowSpeed == v) return;
+    _flowSpeed = v;
+    _save();
+    notifyListeners();
+  }
+
   void _save() {
     final f = file;
     if (f == null) return;
@@ -211,6 +252,8 @@ class AppSettings extends ChangeNotifier {
         'snap': _snap,
         'flow': _showFlow,
         'flowAnim': _flowAnim,
+        'flowAll': _flowAlways,
+        'flowSpeed': _flowSpeed.name,
         if (_lastSeen != null) 'seen': _lastSeen,
         'layout': layout.toJson(),
       }));

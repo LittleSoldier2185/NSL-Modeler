@@ -17,6 +17,7 @@ class RelationPainter extends CustomPainter {
     this.focusRelationId,
     this.flow = false,
     this.flowPhase,
+    this.flowAll = false,
     super.repaint,
   });
 
@@ -25,6 +26,9 @@ class RelationPainter extends CustomPainter {
 
   /// ไม่ null = เส้นประวิ่งตามทิศทางข้อมูลบนเส้นที่เด่นอยู่ (ตารางที่เลือก/เส้นที่เลือก); ค่าเป็นเฟส 0..1 ของรอบหนึ่ง
   final double? flowPhase;
+
+  /// true = เส้นประวิ่งบนทุกเส้น (ไม่เฉพาะเส้นที่เด่นอยู่) ; ใช้คู่กับ [flowPhase]
+  final bool flowAll;
 
   final Project project;
   final String? highlightTableId;
@@ -78,7 +82,7 @@ class RelationPainter extends CustomPainter {
       paint.strokeJoin = StrokeJoin.round;
       canvas.drawPath(path, paint);
 
-      if (flowPhase != null && (active || focused) && !dimmed) _flowDashes(canvas, route, lineColor);
+      if (flowPhase != null && (flowAll || active || focused) && !dimmed) _flowDashes(canvas, route, lineColor);
       if (flow) _flowMarker(canvas, route, lineColor, dimmed ? 0.3 : 1);
 
       if (g.oneToOne) {

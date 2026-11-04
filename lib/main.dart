@@ -4,18 +4,23 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 
+import 'core/models/project.dart';
+import 'core/db/saved_connections.dart';
+import 'core/db/secret_codec.dart';
 import 'core/storage/autosave.dart';
+import 'core/storage/project_file.dart';
 import 'core/l10n/l10n.dart';
 import 'state/app_settings.dart';
 import 'state/autosave_coordinator.dart';
 import 'state/dfd_controller.dart';
 import 'state/project_controller.dart';
 import 'ui/canvas/canvas_controller.dart';
+import 'ui/db_connect_dialog.dart';
 import 'ui/home_page.dart';
 import 'ui/window_chrome.dart';
 import 'ui/theme.dart';
 
-Future<void> main() async {
+Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   await WindowChrome.initDesktop(); // ซ่อนแถบชื่อของระบบ ใช้แถบบนของแอปแทน
 
@@ -27,16 +32,37 @@ Future<void> main() async {
     final dir = await getApplicationSupportDirectory();
     settings = AppSettings.load(File('${dir.path}${Platform.pathSeparator}settings.json'));
     store = FileAutosaveStore(Directory('${dir.path}${Platform.pathSeparator}autosave'));
+    DbConnectDialog.store = SavedConnectionStore(
+      File('${dir.path}${Platform.pathSeparator}connections.json'),
+      WindowsDpapiCodec.forPlatform(),
+    );
     recovery = await store.readRecoverable();
   } catch (_) {
     store = null;
   }
+  // ดับเบิลคลิกไฟล์ .nslm / .erd (หรือ nsl_modeler.exe <ไฟล์>) = เปิดไฟล์นั้นทันที ไม่ถามกู้คืนงานค้าง
+  Project? initial;
+  String? initialPath;
+  for (final a in args) {
+    final lower = a.toLowerCase();
+    if (!kOpenableExts.any((e) => lower.endsWith('.$e'))) continue;
+    try {
+      initial = await ProjectFile.load(a);
+      initialPath = a;
+      recovery = null;
+    } catch (_) {}
+    break;
+  }
   // หาที่เก็บไม่ได้ = ใช้ค่าเริ่มต้น (ไทย/สว่าง) โดยไม่ถามภาษา เพราะบันทึกคำตอบไม่ได้อยู่ดี
-  runApp(NslModelerApp(autosave: store, recovery: recovery, settings: settings ?? AppSettings(lang: Lang.th)));
+  runApp(NslModelerApp(autosave: store, recovery: recovery, settings: settings ?? AppSettings(lang: Lang.th), initialProject: initial, initialPath: initialPath));
 }
 
 class NslModelerApp extends StatefulWidget {
-  const NslModelerApp({super.key, this.autosave, this.recovery, this.settings});
+  const NslModelerApp({super.key, this.autosave, this.recovery, this.settings, this.initialProject, this.initialPath});
+
+  /// โปรเจกต์ที่เปิดตั้งแต่เริ่ม (จากไฟล์ที่ส่งมาทางบรรทัดคำสั่ง) — null = เริ่มว่าง
+  final Project? initialProject;
+  final String? initialPath;
 
   /// การตั้งค่าแอป (null = ค่าเริ่มต้น ไทย/สว่าง ไม่ถามภาษา)
   final AppSettings? settings;
@@ -65,6 +91,8 @@ class _NslModelerAppState extends State<NslModelerApp> with WidgetsBindingObserv
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _settings.addListener(_onSettings);
+    final p = widget.initialProject;
+    if (p != null) _project.loadProject(p, widget.initialPath);
   }
 
   void _onSettings() => setState(() {});

@@ -8,12 +8,13 @@ import '../core/models/diagram.dart';
 import '../state/app_settings.dart';
 import '../state/project_controller.dart';
 import 'app_actions.dart';
+import '../state/dfd_controller.dart';
 import 'canvas/canvas_controller.dart';
 import 'file_actions.dart';
+import 'line_settings_dialog.dart';
 import 'palette/command_palette.dart';
 import 'search_launcher.dart';
 import 'shortcuts.dart';
-import 'style_actions.dart';
 import 'whats_new_dialog.dart';
 import 'theme.dart';
 import 'window_chrome.dart';
@@ -217,7 +218,7 @@ class TopBar extends StatelessWidget {
           div,
           cmd(tr('นำเข้าจาก .sql…'), Cmd.importSql),
           cmd(tr('เปรียบเทียบกับไฟล์เก่า (Migration)…'), Cmd.compare),
-          cmd(tr('เชื่อมต่อฐานข้อมูล MySQL…'), Cmd.connectDb),
+          cmd(tr('เชื่อมต่อฐานข้อมูล…'), Cmd.connectDb),
           div,
           cmd(tr('Export ภาพ (PNG / SVG)…'), Cmd.exportImage),
           cmd(tr('Export เอกสาร / DBML / ข้อมูลตัวอย่าง…'), Cmd.exportText),
@@ -247,12 +248,19 @@ class TopBar extends StatelessWidget {
           _item(
             tr('จัดวางอัตโนมัติ'),
             '',
-            c.project.tables.isEmpty
-                ? null
-                : () {
-                    c.autoLayoutTables();
-                    cv.fit(c.project);
-                  },
+            c.activeDiagram.kind == DiagramKind.dfd
+                ? (c.project.dfdOf(c.activeDiagramId).nodes.length < 2
+                    ? null
+                    : () {
+                        final d = context.read<DfdController>();
+                        if (d.autoLayout()) d.fit(d.viewport);
+                      })
+                : c.project.tables.isEmpty
+                    ? null
+                    : () {
+                        c.autoLayoutTables();
+                        cv.fit(c.project);
+                      },
           ),
         ],
       ),
@@ -275,11 +283,6 @@ class TopBar extends StatelessWidget {
             () => FileActions.changeBoardSize(context, c),
           ),
           _item(
-            tr('สีเส้นความสัมพันธ์…'),
-            '',
-            () => StyleActions.lineColor(context, c),
-          ),
-          _item(
             '${context.read<AppSettings>().snapToGrid ? '✓ ' : '    '}${tr('จัดแนวตามตาราง (Snap)')}',
             '',
             () {
@@ -288,20 +291,9 @@ class TopBar extends StatelessWidget {
             },
           ),
           _item(
-            '${context.read<AppSettings>().showFlow ? '✓ ' : '    '}${tr('แสดงทิศทางข้อมูลบนเส้น FK')}',
+            tr('เส้นความสัมพันธ์ (FK)…'),
             '',
-            () {
-              final s = context.read<AppSettings>();
-              s.setShowFlow(!s.showFlow);
-            },
-          ),
-          _item(
-            '${context.read<AppSettings>().flowAnimation ? '✓ ' : '    '}${tr('เส้นของตารางที่เลือกเคลื่อนไหวตามทิศทางข้อมูล')}',
-            '',
-            () {
-              final s = context.read<AppSettings>();
-              s.setFlowAnimation(!s.flowAnimation);
-            },
+            () => showLineSettingsDialog(context, c),
           ),
           div,
           cmd(tr('ค้นหาตาราง / คอลัมน์'), Cmd.find),

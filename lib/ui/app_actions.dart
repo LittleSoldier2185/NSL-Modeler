@@ -58,6 +58,7 @@ class AppActions {
         Cmd.toolFk: () => cv.setTool(CanvasTool.fk),
         Cmd.toolNote: () => cv.setTool(CanvasTool.note),
         Cmd.createTableForm: createTableFromForm,
+        Cmd.editTableStructure: editTableStructure,
         Cmd.groupSelected: groupSelected,
         Cmd.escape: escape,
         Cmd.fit: () => cv.fit(c.project),
@@ -105,6 +106,24 @@ class AppActions {
     final at = Offset(snapToGrid(center.dx - t.width / 2), snapToGrid(center.dy - tableHeight(t) / 2));
     final added = c.addBuiltTable(t, x: at.dx < 0 ? 40 : at.dx, y: at.dy < 0 ? 60 : at.dy);
     if (context.mounted) cv.focusTable(added);
+  }
+
+  /// แก้โครงสร้างตารางที่เลือกด้วยฟอร์มเดียวกับตอนสร้าง (เหมือนแท็บ Structure ของ phpMyAdmin)
+  Future<void> editTableStructure([String? tableId]) async {
+    final id = tableId ?? c.selectedTableId;
+    final t = id == null ? null : c.project.tableById(id);
+    if (t == null) {
+      _toast(tr('เลือกตารางก่อน จึงจะแก้โครงสร้างได้'));
+      return;
+    }
+    final edited = await showEditTableDialog(
+      context,
+      table: t,
+      newId: c.newId,
+      relationCount: (col) => c.relationCountOfColumn(t.id, col),
+      otherTableNames: [for (final o in c.project.tables) if (o.id != t.id) o.name],
+    );
+    if (edited != null) c.applyTableEdit(t.id, edited);
   }
 
   /// Ctrl+G: จัดตารางที่เลือกเป็นกลุ่ม (สร้างกรอบครอบ แล้วเข้าโหมดพิมพ์ชื่อทันที)

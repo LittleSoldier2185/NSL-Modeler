@@ -1200,6 +1200,37 @@ class ProjectController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// จำนวนความสัมพันธ์ FK ที่ผูกกับคอลัมน์ [columnId] ของตาราง [tableId]
+  int relationCountOfColumn(String tableId, String columnId) => _project.relations
+      .where((r) =>
+          (r.fromTableId == tableId && r.fromColumnId == columnId) ||
+          (r.toTableId == tableId && r.toColumnId == columnId))
+      .length;
+
+  /// ใช้ผลจากฟอร์มแก้โครงสร้างตาราง: แทนชื่อ/หมายเหตุ/คอลัมน์/ดัชนีของตาราง [tableId] ด้วย [edited]
+  /// (คอลัมน์ที่ id ไม่อยู่ใน [edited] = ถูกลบ → ตัดข้อมูลตั้งต้นและ FK ที่ผูกอยู่) — Undo ขั้นเดียว
+  /// ตำแหน่ง/สี/ฟอนต์ของตารางไม่เปลี่ยน
+  void applyTableEdit(String tableId, TableModel edited) {
+    final t = _project.tableById(tableId);
+    if (t == null) return;
+    final keep = {for (final c in edited.columns) c.id};
+    final dropped = [for (final c in t.columns) if (!keep.contains(c.id)) c.id];
+    _edit(() {
+      for (final id in dropped) {
+        t.dropSeedColumn(id);
+        _project.relations.removeWhere((r) =>
+            (r.fromTableId == tableId && r.fromColumnId == id) || (r.toTableId == tableId && r.toColumnId == id));
+      }
+      t
+        ..name = edited.name
+        ..comment = edited.comment
+        ..columns = edited.columns
+        ..indexes = edited.indexes;
+    });
+    _fixSelection();
+    notifyListeners();
+  }
+
   void reorderColumn(String tableId, int oldIndex, int newIndex) {
     final t = _project.tableById(tableId);
     if (t == null || oldIndex < 0 || oldIndex >= t.columns.length) return;

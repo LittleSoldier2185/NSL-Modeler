@@ -4,17 +4,23 @@ import '../models/index_model.dart';
 import '../models/project.dart';
 import '../models/relation_model.dart';
 import '../models/table_model.dart';
+import '../types/type_map.dart';
 import 'seed_diff.dart';
 import '../l10n/l10n.dart';
 
 /// การเปลี่ยนของคอลัมน์หนึ่งตัว (จับคู่ old/new ได้แล้ว)
 class ColumnChange {
-  ColumnChange(this.old, this.neu);
+  ColumnChange(this.old, this.neu, {this.compareAs});
   final ColumnModel old;
   final ColumnModel neu;
 
+  /// ถ้าระบุ dialect : เทียบชนิดตาม "ชนิดที่ฐานข้อมูลนั้นเก็บจริง" (เช่น SQLite เก็บ VARCHAR(255) เป็น TEXT
+  /// จึงอ่านกลับจากไฟล์ SQLite แล้วต้องไม่ถือว่า VARCHAR(255) → TEXT เป็นการเปลี่ยนชนิด)
+  final Dialect? compareAs;
+
   bool get renamed => old.name != neu.name;
-  bool get typeChanged => _typeKey(old) != _typeKey(neu);
+  bool get typeChanged =>
+      compareAs == null ? _typeKey(old) != _typeKey(neu) : sqlType(old, compareAs!) != sqlType(neu, compareAs!);
   bool get nullChanged => _notNull(old) != _notNull(neu);
   bool get defaultChanged => _def(old) != _def(neu);
   bool get autoIncrementChanged => old.autoIncrement != neu.autoIncrement;
@@ -179,15 +185,27 @@ class SchemaDiff {
 
 /// เปรียบเทียบ [old] กับ [neu] — จับคู่ด้วย id ก่อน แล้วค่อยจับคู่ด้วยชื่อสำหรับที่เหลือ
 /// (id ไม่ตรงเมื่อเทียบกับโปรเจกต์ที่ import มา)
-SchemaDiff diffProjects(Project old, Project neu) {
+///
+/// [manualTablePairs] : จับคู่ตารางด้วยมือ (id ตารางเก่า -> id ตารางใหม่) สำหรับตารางที่เปลี่ยนชื่อ
+/// ซึ่งจับคู่อัตโนมัติไม่ได้ (ไม่เช่นนั้นจะถูกมองเป็น "ลบตารางเก่า + สร้างตารางใหม่" และข้อมูลหาย)
+/// คู่ที่ชี้ไปตารางที่ไม่มี หรือซ้ำกับตารางที่จับคู่ได้แล้ว จะถูกข้าม
+SchemaDiff diffProjects(Project old, Project neu, {Map<String, String> manualTablePairs = const {}}) {
   final diff = SchemaDiff();
 
   // ---- จับคู่ตาราง ----
   final pairs = <TableModel, TableModel>{}; // old -> new
   final usedNew = <TableModel>{};
+  for (final e in manualTablePairs.entries) {
+    final o = old.tableById(e.key), n = neu.tableById(e.value);
+    if (o != null && n != null && !pairs.containsKey(o) && !usedNew.contains(n)) {
+      pairs[o] = n;
+      usedNew.add(n);
+    }
+  }
   for (final o in old.tables) {
+    if (pairs.containsKey(o)) continue;
     final n = neu.tableById(o.id);
-    if (n != null) {
+    if (n != null && !usedNew.contains(n)) {
       pairs[o] = n;
       usedNew.add(n);
     }
@@ -217,7 +235,7 @@ SchemaDiff diffProjects(Project old, Project neu) {
     td.droppedColumns.addAll(e.key.columns.where((c) => !cp.containsKey(c)));
     td.addedColumns.addAll(e.value.columns.where((c) => !cp.containsValue(c)));
     for (final c in cp.entries) {
-      final ch = ColumnChange(c.key, c.value);
+      final ch = ColumnChange(c.key, c.value, compareAs: old.dialect == Dialect.sqlite && neu.dialect == Dialect.sqlite ? Dialect.sqlite : null);
       if (ch.any) td.changedColumns.add(ch);
     }
     td.pkChanged = _pkKey(e.key, (id) => colMap[id] ?? id) != _pkKey(e.value, (id) => id);

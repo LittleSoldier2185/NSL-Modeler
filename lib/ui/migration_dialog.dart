@@ -3,29 +3,102 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../core/db/db_session.dart';
+import '../core/db/sqlite_apply.dart';
+import '../core/db/sqlite_connector.dart';
 import '../core/diff/migration.dart';
 import '../core/diff/schema_diff.dart';
+import '../core/models/enums.dart';
 import '../core/models/project.dart';
 import 'file_actions.dart';
+import 'widgets.dart' show Dropdown;
 import 'sql_view.dart';
 import 'theme.dart';
 import '../core/l10n/l10n.dart';
 
 /// เทียบโครงสร้าง [old] (ไฟล์เก่า) กับ [neu] (โปรเจกต์ปัจจุบัน) แล้วแสดงรายการเปลี่ยนแปลง + สคริปต์ migration
 class MigrationDialog extends StatefulWidget {
-  const MigrationDialog({super.key, required this.old, required this.neu, required this.oldLabel});
+  const MigrationDialog({super.key, required this.old, required this.neu, required this.oldLabel, this.sqlitePath});
   final Project old;
   final Project neu;
   final String oldLabel;
+
+  /// ไฟล์ SQLite ที่ฝั่ง "เก่า" อ่านมา — มีค่าเมื่อไหร่จะมีปุ่มรันสคริปต์กับไฟล์นั้นโดยตรง (สำรองไฟล์ก่อนเสมอ)
+  final String? sqlitePath;
 
   @override
   State<MigrationDialog> createState() => _MigrationDialogState();
 }
 
 class _MigrationDialogState extends State<MigrationDialog> {
-  late final SchemaDiff diff = diffProjects(widget.old, widget.neu);
-  late final List<ChangeLine> lines = diff.summary(widget.old, widget.neu);
-  late final String script = generateMigration(widget.old, widget.neu, diff: diff);
+  /// จับคู่ตารางที่เปลี่ยนชื่อด้วยมือ (id ตารางเก่า -> id ตารางใหม่)
+  final Map<String, String> _pairs = {};
+  late SchemaDiff diff = diffProjects(widget.old, widget.neu);
+  late List<ChangeLine> lines = diff.summary(widget.old, widget.neu);
+  late String script = generateMigration(widget.old, widget.neu, diff: diff);
+
+  void _setPair(String oldId, String? newId) {
+    setState(() {
+      if (newId == null) {
+        _pairs.remove(oldId);
+      } else {
+        _pairs[oldId] = newId;
+      }
+      diff = diffProjects(widget.old, widget.neu, manualTablePairs: _pairs);
+      lines = diff.summary(widget.old, widget.neu);
+      script = generateMigration(widget.old, widget.neu, diff: diff);
+      _applyMsg = null;
+    });
+  }
+
+  /// ส่วนจับคู่ตารางที่เปลี่ยนชื่อ : ตารางเก่าที่ "ถูกลบ" คู่กับตารางใหม่ที่ "ถูกเพิ่ม" — เลือกคู่เพื่อให้เป็นการเปลี่ยนชื่อ (ข้อมูลไม่หาย)
+  Widget _pairingSection() {
+    final rows = [for (final t in widget.old.tables) if (diff.droppedTables.contains(t) || _pairs.containsKey(t.id)) t];
+    final canAdd = diff.addedTables.isNotEmpty;
+    if (rows.isEmpty || (!canAdd && _pairs.isEmpty)) return const SizedBox.shrink();
+    return Container(
+      key: const ValueKey('pair-section'),
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(color: C.field, borderRadius: BorderRadius.circular(8)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(tr('ตารางไหนแค่เปลี่ยนชื่อ? จับคู่ตารางเก่าที่ถูกลบกับตารางใหม่ เพื่อไม่ให้ข้อมูลหาย'),
+            style: TextStyle(fontSize: 12.5, color: C.muted)),
+        const SizedBox(height: 6),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 110),
+          child: SingleChildScrollView(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        for (final o in rows)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 3),
+            child: Row(children: [
+              SizedBox(width: 200, child: Text(o.name, overflow: TextOverflow.ellipsis, style: monoStyle.copyWith(fontSize: 12.5))),
+              const Icon(Icons.arrow_right_alt_rounded, size: 18),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 240,
+                child: KeyedSubtree(
+                  key: ValueKey('pair-${o.id}'),
+                  child: Dropdown<String>(
+                    value: _pairs[o.id] ?? '',
+                    items: [
+                      '',
+                      ...[for (final n in widget.neu.tables) if (diff.addedTables.contains(n) || _pairs[o.id] == n.id) n.id],
+                    ],
+                    labelOf: (id) => id.isEmpty ? tr('— ถูกลบจริง —') : widget.neu.tableById(id)!.name,
+                    onChanged: (id) => _setPair(o.id, id.isEmpty ? null : id),
+                  ),
+                ),
+              ),
+            ]),
+          ),
+            ]),
+          ),
+        ),
+      ]),
+    );
+  }
   bool _copied = false;
   Timer? _timer;
 
@@ -46,6 +119,61 @@ class _MigrationDialogState extends State<MigrationDialog> {
   Future<void> _save() async {
     if (!await _confirmRisky()) return;
     if (mounted) await FileActions.saveMigration(context, script, widget.neu);
+  }
+
+  String? _applyMsg;
+  bool _applyOk = true;
+
+  /// รันสคริปต์กับไฟล์ SQLite จริง : ยืนยัน (รายการเสี่ยง + บอกว่าจะสำรองไฟล์) -> สำรอง -> รันใน transaction -> อ่านกลับมาเทียบ
+  Future<void> _apply() async {
+    final path = widget.sqlitePath;
+    if (path == null) return;
+    if (!await _confirmRisky()) return;
+    if (!mounted) return;
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(tr('รันสคริปต์กับไฟล์ SQLite?')),
+        content: Text(tr('จะแก้โครงสร้างของไฟล์\n{0}\n\nโปรแกรมจะสำรองไฟล์เดิมไว้ข้างกันก่อน (ชื่อ .bak-วันเวลา) และรันในทรานแซกชัน ถ้าผิดพลาดจะยกเลิกทั้งหมด', [path])),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('ยกเลิก'))),
+          FilledButton(
+            key: const ValueKey('apply-confirm'),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(tr('สำรองแล้วรัน')),
+          ),
+        ],
+      ),
+    );
+    if (go != true || !mounted) return;
+    try {
+      final r = applySqliteMigration(path, script);
+      // อ่านโครงสร้างกลับมาเทียบกับแผนภาพ เพื่อยืนยันว่าฐานข้อมูลตรงกันแล้วจริง
+      var verified = tr('โครงสร้างตรงกับแผนภาพแล้ว');
+      try {
+        final s = await const SqliteConnector().connect(DbConfig(database: path));
+        final read = await readSqliteSchema(s, name: 'verify');
+        await s.close();
+        final left = diffProjects(read.import.project, widget.neu);
+        if (!left.isEmpty) verified = tr('ยังมีความต่างเล็กน้อย {0} รายการ (อาจเป็นชนิดข้อมูลที่ SQLite เก็บต่างรูป)', [left.summary(read.import.project, widget.neu).length]);
+      } catch (_) {
+        verified = tr('อ่านกลับมาตรวจไม่ได้');
+      }
+      final fk = r.fkViolations.isEmpty ? '' : '\n${tr('⚠ พบข้อมูลที่ละเมิด FK {0} แถว (เช่น {1})', [r.fkViolations.length, r.fkViolations.first])}';
+      if (mounted) {
+        setState(() {
+          _applyOk = r.fkViolations.isEmpty;
+          _applyMsg = '${tr('รันสำเร็จ · ไฟล์สำรอง: {0}', [r.backupPath])}\n$verified$fk';
+        });
+      }
+    } on DbException catch (e) {
+      if (mounted) {
+        setState(() {
+          _applyOk = false;
+          _applyMsg = e.message;
+        });
+      }
+    }
   }
 
   Future<void> _copy() async {
@@ -89,6 +217,7 @@ class _MigrationDialogState extends State<MigrationDialog> {
                     style: TextStyle(fontSize: 12.5, color: C.warnText)),
               ),
             ],
+            _pairingSection(),
             const SizedBox(height: 12),
             if (!diff.isEmpty)
               Flexible(
@@ -109,8 +238,26 @@ class _MigrationDialogState extends State<MigrationDialog> {
                   ]),
                 ),
               ),
+            if (_applyMsg != null) ...[
+              const SizedBox(height: 8),
+              Container(
+                key: const ValueKey('apply-result'),
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(color: _applyOk ? C.primaryTint : C.dangerBg, borderRadius: BorderRadius.circular(7)),
+                child: SelectableText(_applyMsg!, style: TextStyle(fontSize: 12.5, color: _applyOk ? C.primaryDark : C.danger)),
+              ),
+            ],
             const SizedBox(height: 12),
             Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+              if (!diff.isEmpty && widget.sqlitePath != null && widget.neu.dialect == Dialect.sqlite) ...[
+                FilledButton.tonal(
+                  key: const ValueKey('apply-sqlite'),
+                  onPressed: _apply,
+                  child: Text(tr('รันกับไฟล์ SQLite…')),
+                ),
+                const SizedBox(width: 8),
+              ],
               if (!diff.isEmpty) ...[
                 OutlinedButton(
                   onPressed: _copy,

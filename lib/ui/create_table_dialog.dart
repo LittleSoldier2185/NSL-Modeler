@@ -27,16 +27,61 @@ class ColumnDraft {
     this.index = ColumnIndex.none,
     this.autoIncrement = false,
     String comment = '',
-  })  : name = TextEditingController(text: name),
+    this.id,
+    this.plainIndexId,
+  })  : originalIndex = index,
+        name = TextEditingController(text: name),
         length = TextEditingController(text: length),
         defaultValue = TextEditingController(text: defaultValue),
         comment = TextEditingController(text: comment);
 
   final TextEditingController name, length, defaultValue, comment;
+
+  /// id ของคอลัมน์เดิม (โหมดแก้ไข) — null = คอลัมน์ใหม่
+  final String? id;
+
+  /// id ของดัชนีธรรมดาคอลัมน์เดียวที่มีอยู่เดิม (โหมดแก้ไข)
+  final String? plainIndexId;
+
+  /// ชนิดดัชนีตอนเปิดฟอร์ม
+  final ColumnIndex originalIndex;
   DataType type;
   bool allowNull;
   ColumnIndex index;
   bool autoIncrement;
+
+  /// มีดัชนีธรรมดาอยู่เดิมแต่ฟอร์มแสดงเป็น PRIMARY/UNIQUE — ต้องคงดัชนีไว้ ไม่ให้หายเงียบ ๆ
+  bool keepPlain = false;
+
+  /// ร่างจากคอลัมน์เดิมของ [t] (โหมดแก้ไข)
+  factory ColumnDraft.fromColumn(TableModel t, ColumnModel c) {
+    IndexModel? plain;
+    for (final i in t.indexes) {
+      if (!i.unique && i.columnIds.length == 1 && i.columnIds.first == c.id) plain = i;
+    }
+    final idx = c.isPrimaryKey
+        ? ColumnIndex.primary
+        : c.unique
+            ? ColumnIndex.unique
+            : plain != null
+                ? ColumnIndex.plain
+                : ColumnIndex.none;
+    final len = c.type == DataType.decimal && c.length != null
+        ? '${c.length},${c.scale ?? 0}'
+        : (c.length?.toString() ?? '');
+    return ColumnDraft(
+      name: c.name,
+      type: c.type,
+      length: len,
+      defaultValue: c.defaultValue ?? '',
+      allowNull: !c.notNull && !c.isPrimaryKey,
+      index: idx,
+      autoIncrement: c.autoIncrement,
+      comment: c.comment,
+      id: c.id,
+      plainIndexId: plain?.id,
+    )..keepPlain = plain != null && idx != ColumnIndex.plain;
+  }
 
   bool get usesLength => type == DataType.varchar || type == DataType.decimal;
   bool get isIntegerType => type == DataType.integer || type == DataType.bigint || type == DataType.smallint;
@@ -76,6 +121,7 @@ TableModel buildTableFromDrafts({
   required String name,
   required String comment,
   required List<ColumnDraft> drafts,
+  TableModel? existing,
 }) {
   final cols = <ColumnModel>[];
   final indexes = <IndexModel>[];
@@ -93,7 +139,7 @@ TableModel buildTableFromDrafts({
     }
     final dv = d.defaultValue.text.trim();
     final col = ColumnModel(
-      id: newId('c'),
+      id: d.id ?? newId('c'),
       name: d.name.text.trim(),
       type: d.type,
       length: len,
@@ -106,11 +152,22 @@ TableModel buildTableFromDrafts({
       comment: d.comment.text.trim(),
     );
     cols.add(col);
-    if (d.index == ColumnIndex.plain) {
-      indexes.add(IndexModel(id: newId('i'), name: 'idx_${tableName}_${col.name}', columnIds: [col.id]));
+    if (d.index == ColumnIndex.plain || (d.keepPlain && d.plainIndexId != null)) {
+      indexes.add(IndexModel(id: d.plainIndexId ?? newId('i'), name: 'idx_${tableName}_${col.name}', columnIds: [col.id]));
     }
   }
-  return TableModel(id: newId('t'), name: tableName, comment: comment.trim(), columns: cols, indexes: indexes);
+  if (existing != null) {
+    // ดัชนีหลายคอลัมน์ / UNIQUE index เดิมคงไว้ (ตัดคอลัมน์ที่ถูกลบออก) — ฟอร์มนี้แก้ได้เฉพาะดัชนีคอลัมน์เดียว
+    final keptIds = {for (final c in cols) c.id};
+    final plainIds = {for (final d in drafts) if (d.plainIndexId != null) d.plainIndexId};
+    for (final i in existing.indexes) {
+      if (plainIds.contains(i.id)) continue;
+      final ids = [for (final id in i.columnIds) if (keptIds.contains(id)) id];
+      if (ids.isEmpty) continue;
+      indexes.add(IndexModel(id: i.id, name: i.name, columnIds: ids, unique: i.unique));
+    }
+  }
+  return TableModel(id: existing?.id ?? newId('t'), name: tableName, comment: comment.trim(), columns: cols, indexes: indexes);
 }
 
 /// สร้างตารางแบบฟอร์ม เหมือนหน้า "Create table" ของ phpMyAdmin:
@@ -119,10 +176,41 @@ TableModel buildTableFromDrafts({
 Future<TableModel?> showCreateTableDialog(BuildContext context, {required String Function(String) newId}) =>
     showDialog<TableModel>(context: context, builder: (_) => CreateTableDialog(newId: newId));
 
+/// แก้โครงสร้างตารางที่มีอยู่ด้วยฟอร์มเดียวกัน คืนตารางใหม่ (id ตาราง/คอลัมน์เดิมคงไว้) หรือ null ถ้ายกเลิก
+/// [relationCount] คืนจำนวนเส้น FK ที่ผูกกับคอลัมน์ ใช้เตือนก่อนลบคอลัมน์
+Future<TableModel?> showEditTableDialog(
+  BuildContext context, {
+  required TableModel table,
+  required String Function(String) newId,
+  required int Function(String columnId) relationCount,
+  List<String> otherTableNames = const [],
+}) =>
+    showDialog<TableModel>(
+      context: context,
+      builder: (_) => CreateTableDialog(
+        newId: newId,
+        editing: table,
+        relationCount: relationCount,
+        otherTableNames: otherTableNames,
+      ),
+    );
+
 class CreateTableDialog extends StatefulWidget {
-  const CreateTableDialog({super.key, required this.newId, this.initialColumns = 4});
+  const CreateTableDialog({
+    super.key,
+    required this.newId,
+    this.initialColumns = 4,
+    this.editing,
+    this.relationCount,
+    this.otherTableNames = const [],
+  });
   final String Function(String prefix) newId;
   final int initialColumns;
+
+  /// ตารางที่กำลังแก้ (null = สร้างใหม่)
+  final TableModel? editing;
+  final int Function(String columnId)? relationCount;
+  final List<String> otherTableNames;
 
   @override
   State<CreateTableDialog> createState() => _CreateTableDialogState();
@@ -138,6 +226,17 @@ class _CreateTableDialogState extends State<CreateTableDialog> {
   @override
   void initState() {
     super.initState();
+    final e = widget.editing;
+    if (e != null) {
+      _name.text = e.name;
+      _comment.text = e.comment;
+      for (final c in e.columns) {
+        _drafts.add(ColumnDraft.fromColumn(e, c));
+      }
+      if (_drafts.isEmpty) _drafts.add(ColumnDraft());
+      _count.text = '${_drafts.length}';
+      return;
+    }
     _drafts.add(ColumnDraft(
       name: 'id',
       allowNull: false,
@@ -186,7 +285,14 @@ class _CreateTableDialogState extends State<CreateTableDialog> {
 
   // ---------- ตรวจความถูกต้อง ----------
 
-  String? get _nameError => _name.text.trim().isEmpty ? tr('ต้องตั้งชื่อตาราง') : null;
+  bool get _editing => widget.editing != null;
+
+  String? get _nameError {
+    final n = _name.text.trim();
+    if (n.isEmpty) return tr('ต้องตั้งชื่อตาราง');
+    final dup = widget.otherTableNames.any((o) => o.toLowerCase() == n.toLowerCase());
+    return dup ? tr('ชื่อซ้ำกับตารางอื่น') : null;
+  }
 
   String? _colNameError(int i) {
     final n = _drafts[i].name.text.trim();
@@ -213,11 +319,39 @@ class _CreateTableDialogState extends State<CreateTableDialog> {
         (i) => _colNameError(i) == null && _lengthError(i) == null && _aiError(i) == null,
       );
 
-  void _save() {
+  Future<void> _save() async {
     if (!_valid) return;
+    final e = widget.editing;
+    if (e != null) {
+      // คอลัมน์เดิมที่หายไปจากฟอร์ม = ถูกลบ ; เตือนถ้ามี FK ผูกอยู่
+      final kept = {for (final d in _drafts) d.id};
+      var rels = 0;
+      final dropped = <String>[];
+      for (final c in e.columns) {
+        if (kept.contains(c.id)) continue;
+        dropped.add(c.name);
+        rels += widget.relationCount?.call(c.id) ?? 0;
+      }
+      if (dropped.isNotEmpty) {
+        final ok = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text(tr('ลบ {0} คอลัมน์?', [dropped.length])),
+            content: Text(rels > 0
+                ? tr('คอลัมน์ {0} จะถูกลบ พร้อมความสัมพันธ์ FK {1} เส้นที่ผูกอยู่ (ย้อนกลับได้ด้วย Undo)', [dropped.join(', '), rels])
+                : tr('คอลัมน์ {0} จะถูกลบ (ย้อนกลับได้ด้วย Undo)', [dropped.join(', ')])),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('ยกเลิก'))),
+              FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(tr('ลบและบันทึก'))),
+            ],
+          ),
+        );
+        if (ok != true || !mounted) return;
+      }
+    }
     Navigator.pop(
       context,
-      buildTableFromDrafts(newId: widget.newId, name: _name.text, comment: _comment.text, drafts: _drafts),
+      buildTableFromDrafts(newId: widget.newId, name: _name.text, comment: _comment.text, drafts: _drafts, existing: e),
     );
   }
 
@@ -236,9 +370,12 @@ class _CreateTableDialogState extends State<CreateTableDialog> {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(22, 18, 22, 16),
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(tr('สร้างตาราง'), style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+            Text(_editing ? tr('แก้ไขโครงสร้างตาราง') : tr('สร้างตาราง'), style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
             const SizedBox(height: 2),
-            Text(tr('กรอกชื่อตารางและรายละเอียดของทุกคอลัมน์ในครั้งเดียว แล้วกดสร้าง'),
+            Text(
+                _editing
+                    ? tr('แก้ชื่อ ชนิด ความยาว ค่าเริ่มต้น Null Index A_I ของทุกคอลัมน์ในหน้าเดียว แล้วกดบันทึก')
+                    : tr('กรอกชื่อตารางและรายละเอียดของทุกคอลัมน์ในครั้งเดียว แล้วกดสร้าง'),
                 style: TextStyle(fontSize: 12.5, color: C.muted)),
             const SizedBox(height: 14),
             Wrap(spacing: 14, runSpacing: 10, crossAxisAlignment: WrapCrossAlignment.start, children: [
@@ -307,8 +444,8 @@ class _CreateTableDialogState extends State<CreateTableDialog> {
               const SizedBox(width: 8),
               FilledButton(
                 key: const ValueKey('ct-save'),
-                onPressed: _valid ? _save : null,
-                child: Text(tr('สร้าง')),
+                onPressed: _valid ? () => _save() : null,
+                child: Text(_editing ? tr('บันทึก') : tr('สร้าง')),
               ),
             ]),
           ]),

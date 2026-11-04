@@ -268,7 +268,7 @@ void main() {
     test('SQLite ที่ต้องสร้างตารางใหม่: ยังใช้รูปแบบเดิม (PRAGMA foreign_keys ปิด-เปิดรอบทรานแซกชัน)', () {
       final old = base(Dialect.sqlite);
       final neu = clone(old);
-      cl(neu, 'tu', 'u3').type = DataType.text;
+      cl(neu, 'tu', 'u4').type = DataType.text; // INTEGER -> TEXT เป็นการเปลี่ยนชนิดจริงใน SQLite (VARCHAR -> TEXT ไม่ใช่)
       final sql = generateMigration(old, neu);
       expect(sql.startsWith('PRAGMA foreign_keys = OFF;'), true);
       expect(sql, contains('PRAGMA foreign_key_check;'));

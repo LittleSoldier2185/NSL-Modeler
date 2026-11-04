@@ -19,6 +19,10 @@ import '../core/export/svg_export.dart';
 import '../state/app_settings.dart';
 import 'board_size_dialog.dart';
 import 'export/dfd_png.dart';
+import '../core/db/db_session.dart' show DbKind;
+import '../core/db/mysql_data.dart';
+import '../core/db/sqlite_data.dart';
+import 'data_browser_dialog.dart';
 import 'db_connect_dialog.dart';
 import 'export/diagram_png.dart';
 import 'export/export_image_dialog.dart';
@@ -87,7 +91,7 @@ class FileActions {
     final f = await FilePicker.pickFile(
       dialogTitle: tr('เปิดโปรเจกต์'),
       type: FileType.custom,
-      allowedExtensions: ['erd'],
+      allowedExtensions: kOpenableExts,
     );
     final path = f?.path;
     if (path == null) return;
@@ -139,33 +143,45 @@ class FileActions {
       builder: (_) => DbConnectDialog(projectDialect: c.project.dialect),
     );
     if (out == null || !context.mounted) return;
+    if (out.action == DbAction.browse) {
+      final cfg = out.config!;
+      await showDataBrowser(
+        context,
+        title: out.label,
+        opener: (writable) async => out.kind == DbKind.sqlite
+            ? SqliteDataSession.open(cfg.database, writable: writable)
+            : await MysqlDataSession.open(cfg, writable: writable),
+      );
+      return;
+    }
+    final read = out.read!;
     if (out.action == DbAction.compare) {
       // ฝั่งฐานข้อมูลคือ "ของเก่า" แผนภาพปัจจุบันคือ "ของใหม่": สคริปต์ที่ได้ทำให้ฐานข้อมูลตรงกับแผนภาพ
       await showDialog<void>(
         context: context,
-        builder: (_) => MigrationDialog(old: out.read.import.project, neu: c.project, oldLabel: out.label),
+        builder: (_) => MigrationDialog(old: read.import.project, neu: c.project, oldLabel: out.label, sqlitePath: out.sqlitePath),
       );
       return;
     }
     if (!await confirmDiscard(context, c) || !context.mounted) return;
     final ok = await showDialog<bool>(
       context: context,
-      builder: (_) => ImportPreviewDialog(result: out.read.import, fileName: out.label),
+      builder: (_) => ImportPreviewDialog(result: read.import, fileName: out.label),
     );
     if (ok != true) return;
-    c.loadImported(out.read.import.project);
+    c.loadImported(read.import.project);
     if (!context.mounted) return;
     final cv = context.read<CanvasController>();
     cv.fit(c.project);
-    if (out.read.import.notes.any((n) => n.warning)) cv.showDock(DockTab.issues);
+    if (read.import.notes.any((n) => n.warning)) cv.showDock(DockTab.issues);
   }
 
-  /// เลือกไฟล์ .erd เก่ามาเทียบกับโปรเจกต์ปัจจุบัน -> หน้าต่างรายการเปลี่ยนแปลง + สคริปต์ migration
+  /// เลือกไฟล์โปรเจกต์เก่า (.nslm / .erd) มาเทียบกับโปรเจกต์ปัจจุบัน -> หน้าต่างรายการเปลี่ยนแปลง + สคริปต์ migration
   static Future<void> compareWithFile(BuildContext context, ProjectController c) async {
     final f = await FilePicker.pickFile(
       dialogTitle: tr('เลือกไฟล์โปรเจกต์เวอร์ชันเก่าเพื่อเปรียบเทียบ'),
       type: FileType.custom,
-      allowedExtensions: ['erd'],
+      allowedExtensions: kOpenableExts,
     );
     final path = f?.path;
     if (path == null) return;
@@ -349,7 +365,8 @@ class FileActions {
   /// คืน true ถ้าบันทึกสำเร็จ
   static Future<bool> save(BuildContext context, ProjectController c) async {
     final path = c.filePath;
-    if (path == null) return saveAs(context, c);
+    // ไฟล์ .erd เก่า: ไม่เขียนทับ ให้บันทึกเป็น .nslm ใหม่ (ไฟล์เดิมคงอยู่)
+    if (path == null || isLegacyProjectPath(path)) return saveAs(context, c);
     return _write(context, c, path);
   }
 
@@ -357,12 +374,11 @@ class FileActions {
     final name = c.project.name.trim().isEmpty ? 'untitled' : c.project.name.trim();
     final uri = await FilePicker.saveFile(
       dialogTitle: tr('บันทึกเป็น'),
-      fileName: '$name.erd',
+      fileName: '$name.$kProjectExt',
       bytes: utf8.encode(ProjectFile.encode(c.project)),
     );
     if (uri == null) return false;
-    var path = uri.toFilePath();
-    if (!path.toLowerCase().endsWith('.erd')) path = '$path.erd';
+    final path = withProjectExt(uri.toFilePath());
     if (!context.mounted) return false;
     return _write(context, c, path);
   }

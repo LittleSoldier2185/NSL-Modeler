@@ -43,6 +43,17 @@ String? exportDfdSvg(DfdDiagram d, {bool dark = false, String title = 'DFD'}) {
 
   final routes = dfdRoutes(d);
 
+  // ---- ขอบเขตระบบ ----
+  for (final k in d.boundaries) {
+    final c = k.color != null ? hexRgb(k.color!) : th.line;
+    out.writeln('<rect x="${_n(k.x)}" y="${_n(k.y)}" width="${_n(k.w)}" height="${_n(k.h)}" rx="14" '
+        'fill="$c" fill-opacity="0.06" stroke="$c" stroke-opacity="0.75" stroke-width="1.5" stroke-dasharray="8 6"/>');
+    if (k.name.trim().isNotEmpty) {
+      out.writeln('<text x="${_n(k.x + 12)}" y="${_n(k.y + 18)}" fill="${th.text}" font-weight="600" opacity="0.8">'
+          '${_esc(_fit(k.name, k.w - 24, 8))}</text>');
+    }
+  }
+
   // ---- เส้น ----
   for (final f in d.flows) {
     final r = routes[f.id];

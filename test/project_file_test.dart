@@ -34,6 +34,7 @@ Project sample() => Project(
     );
 
 void main() {
+  extensionTests();
   test('encode -> decode ได้ข้อมูลเท่าเดิม', () {
     final a = ProjectFile.encode(sample());
     final b = ProjectFile.encode(ProjectFile.decode(a));
@@ -49,7 +50,7 @@ void main() {
     expect(p.dialect, Dialect.postgres);
   });
 
-  test('ปฏิเสธไฟล์ที่ไม่ใช่ .erd', () {
+  test('ปฏิเสธไฟล์ที่ไม่ใช่ไฟล์โปรเจกต์', () {
     expect(() => ProjectFile.decode('{"a":1}'), throwsA(isA<ProjectFormatException>()));
     expect(() => ProjectFile.decode('not json'), throwsA(isA<ProjectFormatException>()));
   });
@@ -61,11 +62,43 @@ void main() {
 
   test('save/load ผ่านไฟล์จริง', () async {
     final dir = await Directory.systemTemp.createTemp('nsl');
-    final path = '${dir.path}/x.erd';
+    final path = '${dir.path}/x.nslm';
     await ProjectFile.save(sample(), path);
     expect(File('$path.tmp').existsSync(), false);
     final p = await ProjectFile.load(path);
     expect(p.tables.length, 2);
     await dir.delete(recursive: true);
+  });
+}
+
+void extensionTests() {
+  group('สกุลไฟล์ .nslm', () {
+    test('withProjectExt: ต่อ .nslm , เปลี่ยน .erd เป็น .nslm , ของเดิมคงไว้ , ไม่สนตัวพิมพ์', () {
+      expect(withProjectExt(r'C:\งาน\shop'), r'C:\งาน\shop.nslm');
+      expect(withProjectExt(r'C:\งาน\shop.nslm'), r'C:\งาน\shop.nslm');
+      expect(withProjectExt(r'C:\งาน\shop.NSLM'), r'C:\งาน\shop.NSLM');
+      expect(withProjectExt(r'C:\งาน\shop.erd'), r'C:\งาน\shop.nslm');
+      expect(withProjectExt(r'C:\งาน\shop.ERD'), r'C:\งาน\shop.nslm');
+      expect(withProjectExt(r'C:\งาน\shop.sql'), r'C:\งาน\shop.sql.nslm');
+    });
+
+    test('isLegacyProjectPath และสกุลที่เปิดได้', () {
+      expect(isLegacyProjectPath('a.erd'), true);
+      expect(isLegacyProjectPath('a.nslm'), false);
+      expect(kOpenableExts, ['nslm', 'erd']);
+    });
+
+    test('ไฟล์ .erd เก่ายังเปิดได้ และเนื้อในเหมือน .nslm', () async {
+      final dir = await Directory.systemTemp.createTemp('nsl');
+      addTearDown(() => dir.delete(recursive: true));
+      final old = '${dir.path}/old.erd';
+      await File(old).writeAsString(ProjectFile.encode(sample()));
+      final p = await ProjectFile.load(old);
+      final out = withProjectExt(old);
+      await ProjectFile.save(p, out);
+      expect(out.endsWith('old.nslm'), true);
+      expect(File(old).existsSync(), true); // ไฟล์เดิมไม่ถูกแตะ
+      expect((await ProjectFile.load(out)).tables.length, 2);
+    });
   });
 }

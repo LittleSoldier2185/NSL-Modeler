@@ -174,7 +174,8 @@ void main() {
     testWidgets('ลากเสร็จแล้วบันทึกลงไฟล์ และเปิดครั้งหน้าได้ขนาดเดิม', (tester) async {
       final dir = Directory.systemTemp.createTempSync('nsl_layout_ui');
       addTearDown(() => dir.deleteSync(recursive: true));
-      final f = File('${dir.path}/settings.json');
+      // ปิดแอนิเมชันเส้น (ค่าเริ่มต้นของแอปจริงคือเล่นตลอดเวลา ซึ่งทำให้ pumpAndSettle ไม่จบ)
+      final f = File('${dir.path}/settings.json')..writeAsStringSync('{"flowAnim": false}');
       await boot(tester, file: f);
       await tester.drag(find.byKey(const ValueKey('splitter-left')), const Offset(80, 0));
       await tester.pumpAndSettle();

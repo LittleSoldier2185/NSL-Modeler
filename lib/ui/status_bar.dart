@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../core/app_info.dart';
 import '../core/l10n/l10n.dart';
+import '../core/storage/project_file.dart';
 import '../core/models/diagram.dart';
 import '../core/validate/dfd_validator.dart';
 import '../core/validate/issue.dart';
@@ -29,8 +30,8 @@ class StatusBar extends StatelessWidget {
     final cv = context.watch<CanvasController>();
 
     final p = c.project;
-    // ชื่อไฟล์ที่เปิดอยู่ (ยังไม่บันทึก = ชื่อโปรเจกต์ + .erd)
-    final fileName = c.filePath == null ? '${p.name}.erd' : c.filePath!.split(RegExp(r'[\\/]')).last;
+    // ชื่อไฟล์ที่เปิดอยู่ (ยังไม่บันทึก = ชื่อโปรเจกต์ + .nslm)
+    final fileName = c.filePath == null ? '${p.name}.$kProjectExt' : c.filePath!.split(RegExp(r'[\\/]')).last;
     final String summary;
     final List<Issue> issues;
     final double zoom;
@@ -41,7 +42,7 @@ class StatusBar extends StatelessWidget {
     } else {
       final d = p.dfdOf(c.activeDiagramId);
       summary = tr('{0} วัตถุ · {1} เส้นข้อมูล', [d.nodes.length, d.flows.length]);
-      issues = validateDfd(d);
+      issues = validateDfd(d, project: p, diagramId: c.activeDiagramId);
       zoom = dfd.scale;
     }
     final errors = issues.where((i) => i.severity == Severity.error).length;

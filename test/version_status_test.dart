@@ -195,9 +195,9 @@ void main() {
       expect(cv.dockTab, DockTab.issues);
     });
 
-    testWidgets('ชื่อไฟล์ย้ายมาอยู่ที่แถบสถานะ (ยังไม่บันทึก = ชื่อโปรเจกต์.erd)', (tester) async {
+    testWidgets('ชื่อไฟล์ย้ายมาอยู่ที่แถบสถานะ (ยังไม่บันทึก = ชื่อโปรเจกต์.nslm)', (tester) async {
       await boot(tester);
-      expect(tester.widget<Text>(find.byKey(const ValueKey('status-summary'))).data, startsWith('${c.project.name}.erd · '));
+      expect(tester.widget<Text>(find.byKey(const ValueKey('status-summary'))).data, startsWith('${c.project.name}.nslm · '));
     });
 
     testWidgets('หน้าต่างแคบ: แถบสถานะไม่ overflow', (tester) async {

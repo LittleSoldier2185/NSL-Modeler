@@ -11,7 +11,27 @@ class ProjectFormatException implements Exception {
   String toString() => 'ProjectFormatException: $message';
 }
 
-/// อ่าน/เขียนไฟล์ `.erd` (JSON)
+/// สกุลไฟล์โปรเจกต์ของ NSL Modeler (ไม่มีจุด)
+const kProjectExt = 'nslm';
+
+/// สกุลเก่า (ก่อนรุ่นที่เริ่มใช้ `.nslm`) — ยังเปิดอ่านได้ แต่บันทึกเป็น `.nslm` เสมอ
+const kLegacyProjectExt = 'erd';
+
+/// สกุลที่เปิดได้ทั้งหมด (ใช้กับ dialog เลือกไฟล์)
+const kOpenableExts = [kProjectExt, kLegacyProjectExt];
+
+/// path เป็นไฟล์สกุลเก่า `.erd` หรือไม่
+bool isLegacyProjectPath(String path) => path.toLowerCase().endsWith('.$kLegacyProjectExt');
+
+/// ทำให้ path ลงท้าย `.nslm` : `.erd` เก่าถูกเปลี่ยนเป็น `.nslm` , สกุลอื่น/ไม่มีสกุลต่อท้าย `.nslm`
+String withProjectExt(String path) {
+  final lower = path.toLowerCase();
+  if (lower.endsWith('.$kProjectExt')) return path;
+  if (isLegacyProjectPath(path)) return '${path.substring(0, path.length - kLegacyProjectExt.length)}$kProjectExt';
+  return '$path.$kProjectExt';
+}
+
+/// อ่าน/เขียนไฟล์โปรเจกต์ `.nslm` (JSON ; เนื้อในเหมือน `.erd` เดิมทุกประการ จึงอ่านไฟล์เก่าได้)
 class ProjectFile {
   static String encode(Project p) =>
       const JsonEncoder.withIndent('  ').convert(p.toJson());

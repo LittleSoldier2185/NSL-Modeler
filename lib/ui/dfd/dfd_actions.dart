@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/l10n/l10n.dart';
@@ -53,6 +54,10 @@ class DfdActions {
         d.selectAll();
       case Cmd.duplicate:
         d.duplicateSelection();
+      case Cmd.copy:
+        copy();
+      case Cmd.paste:
+        paste();
       case Cmd.toolSelect:
         d.setTool(DfdTool.select);
       case Cmd.toolFk:
@@ -88,12 +93,53 @@ class DfdActions {
     }
   }
 
+  static String? _lastPasted;
+  static int _pasteCount = 0;
+
+  /// Ctrl+C : คัดลอกวัตถุ DFD ที่เลือก (+เส้นระหว่างกัน) ลงคลิปบอร์ดของระบบ
+  Future<void> copy() async {
+    final text = d.copySelectionText();
+    if (text == null) return;
+    await Clipboard.setData(ClipboardData(text: text));
+    _lastPasted = null;
+    _pasteCount = 0;
+  }
+
+  /// Ctrl+V : วางจากคลิปบอร์ด (วางซ้ำจะเลื่อนทีละขั้น) ข้ามแท็บ/ข้ามโปรเจกต์ได้
+  Future<void> paste() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final text = data?.text;
+    if (text == null) return;
+    _pasteCount = text == _lastPasted ? _pasteCount + 1 : 1;
+    _lastPasted = text;
+    final n = d.pasteText(text, offset: 30.0 * _pasteCount);
+    if (n == 0) {
+      _pasteCount = 0;
+      _lastPasted = null;
+    }
+  }
+
   /// เปลี่ยนชื่อวัตถุที่เลือก / พิมพ์ชื่อเส้นข้อมูลที่เลือก
   Future<void> rename() async {
     final n = d.selectedNode;
     if (n != null) return renameNode(n);
     final f = d.selectedFlow;
     if (f != null) return editFlowLabel(f);
+    final b = d.selectedBoundary;
+    if (b != null) return renameBoundary(b);
+  }
+
+  Future<void> renameBoundary(DfdBoundary b) async {
+    final r = await showDialog<PromptResult>(
+      context: context,
+      builder: (_) => TextPromptDialog(title: tr('ชื่อขอบเขตระบบ'), initial: b.name, label: tr('ชื่อ')),
+    );
+    if (r != null) d.renameBoundary(b.id, r.text.trim());
+  }
+
+  Future<void> pickBoundaryColor(DfdBoundary b) async {
+    final r = await showColorPickerDialog(context, title: tr('สีขอบเขตระบบ'), initial: b.color);
+    if (r != null) d.setBoundaryColor(b.id, r.argb);
   }
 
   Future<void> renameNode(DfdNode n) async {

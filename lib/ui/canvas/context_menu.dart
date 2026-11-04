@@ -180,6 +180,8 @@ List<MenuSpec?> tableMenuEntries(BuildContext context, TableModel t, {ColumnMode
   final many = c.selectionCount > 1;
   return [
     MenuSpec(tr('เปลี่ยนชื่อ…'), Icons.drive_file_rename_outline, a.rename, shortcut: 'F2', enabled: !many),
+    MenuSpec(tr('แก้ไขโครงสร้าง…'), Icons.table_chart_outlined, () => a.editTableStructure(t.id),
+        shortcut: 'Ctrl+Shift+M', enabled: !many),
     MenuSpec(tr('เพิ่มคอลัมน์'), Icons.add_rounded, () => c.addColumn(t.id), enabled: !many),
     null,
     MenuSpec(tr('คัดลอกตาราง'), Icons.copy_rounded, a.copy, shortcut: 'Ctrl+C'),

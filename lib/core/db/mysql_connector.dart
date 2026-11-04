@@ -15,7 +15,24 @@ class MysqlConnector implements DbConnector {
   static const connectTimeout = Duration(seconds: 10);
 
   @override
-  Future<DbSession> connect(DbConfig config) async {
+  Future<DbSession> connect(DbConfig config) async => ReadOnlySession(_MysqlSession(await openConnection(config, readOnly: true)));
+
+  /// เปิดการเชื่อมต่อ MySQL พร้อมแปลข้อผิดพลาดเป็นข้อความที่อ่านเข้าใจ (ไม่มีรหัสผ่าน)
+  /// [readOnly] = true ตั้ง `SET SESSION TRANSACTION READ ONLY` ให้เซิร์ฟเวอร์ปฏิเสธการเขียนเอง ; false = เขียนได้ (ใช้กับโหมดแก้ข้อมูลเท่านั้น)
+  static Future<MySQLConnection> openConnection(DbConfig config, {required bool readOnly}) async {
+    try {
+      return await _open(config, readOnly: readOnly);
+    } on DbException catch (e) {
+      // MySQL 8+ ใช้รหัสผ่านแบบ caching_sha2_password ซึ่งส่งได้เฉพาะผ่านการเข้ารหัส : ถ้าผู้ใช้ไม่ได้ติ๊ก SSL/TLS ไว้
+      // ลองใหม่โดยเปิด TLS ให้เอง (ปลอดภัยกว่าเดิม ไม่ต้องให้ผู้ใช้รู้เรื่องปลั๊กอินยืนยันตัวตน)
+      if (!config.secure && e.message.contains('caching_sha2_password')) {
+        return _open(config.copyWith(secure: true), readOnly: readOnly);
+      }
+      rethrow;
+    }
+  }
+
+  static Future<MySQLConnection> _open(DbConfig config, {required bool readOnly}) async {
     MySQLConnection? conn;
     try {
       conn = await MySQLConnection.createConnection(
@@ -27,10 +44,9 @@ class MysqlConnector implements DbConnector {
         secure: config.secure,
       ).timeout(connectTimeout);
       await conn.connect(timeoutMs: connectTimeout.inMilliseconds);
-      final session = _MysqlSession(conn);
       // ชั้นที่สองของความปลอดภัย: ให้เซิร์ฟเวอร์ปฏิเสธการเขียนเองด้วย (ชั้นแรกคือ ReadOnlySession)
-      await conn.execute('SET SESSION TRANSACTION READ ONLY');
-      return ReadOnlySession(session);
+      if (readOnly) await conn.execute('SET SESSION TRANSACTION READ ONLY');
+      return conn;
     } on SocketException catch (e) {
       await _closeQuietly(conn);
       throw DbException(tr('เชื่อมต่อ {0}:{1} ไม่ได้ ({2}) — ตรวจชื่อเครื่อง พอร์ต และว่าเซิร์ฟเวอร์เปิดอยู่', [config.host, config.port, e.message]));

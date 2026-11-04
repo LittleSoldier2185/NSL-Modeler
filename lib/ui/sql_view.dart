@@ -35,17 +35,24 @@ class SqlCodeView extends StatelessWidget {
   /// ความกว้างของบรรทัดที่ยาวที่สุด วัดด้วยฟอนต์จริง (ภาษาไทย/ฟอนต์สำรองกว้างไม่เท่า monospace)
   double _textWidth() {
     if (lines.isEmpty) return 0;
+    // บรรทัดที่ยาวที่สุดตามจำนวนตัวอักษร + บรรทัดที่มีอักขระนอก ASCII (ไทย/ฟอนต์สำรอง กว้างกว่า monospace
+    // จึงบรรทัดสั้นกว่าอาจกว้างกว่า) — จำกัดจำนวนผู้เข้าชิงไว้ไม่ให้ช้าเมื่อไฟล์ใหญ่
     final longest = lines.reduce((a, b) => b.length > a.length ? b : a);
-    final tp = TextPainter(
-      text: TextSpan(
-        text: longest,
-        style: monoStyle.copyWith(fontSize: 12.5, height: 1.0),
-      ),
-      textDirection: TextDirection.ltr,
-      maxLines: 1,
-    )..layout();
-    final w = tp.width;
-    tp.dispose();
+    final candidates = <String>{longest};
+    for (final l in lines) {
+      if (candidates.length >= 60) break;
+      if (l.runes.any((r) => r > 0x7e)) candidates.add(l);
+    }
+    var w = 0.0;
+    for (final text in candidates) {
+      final tp = TextPainter(
+        text: TextSpan(text: text, style: monoStyle.copyWith(fontSize: 12.5, height: 1.0)),
+        textDirection: TextDirection.ltr,
+        maxLines: 1,
+      )..layout();
+      if (tp.width > w) w = tp.width;
+      tp.dispose();
+    }
     return w;
   }
 

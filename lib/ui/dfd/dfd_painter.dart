@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/layout/diagram_geometry.dart' show roundedRoute;
 import '../../core/models/color_utils.dart';
+import '../../core/layout/dfd_resize.dart';
 import '../../core/models/dfd_model.dart';
 import '../theme.dart';
 
@@ -60,8 +61,14 @@ void paintDfd(
   Set<String> selectedNodes = const {},
   String? selectedFlow,
   String? linkSource,
+  String? selectedBoundary,
 }) {
   final routes = dfdRoutes(d);
+
+  // ---- ขอบเขตระบบ (ใต้ทุกอย่าง) ----
+  for (final b in d.boundaries) {
+    _paintBoundary(canvas, b, selected: b.id == selectedBoundary);
+  }
 
   // ---- เส้น ----
   for (final f in d.flows) {
@@ -113,6 +120,27 @@ void paintDfd(
     }
     final tp = _tp(f.label, kDfdLabelSize, selected ? color : C.text, weight: FontWeight.w500, maxWidth: rect.width - 8);
     tp.paint(canvas, Offset(rect.left + 4, rect.center.dy - tp.height / 2));
+  }
+}
+
+void _paintBoundary(Canvas canvas, DfdBoundary b, {required bool selected}) {
+  final accent = Color(b.color ?? C.muted.toARGB32());
+  final rr = RRect.fromRectAndRadius(Rect.fromLTWH(b.x, b.y, b.w, b.h), const Radius.circular(14));
+  canvas.drawRRect(rr, Paint()..color = accent.withValues(alpha: C.isDark ? 0.08 : 0.05));
+  final stroke = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = selected ? 2.4 : 1.5
+    ..color = selected ? C.primary : accent.withValues(alpha: 0.75);
+  // เส้นประ
+  final path = Path()..addRRect(rr);
+  for (final m in path.computeMetrics()) {
+    for (var d = 0.0; d < m.length; d += 14) {
+      canvas.drawPath(m.extractPath(d, math.min(m.length, d + 8)), stroke);
+    }
+  }
+  if (b.name.trim().isNotEmpty) {
+    final tp = _tp(b.name, 13, selected ? C.primary : C.muted, weight: FontWeight.w600, maxWidth: math.max(40, b.w - 24));
+    tp.paint(canvas, Offset(b.x + 12, b.y + (kDfdBoundaryLabelH - tp.height) / 2 + 2));
   }
 }
 
@@ -178,7 +206,21 @@ void _paintNode(Canvas canvas, DfdNode n, {required bool selected, required bool
       final br = RRect.fromRectAndRadius(Rect.fromLTWH(n.x + 10, n.cy - 11, bw, 22), const Radius.circular(11));
       canvas.drawRRect(br, Paint()..color = accent);
       badge.paint(canvas, Offset(br.left + (bw - badge.width) / 2, br.top + (22 - badge.height) / 2));
-      _text(canvas, n.name, Rect.fromLTWH(n.x + 10 + bw + 8, n.y + 4, n.w - bw - 28, n.h - 8), weight: FontWeight.w600);
+      final hasChild = n.childId != null;
+      _text(canvas, n.name, Rect.fromLTWH(n.x + 10 + bw + 8, n.y + 4, n.w - bw - 28 - (hasChild ? 14 : 0), n.h - 8), weight: FontWeight.w600);
+      if (hasChild) {
+        // ลูกศรเล็กมุมขวาล่าง = มีแผนภาพย่อย
+        final cp = Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.6
+          ..strokeCap = StrokeCap.round
+          ..color = accent;
+        final ox = n.right - 20, oy = n.bottom - 18;
+        canvas.drawLine(Offset(ox, oy), Offset(ox, oy + 8), cp);
+        canvas.drawLine(Offset(ox, oy + 8), Offset(ox + 8, oy + 8), cp);
+        canvas.drawLine(Offset(ox + 5, oy + 5), Offset(ox + 8, oy + 8), cp);
+        canvas.drawLine(Offset(ox + 5, oy + 11), Offset(ox + 8, oy + 8), cp);
+      }
     case DfdKind.store:
       canvas.drawRect(rect, fill);
       canvas.drawRect(rect, tint);
@@ -198,7 +240,19 @@ void _paintNode(Canvas canvas, DfdNode n, {required bool selected, required bool
         final tp = _tp(code, 12, accent, weight: FontWeight.w700, maxWidth: cw - 6);
         tp.paint(canvas, Offset(n.x + (cw - tp.width) / 2, n.cy - tp.height / 2));
       }
-      _text(canvas, n.name, Rect.fromLTWH(n.x + cw + 10, n.y + 4, n.w - cw - 18, n.h - 8), weight: FontWeight.w600);
+      final linked = n.tableId != null;
+      _text(canvas, n.name, Rect.fromLTWH(n.x + cw + 10, n.y + 4, n.w - cw - 18 - (linked ? 18 : 0), n.h - 8), weight: FontWeight.w600);
+      if (linked) {
+        // เครื่องหมายตารางเล็ก ๆ = ผูกกับตาราง ER แล้ว
+        final g = Rect.fromLTWH(n.right - 20, n.cy - 6, 13, 12);
+        final gp = Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.2
+          ..color = accent;
+        canvas.drawRRect(RRect.fromRectAndRadius(g, const Radius.circular(2)), gp);
+        canvas.drawLine(Offset(g.left, g.top + 4), Offset(g.right, g.top + 4), gp);
+        canvas.drawLine(Offset(g.left + g.width / 2, g.top + 4), Offset(g.left + g.width / 2, g.bottom), gp);
+      }
   }
 
   if (selected || linkSource) {
@@ -233,6 +287,7 @@ class DfdScreenPainter extends CustomPainter {
     this.linkSource,
     this.linkCursor,
     this.marquee,
+    this.selectedBoundary,
     required this.repaint,
   }) : super(repaint: repaint);
 
@@ -241,6 +296,7 @@ class DfdScreenPainter extends CustomPainter {
   final double scale;
   final Set<String> selectedNodes;
   final String? selectedFlow;
+  final String? selectedBoundary;
   final String? linkSource;
   final Offset? linkCursor; // พิกัดแผนภาพ
   final Rect? marquee; // พิกัดจอ
@@ -251,7 +307,38 @@ class DfdScreenPainter extends CustomPainter {
     canvas.save();
     canvas.translate(offset.dx, offset.dy);
     canvas.scale(scale);
-    paintDfd(canvas, diagram, selectedNodes: selectedNodes, selectedFlow: selectedFlow, linkSource: linkSource);
+    paintDfd(canvas, diagram,
+        selectedNodes: selectedNodes, selectedFlow: selectedFlow, linkSource: linkSource, selectedBoundary: selectedBoundary);
+    final sb = selectedBoundary == null ? null : diagram.boundaryById(selectedBoundary!);
+    if (sb != null) {
+      final hs = 4.5 / scale;
+      final r = Rect.fromLTWH(sb.x, sb.y, sb.w, sb.h);
+      for (final h in DfdHandle.values) {
+        final box = Rect.fromCenter(center: dfdHandlePos(r, h), width: hs * 2, height: hs * 2);
+        canvas.drawRect(box, Paint()..color = C.surface);
+        canvas.drawRect(box, Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.4 / scale
+          ..color = C.primary);
+      }
+    }
+    if (selectedNodes.length == 1) {
+      final n = diagram.nodeById(selectedNodes.first);
+      if (n != null) {
+        // จุดจับปรับขนาด (ขนาดคงที่บนจอไม่ว่าซูมเท่าไร)
+        final hs = 4.5 / scale;
+        final r = Rect.fromLTWH(n.x, n.y, n.w, n.h);
+        for (final h in DfdHandle.values) {
+          final c = dfdHandlePos(r, h);
+          final box = Rect.fromCenter(center: c, width: hs * 2, height: hs * 2);
+          canvas.drawRect(box, Paint()..color = C.surface);
+          canvas.drawRect(box, Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.4 / scale
+            ..color = C.primary);
+        }
+      }
+    }
     final src = linkSource == null ? null : diagram.nodeById(linkSource!);
     if (src != null && linkCursor != null) {
       canvas.drawLine(

@@ -72,7 +72,7 @@ List<PaletteEntry> buildPaletteEntries(BuildContext context) {
 
   final commands = <PaletteEntry>[
     byCmd(tr('โปรเจกต์ใหม่'), 'new project', Cmd.newProject),
-    byCmd(tr('เปิดไฟล์โปรเจกต์…'), 'open erd', Cmd.open),
+    byCmd(tr('เปิดไฟล์โปรเจกต์…'), 'open nslm erd', Cmd.open),
     byCmd(tr('บันทึก'), 'save', Cmd.save),
     byCmd(tr('บันทึกเป็น…'), 'save as', Cmd.saveAs),
     byCmd('Export .sql', tr('export sql ddl สคริปต์'), Cmd.exportSql),
@@ -86,11 +86,12 @@ List<PaletteEntry> buildPaletteEntries(BuildContext context) {
         () => FileActions.exportText(context, c, kind: TextExportKind.sample)),
     byCmd(tr('นำเข้าจากไฟล์ .sql…'), 'import sql create table', Cmd.importSql),
     byCmd(tr('เปรียบเทียบกับไฟล์เก่า (Migration)…'), tr('diff migration alter compare เทียบ'), Cmd.compare),
-    byCmd(tr('เชื่อมต่อฐานข้อมูล MySQL…'), 'database connect mysql mariadb db เชื่อมต่อ ฐานข้อมูล', Cmd.connectDb),
+    byCmd(tr('เชื่อมต่อฐานข้อมูล…'), 'database connect mysql mariadb sqlite db เชื่อมต่อ ฐานข้อมูล', Cmd.connectDb),
     byCmd(tr('ย้อนกลับ'), 'undo', Cmd.undo),
     byCmd(tr('ทำซ้ำ'), 'redo', Cmd.redo),
     byCmd(tr('คัดลอกตารางที่เลือก'), 'copy', Cmd.copy),
     byCmd(tr('สร้างตารางแบบฟอร์ม (เหมือน phpMyAdmin)'), 'create table form phpmyadmin columns new', Cmd.createTableForm),
+    byCmd(tr('แก้โครงสร้างตารางที่เลือก (ฟอร์ม)'), 'edit alter structure table columns phpmyadmin แก้ไข โครงสร้าง', Cmd.editTableStructure),
     byCmd(tr('จัดกลุ่มตารางที่เลือก'), 'group box frame area section', Cmd.groupSelected),
     byCmd(tr('วางตาราง'), 'paste', Cmd.paste),
     byCmd(tr('ทำสำเนาตารางที่เลือก'), 'duplicate clone', Cmd.duplicate),
@@ -100,6 +101,10 @@ List<PaletteEntry> buildPaletteEntries(BuildContext context) {
     cmd(tr('จัดวางตารางอัตโนมัติ'), tr('auto layout จัดตำแหน่ง'), () {
       c.autoLayoutTables();
       cv.fit(c.project);
+    }),
+    cmd(tr('จัดวาง DFD อัตโนมัติ'), tr('auto layout dfd จัดตำแหน่ง แผนภาพกระแสข้อมูล'), () {
+      final d = context.read<DfdController>();
+      if (c.activeDiagram.kind == DiagramKind.dfd && d.autoLayout()) d.fit(d.viewport);
     }),
     byCmd(tr('พอดีหน้าจอ'), 'fit zoom', Cmd.fit),
     byCmd(tr('ซูม 100%'), 'zoom reset', Cmd.zoom100),
@@ -183,7 +188,7 @@ List<PaletteEntry> buildPaletteEntries(BuildContext context) {
         ),
     ],
     if (c.activeDiagram.kind == DiagramKind.dfd)
-      for (final i in validateDfd(c.project.dfdOf(c.activeDiagramId)))
+      for (final i in validateDfd(c.project.dfdOf(c.activeDiagramId), project: c.project, diagramId: c.activeDiagramId))
         PaletteEntry(
           kind: PaletteKind.issue,
           title: i.title,

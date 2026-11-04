@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nsl_modeler/core/db/db_session.dart';
@@ -8,6 +10,9 @@ import 'package:nsl_modeler/main.dart';
 import 'package:nsl_modeler/state/app_settings.dart';
 import 'package:nsl_modeler/state/project_controller.dart';
 import 'package:nsl_modeler/ui/db_connect_dialog.dart';
+import 'package:nsl_modeler/ui/data_browser_dialog.dart';
+import 'package:nsl_modeler/ui/import_dialog.dart';
+import 'package:sqlite3/sqlite3.dart';
 import 'package:nsl_modeler/ui/home_page.dart';
 import 'package:nsl_modeler/ui/shortcuts.dart';
 import 'package:provider/provider.dart';
@@ -187,7 +192,7 @@ void main() {
     Future<void> open(WidgetTester tester) async {
       await tester.tap(find.text('ไฟล์'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('เชื่อมต่อฐานข้อมูล MySQL…'));
+      await tester.tap(find.text('เชื่อมต่อฐานข้อมูล…'));
       await tester.pumpAndSettle();
     }
 
@@ -201,7 +206,7 @@ void main() {
     testWidgets('เมนูไฟล์เปิดกล่อง; รหัสผ่านถูกซ่อน; กรอกไม่ครบ = แจ้งและไม่เชื่อมต่อ', (tester) async {
       await boot(tester);
       await open(tester);
-      expect(find.text('เชื่อมต่อฐานข้อมูล MySQL / MariaDB'), findsOneWidget);
+      expect(find.text('เชื่อมต่อฐานข้อมูล'), findsOneWidget);
       expect(tester.widget<TextField>(find.byKey(const ValueKey('db-pass'))).obscureText, true);
       await tester.tap(find.byKey(const ValueKey('db-test')));
       await tester.pump();
@@ -266,7 +271,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('db-compare')));
       await tester.pumpAndSettle();
       expect(find.textContaining('shop'), findsWidgets); // oldLabel = ชื่อการเชื่อมต่อ
-      expect(find.text('เชื่อมต่อฐานข้อมูล MySQL / MariaDB'), findsNothing);
+      expect(find.text('เชื่อมต่อฐานข้อมูล'), findsNothing);
     });
 
     testWidgets('โปรเจกต์ไม่ใช่ MySQL: ปุ่มเปรียบเทียบปิดอยู่พร้อมคำอธิบาย', (tester) async {
@@ -278,14 +283,83 @@ void main() {
       expect(find.textContaining('dialect ของโปรเจกต์เป็น MySQL'), findsOneWidget);
     });
 
+    testWidgets('โหมด SQLite: ซ่อนช่องเซิร์ฟเวอร์ ใช้ไฟล์จริง นำเข้าได้ ; ไฟล์ไม่มี = แจ้งข้อผิดพลาด ; เปรียบเทียบปิด (โปรเจกต์เป็น MySQL)', (tester) async {
+      await boot(tester);
+      DbConnectDialog.lastKind = DbKind.mysql;
+      DbConnectDialog.lastSqlitePath = '';
+      final dir = Directory.systemTemp.createTempSync('nsl_dlg');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final file = '${dir.path}/shop.db';
+      final db = sqlite3.open(file)..execute('CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)');
+      db.close();
+
+      await open(tester);
+      await tester.tap(find.descendant(of: find.byKey(const ValueKey('db-kind')), matching: find.text('SQLite')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('db-host')), findsNothing);
+      expect(find.byKey(const ValueKey('db-pass')), findsNothing);
+      expect(find.byKey(const ValueKey('db-file')), findsOneWidget);
+      expect(tester.widget<OutlinedButton>(find.byKey(const ValueKey('db-compare'))).onPressed, isNull);
+
+      await tester.tap(find.byKey(const ValueKey('db-import')));
+      await tester.pump();
+      expect(find.text('กรอกที่อยู่ไฟล์ SQLite'), findsOneWidget);
+
+      await tester.enterText(find.byKey(const ValueKey('db-file')), '${dir.path}/missing.db');
+      await tester.tap(find.byKey(const ValueKey('db-import')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('db-error')), findsOneWidget);
+      expect(fake.configs, isEmpty); // ไม่ได้แตะตัวเชื่อมต่อ MySQL
+
+      await tester.enterText(find.byKey(const ValueKey('db-file')), file);
+      await tester.runAsync(() async {
+        await tester.tap(find.byKey(const ValueKey('db-import')));
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      });
+      await tester.pumpAndSettle();
+      expect(find.byType(ImportPreviewDialog), findsOneWidget);
+      expect(DbConnectDialog.lastKind, DbKind.sqlite);
+      expect(DbConnectDialog.lastSqlitePath, file);
+      DbConnectDialog.lastKind = DbKind.mysql;
+    });
+
+    testWidgets('เปิดดู/แก้ข้อมูล : ไฟล์ SQLite จริง > เปิดหน้าข้อมูล เห็นตารางและแถว ; เชื่อมไม่ได้ = อยู่ในกล่องเดิมพร้อมข้อผิดพลาด', (tester) async {
+      await boot(tester);
+      DbConnectDialog.lastKind = DbKind.mysql;
+      final dir = Directory.systemTemp.createTempSync('nsl_dlg2');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final file = '${dir.path}/shop.db';
+      final db = sqlite3.open(file)..execute("CREATE TABLE people (id INTEGER PRIMARY KEY, name TEXT); INSERT INTO people (name) VALUES ('Zed')");
+      db.close();
+
+      await open(tester);
+      await tester.tap(find.descendant(of: find.byKey(const ValueKey('db-kind')), matching: find.text('SQLite')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const ValueKey('db-file')), '${dir.path}/none.db');
+      await tester.tap(find.byKey(const ValueKey('db-browse-data')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('db-error')), findsOneWidget);
+      expect(find.byType(DataBrowserDialog), findsNothing);
+
+      await tester.enterText(find.byKey(const ValueKey('db-file')), file);
+      await tester.runAsync(() async {
+        await tester.tap(find.byKey(const ValueKey('db-browse-data')));
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+      });
+      await tester.pumpAndSettle();
+      expect(find.byType(DataBrowserDialog), findsOneWidget);
+      expect(find.text('Zed'), findsOneWidget);
+      DbConnectDialog.lastKind = DbKind.mysql;
+    });
+
     testWidgets('คีย์ลัด Ctrl+Shift+O และภาษาอังกฤษ', (tester) async {
       await boot(tester, lang: Lang.en);
       expect(shortcutText(Cmd.connectDb), 'Ctrl+Shift+O');
       await tester.tap(find.text('File'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Connect to MySQL database…'));
+      await tester.tap(find.text('Connect to database…'));
       await tester.pumpAndSettle();
-      expect(find.text('Connect to MySQL / MariaDB database'), findsOneWidget);
+      expect(find.text('Connect to database'), findsOneWidget);
       expect(find.text('Test connection'), findsOneWidget);
       expect(find.textContaining('Reads the structure only'), findsOneWidget);
       currentLang = Lang.th;

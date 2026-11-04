@@ -183,8 +183,11 @@ class DfdRightPanel extends StatelessWidget {
     context.watch<ProjectController>();
     final node = d.selectedNode;
     final flow = d.selectedFlow;
+    final boundary = d.selectedBoundary;
     final Widget body;
-    if (node != null) {
+    if (boundary != null) {
+      body = _BoundaryProps(boundary: boundary);
+    } else if (node != null) {
       body = _NodeProps(node: node);
     } else if (flow != null) {
       body = _FlowProps(flow: flow);
@@ -349,6 +352,14 @@ class _NodeProps extends StatelessWidget {
           value: node.name,
           onCommit: (v) => d.renameNode(node.id, v.trim()),
         ),
+        if (node.kind == DfdKind.store) ...[
+          const SizedBox(height: 14),
+          _StoreTable(node: node),
+        ],
+        if (node.kind == DfdKind.process) ...[
+          const SizedBox(height: 14),
+          _ProcessChild(node: node),
+        ],
         const SizedBox(height: 14),
         LabeledField(
           label: tr('สี'),
@@ -364,6 +375,153 @@ class _NodeProps extends StatelessWidget {
         const SizedBox(height: 14),
         _Connections(node: node),
       ],
+    );
+  }
+}
+
+/// แตกรายละเอียดกระบวนการเป็นแผนภาพย่อย (Level 0 → Level 1) : เลือกแท็บ DFD ที่มีอยู่ หรือสร้างใหม่ให้พร้อมเส้นข้อมูลเดียวกับแม่
+class _ProcessChild extends StatelessWidget {
+  const _ProcessChild({required this.node});
+  final DfdNode node;
+
+  @override
+  Widget build(BuildContext context) {
+    final d = context.read<DfdController>();
+    final pc = context.watch<ProjectController>();
+    final cands = d.childCandidates(pc.activeDiagramId);
+    final cid = node.childId;
+    final linked = cid == null ? null : pc.project.diagramById(cid);
+    const none = '';
+    final ids = [none, ...cands.map((t) => t.id)];
+    final value = linked != null && ids.contains(linked.id) ? linked.id : none;
+    return LabeledField(
+      label: tr('แผนภาพย่อย (Level ถัดไป)'),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        KeyedSubtree(
+          key: const ValueKey('dfd-child'),
+          child: Dropdown<String>(
+            value: value,
+            items: ids,
+            labelOf: (id) => id == none ? tr('— ไม่มี —') : pc.project.diagramById(id)!.name,
+            onChanged: (id) => d.setProcessChild(node.id, id == none ? null : id),
+          ),
+        ),
+        if (cid != null && linked == null)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(tr('แผนภาพย่อยที่ชี้ไว้ไม่มีแล้ว'), style: TextStyle(fontSize: 12, color: C.danger)),
+          ),
+        Wrap(spacing: 4, children: [
+          if (linked != null)
+            TextButton.icon(
+              key: const ValueKey('dfd-child-open'),
+              onPressed: () => d.openChild(node.id),
+              icon: const Icon(Icons.subdirectory_arrow_right_rounded, size: 16),
+              label: Text(tr('เปิดแผนภาพย่อย')),
+            ),
+          if (cid == null)
+            TextButton.icon(
+              key: const ValueKey('dfd-child-create'),
+              onPressed: () => d.createChildFor(node.id),
+              icon: const Icon(Icons.add_rounded, size: 16),
+              label: Text(tr('สร้างแผนภาพย่อยใหม่')),
+            ),
+        ]),
+      ]),
+    );
+  }
+}
+
+/// ขอบเขตระบบที่เลือก : ชื่อ สี ลบ
+class _BoundaryProps extends StatelessWidget {
+  const _BoundaryProps({required this.boundary});
+  final DfdBoundary boundary;
+
+  @override
+  Widget build(BuildContext context) {
+    final d = context.read<DfdController>();
+    final a = DfdActions(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          Icon(Icons.crop_free_rounded, size: 18, color: C.muted),
+          const SizedBox(width: 8),
+          Expanded(child: Text(tr('ขอบเขตระบบ'), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14))),
+          IconButton(
+            key: const ValueKey('dfd-delete'),
+            tooltip: tr('ลบขอบเขต (ไม่ลบวัตถุข้างใน)'),
+            icon: Icon(Icons.delete_outline, color: C.danger, size: 20),
+            onPressed: d.deleteSelection,
+          ),
+        ]),
+        const SizedBox(height: 12),
+        CommitField(
+          key: ValueKey('dfd-boundary-name-${boundary.id}-${boundary.name}'),
+          label: tr('ชื่อ'),
+          value: boundary.name,
+          onCommit: (v) => d.renameBoundary(boundary.id, v.trim()),
+        ),
+        const SizedBox(height: 14),
+        LabeledField(
+          label: tr('สี'),
+          child: _ColorRow(
+            current: boundary.color,
+            defaultColor: C.muted.toARGB32(),
+            onPick: (c) => d.setBoundaryColor(boundary.id, c),
+            onCustom: () => a.pickBoundaryColor(boundary),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Text(tr('ลากเส้นประเพื่อย้าย (วัตถุข้างในเลื่อนตาม) · ลากจุดจับเพื่อปรับขนาด'),
+            style: TextStyle(fontSize: 12, color: C.muted)),
+      ],
+    );
+  }
+}
+
+/// ผูกที่เก็บข้อมูลกับตารางใน ER (ตัวเลือก = ตารางทุกใบของโปรเจกต์)
+class _StoreTable extends StatelessWidget {
+  const _StoreTable({required this.node});
+  final DfdNode node;
+
+  @override
+  Widget build(BuildContext context) {
+    final d = context.read<DfdController>();
+    final pc = context.watch<ProjectController>();
+    final tables = pc.project.tables;
+    final linked = node.tableId == null ? null : pc.project.tableById(node.tableId!);
+    const none = '';
+    final ids = [none, ...tables.map((t) => t.id)];
+    final value = linked == null ? none : linked.id;
+    return LabeledField(
+      label: tr('ตารางใน ER'),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        KeyedSubtree(
+          key: const ValueKey('dfd-store-table'),
+          child: Dropdown<String>(
+            value: value,
+            items: ids,
+            labelOf: (id) => id == none ? tr('— ไม่ผูก —') : pc.project.tableById(id)!.name,
+            onChanged: (id) => d.setStoreTable(node.id, id == none ? null : id),
+          ),
+        ),
+        if (node.tableId != null && linked == null)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(tr('ตารางที่ผูกไว้ถูกลบไปแล้ว'), style: TextStyle(fontSize: 12, color: C.danger)),
+          ),
+        if (linked != null)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              key: const ValueKey('dfd-store-goto'),
+              onPressed: () => d.gotoLinkedTable(node.id),
+              icon: const Icon(Icons.open_in_new_rounded, size: 15),
+              label: Text(tr('ไปที่ตารางใน ER')),
+            ),
+          ),
+      ]),
     );
   }
 }
@@ -571,7 +729,7 @@ class _Issues extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final d = context.read<DfdController>();
-    final issues = validateDfd(diagram);
+    final issues = validateDfd(diagram, project: context.read<ProjectController>().project, diagramId: context.read<ProjectController>().activeDiagramId);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -587,6 +745,29 @@ class _Issues extends StatelessWidget {
           ]),
           style: TextStyle(fontSize: 12.5, color: C.muted),
         ),
+        for (final (tab, proc) in d.parentsOf(context.read<ProjectController>().activeDiagramId))
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: InkWell(
+              key: ValueKey('dfd-parent-${proc.id}'),
+              borderRadius: BorderRadius.circular(6),
+              onTap: () {
+                context.read<ProjectController>().selectDiagram(tab.id);
+                d.selectNode(proc.id);
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(children: [
+                  Icon(Icons.subdirectory_arrow_left_rounded, size: 16, color: C.primaryDark),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(tr('รายละเอียดของ {0} ใน {1}', [proc.title, tab.name]),
+                        style: TextStyle(fontSize: 12.5, color: C.primaryDark), overflow: TextOverflow.ellipsis),
+                  ),
+                ]),
+              ),
+            ),
+          ),
         const SizedBox(height: 14),
         Text.rich(
           TextSpan(

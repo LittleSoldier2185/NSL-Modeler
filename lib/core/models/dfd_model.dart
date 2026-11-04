@@ -36,6 +36,8 @@ class DfdNode {
     double? w,
     double? h,
     this.color,
+    this.tableId,
+    this.childId,
   })  : w = w ?? dfdDefaultSize(kind).$1,
         h = h ?? dfdDefaultSize(kind).$2;
 
@@ -49,6 +51,12 @@ class DfdNode {
 
   /// สีกำหนดเอง (ARGB) — null = สีตามชนิด
   int? color;
+
+  /// id ของตาราง ER ที่ที่เก็บข้อมูลนี้แทน (เฉพาะ [DfdKind.store]) — null = ยังไม่ผูก
+  String? tableId;
+
+  /// id ของแท็บ DFD ที่แตกรายละเอียดของกระบวนการนี้ (เฉพาะ [DfdKind.process]) — null = ไม่มี
+  String? childId;
 
   double get cx => x + w / 2;
   double get cy => y + h / 2;
@@ -68,6 +76,8 @@ class DfdNode {
         'w': w,
         'h': h,
         if (color != null) 'color': color,
+        if (tableId != null) 'table': tableId,
+        if (childId != null) 'child': childId,
       };
 
   /// ค่าผิดปกติ = null (ข้ามวัตถุนั้น) หรือใช้ค่าปลอดภัย (ขนาด/ตำแหน่ง)
@@ -93,6 +103,8 @@ class DfdNode {
       w: side(j['w'], kDfdMinW, d.$1),
       h: side(j['h'], kDfdMinH, d.$2),
       color: parseArgb(j['color']),
+      tableId: kind == DfdKind.store && j['table'] is String && (j['table'] as String).isNotEmpty ? j['table'] as String : null,
+      childId: kind == DfdKind.process && j['child'] is String && (j['child'] as String).isNotEmpty ? j['child'] as String : null,
     );
   }
 }
@@ -140,14 +152,67 @@ class DfdFlow {
   }
 }
 
+/// กรอบขอบเขตระบบ / กลุ่ม วาดเป็นเส้นประรอบวัตถุ (อยู่ใต้วัตถุและเส้นข้อมูล ไม่มีผลต่อกฎของ DFD)
+class DfdBoundary {
+  DfdBoundary({required this.id, this.name = '', this.x = 0, this.y = 0, this.w = 300, this.h = 200, this.color});
+
+  final String id;
+  String name;
+  double x, y, w, h;
+  int? color;
+
+  double get right => x + w;
+  double get bottom => y + h;
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'x': x,
+        'y': y,
+        'w': w,
+        'h': h,
+        if (color != null) 'color': color,
+      };
+
+  static DfdBoundary? tryFromJson(Object? j) {
+    if (j is! Map) return null;
+    final id = j['id'];
+    if (id is! String || id.isEmpty) return null;
+    double num0(Object? v, double fb) => v is num && v.isFinite ? v.toDouble() : fb;
+    double side(Object? v, double fb) {
+      final n = num0(v, fb);
+      return n < 40 ? fb : math.min(n, 4000);
+    }
+
+    return DfdBoundary(
+      id: id,
+      name: j['name'] is String ? j['name'] as String : '',
+      x: num0(j['x'], 0),
+      y: num0(j['y'], 0),
+      w: side(j['w'], 300),
+      h: side(j['h'], 200),
+      color: parseArgb(j['color']),
+    );
+  }
+}
+
 /// เนื้อหาของแผนภาพ DFD หนึ่งแท็บ
 class DfdDiagram {
-  DfdDiagram({List<DfdNode>? nodes, List<DfdFlow>? flows})
+  DfdDiagram({List<DfdNode>? nodes, List<DfdFlow>? flows, List<DfdBoundary>? boundaries})
       : nodes = nodes ?? [],
-        flows = flows ?? [];
+        flows = flows ?? [],
+        boundaries = boundaries ?? [];
 
   final List<DfdNode> nodes;
   final List<DfdFlow> flows;
+  final List<DfdBoundary> boundaries;
+
+  DfdBoundary? boundaryById(String id) {
+    for (final b in boundaries) {
+      if (b.id == id) return b;
+    }
+    return null;
+  }
 
   DfdNode? nodeById(String id) {
     for (final n in nodes) {
@@ -182,6 +247,7 @@ class DfdDiagram {
   Map<String, dynamic> toJson() => {
         'nodes': nodes.map((n) => n.toJson()).toList(),
         'flows': flows.map((f) => f.toJson()).toList(),
+        if (boundaries.isNotEmpty) 'boundaries': boundaries.map((b) => b.toJson()).toList(),
       };
 
   /// ซ่อมข้อมูลผิดปกติ: ข้ามวัตถุที่อ่านไม่ได้/id ซ้ำ, ตัดเส้นที่ชี้ไปวัตถุที่ไม่มี หรือชี้ไปที่ตัวเอง
@@ -200,7 +266,12 @@ class DfdDiagram {
             when nodeIds.contains(f.fromId) && nodeIds.contains(f.toId) && f.fromId != f.toId && fids.add(f.id))
           f,
     ];
-    return DfdDiagram(nodes: nodes, flows: flows);
+    final bids = <String>{};
+    final boundaries = [
+      for (final e in (j['boundaries'] as List? ?? const []))
+        if (DfdBoundary.tryFromJson(e) case final b? when bids.add(b.id)) b,
+    ];
+    return DfdDiagram(nodes: nodes, flows: flows, boundaries: boundaries);
   }
 }
 
@@ -395,13 +466,19 @@ DfdNode? dfdNodeAt(DfdDiagram d, double x, double y) {
 
 /// ขอบเขตของแผนภาพ (วัตถุ + ป้ายชื่อ flow โดยประมาณ) เผื่อขอบ [pad]; ว่าง = null
 ({double left, double top, double right, double bottom})? dfdBounds(DfdDiagram d, {double pad = 40}) {
-  if (d.nodes.isEmpty) return null;
+  if (d.nodes.isEmpty && d.boundaries.isEmpty) return null;
   var l = double.infinity, t = double.infinity, r = -double.infinity, b = -double.infinity;
   for (final n in d.nodes) {
     l = math.min(l, n.x);
     t = math.min(t, n.y);
     r = math.max(r, n.right);
     b = math.max(b, n.bottom);
+  }
+  for (final k in d.boundaries) {
+    l = math.min(l, k.x);
+    t = math.min(t, k.y);
+    r = math.max(r, k.right);
+    b = math.max(b, k.bottom);
   }
   for (final pts in dfdRoutes(d).values) {
     for (final (x, y) in pts) {
@@ -413,3 +490,18 @@ DfdNode? dfdNodeAt(DfdDiagram d, double x, double y) {
   }
   return (left: l - pad, top: t - pad, right: r + pad, bottom: b + pad);
 }
+
+/// ขอบเขตระบบที่ (x,y) ชี้โดน : แถบขอบกว้าง [tol] หรือแถบชื่อด้านบน (ข้างในกรอบคลิกทะลุเพื่อลากเลือกวัตถุ)
+DfdBoundary? dfdBoundaryAt(DfdDiagram d, double x, double y, {double tol = 7}) {
+  for (final b in d.boundaries.reversed) {
+    final outer = x >= b.x - tol && x <= b.right + tol && y >= b.y - tol && y <= b.bottom + tol;
+    if (!outer) continue;
+    final inner = x > b.x + tol && x < b.right - tol && y > b.y + tol && y < b.bottom - tol;
+    final inLabel = x >= b.x && x <= b.right && y >= b.y && y <= b.y + kDfdBoundaryLabelH;
+    if (!inner || inLabel) return b;
+  }
+  return null;
+}
+
+/// ความสูงแถบชื่อของขอบเขตระบบ
+const double kDfdBoundaryLabelH = 26;

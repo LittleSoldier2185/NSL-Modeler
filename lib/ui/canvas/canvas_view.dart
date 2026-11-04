@@ -157,6 +157,8 @@ class CanvasView extends StatelessWidget {
                           focusRelationId: _focusRelation(c),
                           showFlow: context.select<AppSettings, bool>((s) => s.showFlow),
                           animate: context.select<AppSettings, bool>((s) => s.flowAnimation),
+                          always: context.select<AppSettings, bool>((s) => s.flowAlways),
+                          speed: context.select<AppSettings, FlowSpeed>((s) => s.flowSpeed),
                         ),
                       ),
                       for (final t in c.project.tables) TableCard(key: ValueKey('table-${t.id}'), table: t),
@@ -441,6 +443,8 @@ class _RelationLayer extends StatefulWidget {
     required this.focusRelationId,
     required this.showFlow,
     required this.animate,
+    this.always = false,
+    this.speed = FlowSpeed.normal,
   });
 
   final Project project;
@@ -449,20 +453,27 @@ class _RelationLayer extends StatefulWidget {
   final bool showFlow;
   final bool animate;
 
+  /// เส้นประวิ่งทุกเส้นตลอดเวลา (ไม่ต้องเลือกตาราง)
+  final bool always;
+  final FlowSpeed speed;
+
   @override
   State<_RelationLayer> createState() => _RelationLayerState();
 }
 
 class _RelationLayerState extends State<_RelationLayer> with SingleTickerProviderStateMixin {
-  /// หนึ่งรอบของเส้นประ
-  static const _cycle = Duration(milliseconds: 900);
-
-  late final AnimationController _ctl = AnimationController(vsync: this, duration: _cycle);
+  late final AnimationController _ctl = AnimationController(vsync: this, duration: widget.speed.cycle);
 
   bool get _wantAnimation =>
-      widget.animate && (widget.selectedTableId != null || widget.focusRelationId != null) && widget.project.relations.isNotEmpty;
+      widget.animate &&
+      (widget.always || widget.selectedTableId != null || widget.focusRelationId != null) &&
+      widget.project.relations.isNotEmpty;
 
   void _sync() {
+    if (_ctl.duration != widget.speed.cycle) {
+      _ctl.duration = widget.speed.cycle;
+      if (_ctl.isAnimating) _ctl.repeat();
+    }
     if (_wantAnimation) {
       if (!_ctl.isAnimating) _ctl.repeat();
     } else if (_ctl.isAnimating) {
@@ -499,6 +510,7 @@ class _RelationLayerState extends State<_RelationLayer> with SingleTickerProvide
             focusRelationId: widget.focusRelationId,
             flow: widget.showFlow,
             flowPhase: _wantAnimation ? _ctl.value : null,
+            flowAll: widget.always,
           ),
         ),
       );

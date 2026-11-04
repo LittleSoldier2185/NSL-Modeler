@@ -415,7 +415,9 @@ void main() {
       await boot(tester);
       await tester.tap(find.text('มุมมอง'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('สีเส้นความสัมพันธ์…'));
+      await tester.tap(find.text('เส้นความสัมพันธ์ (FK)…'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('line-color')));
       await tester.pumpAndSettle();
       await tester.enterText(find.byKey(const ValueKey('color-hex')), 'AA1122');
       await tester.pump();

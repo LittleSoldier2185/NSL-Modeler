@@ -6,6 +6,7 @@ import '../core/models/enums.dart';
 import '../core/models/relation_model.dart';
 import '../core/models/table_model.dart';
 import '../state/project_controller.dart';
+import 'app_actions.dart';
 import 'issue_widgets.dart';
 import 'theme.dart';
 import 'seed_data_dialog.dart';
@@ -191,7 +192,19 @@ class _TableEditor extends StatelessWidget {
                 maxLines: 1,
               ),
             ),
-            const SizedBox(width: 8),
+            Tooltip(
+              message: tr('แก้ไขโครงสร้างทั้งตาราง…'),
+              child: InkWell(
+                key: const ValueKey('edit-structure'),
+                borderRadius: BorderRadius.circular(6),
+                onTap: () => AppActions(context).editTableStructure(table.id),
+                child: Padding(
+                  padding: const EdgeInsets.all(2),
+                  child: Icon(Icons.table_chart_outlined, size: 18, color: C.primaryDark),
+                ),
+              ),
+            ),
+            const SizedBox(width: 2),
             SmallButton(label: tr('+ เพิ่มคอลัมน์'), onTap: () => c.addColumn(table.id)),
           ]),
         ),

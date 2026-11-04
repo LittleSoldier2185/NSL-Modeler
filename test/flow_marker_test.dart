@@ -57,7 +57,20 @@ void main() {
       final dir = Directory.systemTemp.createTempSync('nsl_settings');
       addTearDown(() => dir.deleteSync(recursive: true));
       final first = AppSettings.load(File('${dir.path}/settings.json'));
-      expect((first.showFlow, first.flowAnimation), (true, true));
+      expect((first.showFlow, first.flowAnimation, first.flowAlways), (true, true, true));
+    });
+
+    test('เล่นตลอดเวลา/ความเร็ว: ค่าเริ่มต้น ปิด/ปกติ และบันทึก-โหลดกลับ', () {
+      final dir = Directory.systemTemp.createTempSync('nsl_settings');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final f = File('${dir.path}/settings.json');
+      final s = AppSettings(lang: Lang.th, file: f);
+      expect((s.flowAlways, s.flowSpeed), (false, FlowSpeed.normal));
+      s.setFlowAlways(true);
+      s.setFlowSpeed(FlowSpeed.slow);
+      final back = AppSettings.load(f);
+      expect((back.flowAlways, back.flowSpeed), (true, FlowSpeed.slow));
+      expect(FlowSpeed.fromName('???'), FlowSpeed.normal);
     });
 
     test('บันทึกและโหลดกลับ', () {
@@ -130,6 +143,24 @@ void main() {
       expect(tester.binding.transientCallbackCount, 0);
     });
 
+    testWidgets('เล่นตลอดเวลา: วิ่งแม้ไม่ได้เลือกอะไร; ปิดตัวเลือก/ปิดอนิเมชัน = หยุด', (tester) async {
+      await boot(tester, animate: true);
+      settings.setFlowAlways(true);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(tester.binding.transientCallbackCount, greaterThan(0));
+      settings.setFlowAlways(false);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      expect(tester.binding.transientCallbackCount, 0);
+      settings.setFlowAlways(true);
+      await tester.pump();
+      settings.setFlowAnimation(false);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      expect(tester.binding.transientCallbackCount, 0);
+    });
+
     testWidgets('ปิดอนิเมชัน (ค่าเริ่มต้นในเทสต์): เลือกตารางแล้ว pumpAndSettle จบ', (tester) async {
       await boot(tester);
       c.selectTable('tu');
@@ -141,16 +172,28 @@ void main() {
       await boot(tester);
       await tester.tap(find.text('มุมมอง'));
       await tester.pumpAndSettle();
-      expect(find.text('✓ แสดงทิศทางข้อมูลบนเส้น FK'), findsOneWidget);
-      await tester.tap(find.text('✓ แสดงทิศทางข้อมูลบนเส้น FK'));
+      await tester.tap(find.text('เส้นความสัมพันธ์ (FK)…'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('line-flow')));
       await tester.pumpAndSettle();
       expect(settings.showFlow, false);
 
-      await tester.tap(find.text('มุมมอง'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('    เส้นของตารางที่เลือกเคลื่อนไหวตามทิศทางข้อมูล'));
+      await tester.tap(find.byKey(const ValueKey('line-anim')));
       await tester.pumpAndSettle();
       expect(settings.flowAnimation, true);
+      // ตัวเลือกเล่นตลอดเวลา/ความเร็ว ใช้ได้เมื่อเปิดอนิเมชัน
+      // โหมดเล่นตลอดเวลาวิ่งไม่หยุด จึงใช้ pump() ไม่ใช่ pumpAndSettle()
+      await tester.tap(find.byKey(const ValueKey('line-always')));
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(settings.flowAlways, true);
+      await tester.tap(find.text('เร็ว'));
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(settings.flowSpeed, FlowSpeed.fast);
+      await tester.tap(find.byKey(const ValueKey('line-anim')));
+      await tester.pumpAndSettle();
+      expect(settings.flowAnimation, false);
+      await tester.tap(find.text('ปิด'));
+      await tester.pumpAndSettle();
       c.selectTable(null);
       await tester.pump();
     });
@@ -162,8 +205,11 @@ void main() {
       await tester.pumpWidget(NslModelerApp(settings: AppSettings(lang: Lang.en)));
       await tester.tap(find.text('View'));
       await tester.pumpAndSettle();
-      expect(find.text('✓ Show data direction on FK lines'), findsOneWidget);
-      expect(find.textContaining("Animate the selected table's lines"), findsOneWidget);
+      await tester.tap(find.text('Relationship lines (FK)…'));
+      await tester.pumpAndSettle();
+      expect(find.text('Show data direction on FK lines'), findsOneWidget);
+      expect(find.text('Always play (all lines)'), findsOneWidget);
+      expect(find.text('Slow'), findsOneWidget);
       currentLang = Lang.th;
     });
   });
