@@ -18,6 +18,7 @@ import '../core/models/relation_model.dart';
 import '../core/models/table_model.dart';
 import '../core/validate/issue.dart';
 import '../core/validate/validator.dart';
+import 'snapshot_history.dart';
 
 /// ถือโปรเจกต์ปัจจุบัน + selection + undo/redo (แบบ snapshot)
 class ProjectController extends ChangeNotifier {
@@ -34,9 +35,8 @@ class ProjectController extends ChangeNotifier {
   /// ตารางที่เลือกเพิ่มจากตัวหลัก [_selectedTableId] (เลือกหลายตารางด้วย Ctrl/Shift+คลิก หรือ Ctrl+A)
   final Set<String> _extra = {};
 
-  final List<String> _undo = [];
-  final List<String> _redo = [];
-  String? _gestureBefore;
+  /// ประวัติ undo/redo ของ ER (snapshot ไม่รวมแท็บ/DFD)
+  final SnapshotHistory _history = SnapshotHistory(max: _maxHistory);
   int _idCounter = 0;
 
   Project get project => _project;
@@ -44,8 +44,8 @@ class ProjectController extends ChangeNotifier {
   bool get dirty => _dirty;
   String? get selectedTableId => _selectedTableId;
   String? get selectedColumnId => _selectedColumnId;
-  bool get canUndo => activeDiagram.kind == DiagramKind.er ? _undo.isNotEmpty : (_dfdUndo[activeDiagramId]?.isNotEmpty ?? false);
-  bool get canRedo => activeDiagram.kind == DiagramKind.er ? _redo.isNotEmpty : (_dfdRedo[activeDiagramId]?.isNotEmpty ?? false);
+  bool get canUndo => activeDiagram.kind == DiagramKind.er ? _history.canUndo : (_dfdHistory[activeDiagramId]?.canUndo ?? false);
+  bool get canRedo => activeDiagram.kind == DiagramKind.er ? _history.canRedo : (_dfdHistory[activeDiagramId]?.canRedo ?? false);
 
   List<Issue>? _issues;
 
@@ -67,15 +67,9 @@ class ProjectController extends ChangeNotifier {
 
   String _snapshot() => jsonEncode(_project.toJson(withDfd: false));
 
-  void _push(String snap) {
-    _undo.add(snap);
-    if (_undo.length > _maxHistory) _undo.removeAt(0);
-    _redo.clear();
-  }
-
   /// แก้ข้อมูลแบบมีประวัติ
   void _edit(void Function() change) {
-    _push(_snapshot());
+    _history.push(_snapshot());
     change();
     _dirty = true;
     _issues = null;
@@ -123,12 +117,9 @@ class ProjectController extends ChangeNotifier {
     _attached.clear();
     _extra.clear();
     _selectedColumnId = null;
-    _undo.clear();
-    _redo.clear();
-    _dfdUndo.clear();
-    _dfdRedo.clear();
-    _dfdGestureBefore = null;
-    _gestureBefore = null;
+    _history.clear();
+    _dfdHistory.clear();
+    _dfdGestureId = null;
     notifyListeners();
   }
 
@@ -195,8 +186,7 @@ class ProjectController extends ChangeNotifier {
     if (i < 0 || _project.diagrams[i].kind == DiagramKind.er) return false;
     _project.diagrams.removeAt(i);
     _project.dfd.remove(id);
-    _dfdUndo.remove(id);
-    _dfdRedo.remove(id);
+    _dfdHistory.remove(id);
     if (_activeDiagramId == id) {
       _activeDiagramId = _project.diagrams[i > 0 ? i - 1 : 0].id;
     }
@@ -218,25 +208,20 @@ class ProjectController extends ChangeNotifier {
   // ---------- undo / redo ----------
 
   // --- ประวัติของแท็บ DFD: แยกต่อแท็บ (snapshot เฉพาะเนื้อหาของแท็บนั้น) ---
-  final Map<String, List<String>> _dfdUndo = {};
-  final Map<String, List<String>> _dfdRedo = {};
-  String? _dfdGestureBefore;
+  final Map<String, SnapshotHistory> _dfdHistory = {};
+
+  /// แท็บ DFD ที่กำลังลากอยู่ (ลากได้ทีละแท็บ)
   String? _dfdGestureId;
 
   String _dfdSnapshot(String id) => jsonEncode(_project.dfdOf(id).toJson());
 
-  void _dfdPush(String id, String snap) {
-    final u = _dfdUndo.putIfAbsent(id, () => []);
-    u.add(snap);
-    if (u.length > _maxHistory) u.removeAt(0);
-    _dfdRedo[id]?.clear();
-  }
+  SnapshotHistory _dfdHist(String id) => _dfdHistory.putIfAbsent(id, () => SnapshotHistory(max: _maxHistory));
 
   /// แก้เนื้อหา DFD ของแท็บที่เปิดอยู่แบบมีประวัติ (undo ขั้นเดียว)
   void dfdEdit(void Function(DfdDiagram d) change) {
     if (activeDiagram.kind != DiagramKind.dfd) return;
     final id = activeDiagramId;
-    _dfdPush(id, _dfdSnapshot(id));
+    _dfdHist(id).push(_dfdSnapshot(id));
     change(_project.dfdOf(id));
     _dirty = true;
     notifyListeners();
@@ -250,29 +235,32 @@ class ProjectController extends ChangeNotifier {
   }
 
   void dfdBeginGesture() {
-    if (_dfdGestureBefore != null || activeDiagram.kind != DiagramKind.dfd) return;
-    _dfdGestureId = activeDiagramId;
-    _dfdGestureBefore = _dfdSnapshot(activeDiagramId);
+    if (_dfdGestureId != null || activeDiagram.kind != DiagramKind.dfd) return;
+    final id = activeDiagramId;
+    _dfdGestureId = id;
+    _dfdHist(id).beginGesture(_dfdSnapshot(id));
   }
 
   void dfdEndGesture() {
-    final before = _dfdGestureBefore, id = _dfdGestureId;
-    _dfdGestureBefore = null;
+    final id = _dfdGestureId;
     _dfdGestureId = null;
-    if (before == null || id == null || _project.diagramById(id) == null) return;
-    if (before != _dfdSnapshot(id)) {
-      _dfdPush(id, before);
-      _dirty = true;
+    if (id == null) return;
+    final h = _dfdHistory[id];
+    if (h == null || !h.gestureActive || _project.diagramById(id) == null) {
+      h?.cancelGesture();
+      return;
     }
+    if (h.endGesture(_dfdSnapshot(id))) _dirty = true;
     notifyListeners();
   }
 
   void _dfdUndoRedo(bool undo) {
     final id = activeDiagramId;
-    final from = (undo ? _dfdUndo : _dfdRedo)[id];
-    if (from == null || from.isEmpty) return;
-    (undo ? _dfdRedo : _dfdUndo).putIfAbsent(id, () => []).add(_dfdSnapshot(id));
-    _project.dfd[id] = DfdDiagram.fromJson(jsonDecode(from.removeLast()));
+    final h = _dfdHistory[id];
+    if (h == null || !(undo ? h.canUndo : h.canRedo)) return;
+    final cur = _dfdSnapshot(id);
+    final snap = undo ? h.undo(cur)! : h.redo(cur)!;
+    _project.dfd[id] = DfdDiagram.fromJson(jsonDecode(snap));
     _dirty = true;
     notifyListeners();
   }
@@ -282,11 +270,11 @@ class ProjectController extends ChangeNotifier {
       _dfdUndoRedo(true);
       return;
     }
-    if (_undo.isEmpty) return;
-    _redo.add(_snapshot());
+    if (!_history.canUndo) return;
+    final snap = _history.undo(_snapshot())!;
     final tabs = _project.diagrams; // undo ไม่ย้อนรายการแท็บ/เนื้อหา DFD
     final dfd = _project.dfd;
-    _project = Project.fromJson(jsonDecode(_undo.removeLast()) as Map<String, dynamic>)
+    _project = Project.fromJson(jsonDecode(snap) as Map<String, dynamic>)
       ..diagrams = tabs
       ..dfd = dfd;
     _dirty = true;
@@ -300,11 +288,11 @@ class ProjectController extends ChangeNotifier {
       _dfdUndoRedo(false);
       return;
     }
-    if (_redo.isEmpty) return;
-    _undo.add(_snapshot());
+    if (!_history.canRedo) return;
+    final snap = _history.redo(_snapshot())!;
     final tabs = _project.diagrams;
     final dfd = _project.dfd;
-    _project = Project.fromJson(jsonDecode(_redo.removeLast()) as Map<String, dynamic>)
+    _project = Project.fromJson(jsonDecode(snap) as Map<String, dynamic>)
       ..diagrams = tabs
       ..dfd = dfd;
     _dirty = true;
@@ -316,8 +304,8 @@ class ProjectController extends ChangeNotifier {
   // ---------- gesture (ลาก) : นับเป็น 1 ขั้น undo ----------
 
   void beginGesture() {
-    if (_gestureBefore != null) return;
-    _gestureBefore = _snapshot();
+    if (_history.gestureActive) return;
+    _history.beginGesture(_snapshot());
     _dragOrigin = null;
     _attOrigin = null;
   }
@@ -327,21 +315,19 @@ class ProjectController extends ChangeNotifier {
   double _rawDx = 0, _rawDy = 0;
 
   /// กำลังลากอยู่ (ตั้งแต่ beginGesture ถึง endGesture)
-  bool get gestureActive => _gestureBefore != null;
+  bool get gestureActive => _history.gestureActive;
 
   void endGesture() {
-    final before = _gestureBefore;
-    _gestureBefore = null;
+    final had = _history.gestureActive;
     _dragOrigin = null;
     _attOrigin = null;
     _groupOrigin = null;
     _resizeOrigin = null;
-    if (before != null && before != _snapshot()) {
-      _push(before);
+    if (had && _history.endGesture(_snapshot())) {
       _dirty = true;
       _issues = null;
     }
-    if (before != null) notifyListeners(); // ให้ hint ตอนลากหายไป
+    if (had) notifyListeners(); // ให้ hint ตอนลากหายไป
   }
 
   /// ตั้งข้อมูลตั้งต้นของตาราง (แทนที่ทั้งชุด) เป็น undo ขั้นเดียว — ไม่เปลี่ยนถ้าเหมือนเดิม
