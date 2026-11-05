@@ -5,6 +5,8 @@ import 'package:nsl_dev/core/models/workspace.dart';
 import 'package:nsl_dev/state/dfd_controller.dart';
 import 'package:nsl_dev/state/project_controller.dart';
 
+import 'support/project_helpers.dart';
+
 import 'migration_fixtures.dart';
 
 DfdNode e(String id) => DfdNode(id: id, kind: DfdKind.entity, name: id);
@@ -60,8 +62,8 @@ void main() {
 
   test('DfdController.autoLayout: undo ขั้นเดียว ; จัดซ้ำแล้วไม่เปลี่ยน = false', () {
     final pc = ProjectController(base());
-    final d = DfdController(pc);
     final tab = pc.addDiagram(DocType.dfd)!.id;
+    final d = dfdCtl(pc, tab);
     final a = d.addNode(DfdKind.entity, 300, 300)!;
     final b = d.addNode(DfdKind.process, 100, 100)!;
     d.setTool(DfdTool.flow);
@@ -72,7 +74,7 @@ void main() {
     final after = pc.dfdOf(tab);
     expect(after.nodeById(a.id)!.x, lessThan(after.nodeById(b.id)!.x));
     expect(d.autoLayout(), false);
-    pc.undo();
+    d.undo();
     for (final n in pc.dfdOf(tab).nodes) {
       expect((n.x, n.y), before[n.id]);
     }

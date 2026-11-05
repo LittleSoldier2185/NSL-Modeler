@@ -17,8 +17,8 @@ void main() {
 
   setUp(() {
     pc = ProjectController(base());
-    d = DfdController(pc);
     tab = pc.addDiagram(DocType.dfd)!.id;
+    d = dfdCtl(pc, tab);
     store = d.addNode(DfdKind.store, 100, 100)!;
   });
 
@@ -26,32 +26,32 @@ void main() {
 
   test('ผูกกับตาราง: เก็บ tableId และตั้งชื่อให้เมื่อยังว่าง, undo ขั้นเดียว', () {
     d.renameNode(store.id, '');
-    d.setStoreTable(store.id, 'tu');
+    d.setStoreTable(store.id, tableRef(pc, 'tu'));
     expect(node().tableId, 'tu');
     expect(node().name, 'users');
-    pc.undo();
+    d.undo();
     expect(node().tableId, isNull);
     expect(node().name, '');
   });
 
   test('มีชื่ออยู่แล้ว = ไม่ทับชื่อ ; เลิกผูกได้ ; ตารางที่ไม่มีอยู่ = ไม่ผูก', () {
     d.renameNode(store.id, 'คลังลูกค้า');
-    d.setStoreTable(store.id, 'to');
+    d.setStoreTable(store.id, tableRef(pc, 'to'));
     expect((node().tableId, node().name), ('to', 'คลังลูกค้า'));
     d.setStoreTable(store.id, null);
     expect(node().tableId, isNull);
-    d.setStoreTable(store.id, 'nope');
+    d.setStoreTable(store.id, tableRef(pc, 'nope'));
     expect(node().tableId, isNull);
   });
 
   test('entity / process ผูกตารางไม่ได้', () {
     final p = d.addNode(DfdKind.process, 300, 100)!;
-    d.setStoreTable(p.id, 'tu');
+    d.setStoreTable(p.id, tableRef(pc, 'tu'));
     expect(pc.dfdOf(tab).nodeById(p.id)!.tableId, isNull);
   });
 
   test('บันทึก-โหลดไฟล์แล้ว tableId ยังอยู่ ; ทำสำเนาวัตถุแล้วผูกตารางเดิมต่อ', () {
-    d.setStoreTable(store.id, 'tu');
+    d.setStoreTable(store.id, tableRef(pc, 'tu'));
     final back = roundTrip(pc.workspace);
     expect(dfdIn(back, tab).nodes.firstWhere((n) => n.id == store.id).tableId, 'tu');
 
@@ -62,7 +62,7 @@ void main() {
   });
 
   test('ตัวตรวจ: ตารางที่ผูกถูกลบ = เตือน ; ไม่ส่ง project = ไม่ตรวจ', () {
-    d.setStoreTable(store.id, 'tu');
+    d.setStoreTable(store.id, tableRef(pc, 'tu'));
     expect(validateDfd(pc.dfdOf(tab), workspace: pc.workspace).any((i) => i.code == 'dfd_store_table_missing'), false);
     pc.removeTable('tu');
     final issues = validateDfd(pc.dfdOf(tab), workspace: pc.workspace);
@@ -71,7 +71,7 @@ void main() {
   });
 
   test('gotoLinkedTable สลับไปแท็บ ER และเลือกตาราง', () {
-    d.setStoreTable(store.id, 'to');
+    d.setStoreTable(store.id, tableRef(pc, 'to'));
     expect(pc.activeDiagramId, tab);
     d.gotoLinkedTable(store.id);
     expect(pc.activeDiagramId, kErDiagramId);

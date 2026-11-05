@@ -83,7 +83,6 @@ class _NslDevAppState extends State<NslDevApp> with WidgetsBindingObserver {
   bool _recoveryPending = true;
   late final WorkspaceController _workspace = WorkspaceController();
   late final CanvasController _canvas = CanvasController();
-  late final DfdController _dfd = DfdController(_workspace.mainEr);
   late final AutosaveCoordinator? _autosave =
       widget.autosave == null ? null : AutosaveCoordinator(_workspace, widget.autosave!);
 
@@ -115,7 +114,6 @@ class _NslDevAppState extends State<NslDevApp> with WidgetsBindingObserver {
     _settings.removeListener(_onSettings);
     _workspace.removeListener(_onWorkspace);
     _autosave?.dispose();
-    _dfd.dispose();
     _workspace.dispose();
     _canvas.dispose();
     super.dispose();
@@ -139,7 +137,7 @@ class _NslDevAppState extends State<NslDevApp> with WidgetsBindingObserver {
         builder: (context, child) => MultiProvider(
           providers: [
             ChangeNotifierProvider<ProjectController>.value(value: _workspace.currentEr),
-            ChangeNotifierProvider<DfdController>.value(value: _dfd),
+            ChangeNotifierProvider<DfdController>.value(value: _workspace.currentDfd),
           ],
           child: child,
         ),

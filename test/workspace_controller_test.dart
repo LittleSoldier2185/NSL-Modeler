@@ -50,16 +50,15 @@ void main() {
 
     test('DFD: undo แล้วบันทึก = ไฟล์มีเนื้อหา DFD ที่ย้อนแล้ว ; undo ER ไม่แตะ DFD', () {
       final c = ProjectController(base());
-      final d = DfdController(c);
-      addTearDown(d.dispose);
       final tab = c.addDiagram(DocType.dfd, name: 'L0')!;
+      final d = dfdCtl(c, tab.id);
       d.addNode(DfdKind.process, 100, 100);
       d.addNode(DfdKind.entity, 400, 100);
       expect(dfdIn(roundTrip(c.workspace), tab.id).nodes, hasLength(2));
-      c.undo();
+      d.undo();
       expect(identical(c.documentById(tab.id)!.dfd, c.dfdOf(tab.id)), isTrue);
       expect(dfdIn(roundTrip(c.workspace), tab.id).nodes.map((n) => n.kind), [DfdKind.process]);
-      c.redo();
+      d.redo();
       expect(dfdIn(roundTrip(c.workspace), tab.id).nodes, hasLength(2));
 
       c.selectDiagram(c.erDocumentId);
@@ -129,13 +128,12 @@ void main() {
 
     setUp(() {
       c = ProjectController(base());
-      d = DfdController(c);
       tab = c.addDiagram(DocType.dfd, name: 'L0')!.id;
+      d = dfdCtl(c, tab);
       final s = d.addNode(DfdKind.store, 100, 300)!;
       store = s.id;
-      d.setStoreTable(store, c.project.tables.first.id);
+      d.setStoreTable(store, tableRef(c, c.project.tables.first.id));
     });
-    tearDown(() => d.dispose());
 
     test('ผูกตาราง = tableDocId เป็นเอกสาร ER ; เลิกผูก = null', () {
       expect(c.dfdOf(tab).nodeById(store)!.tableDocId, c.erDocumentId);
@@ -169,9 +167,8 @@ void main() {
       expect((pasted.tableId, pasted.tableDocId), (c.project.tables.first.id, c.erDocumentId));
 
       final other = ProjectController();
-      final od = DfdController(other);
-      addTearDown(od.dispose);
       final otab = other.addDiagram(DocType.dfd)!.id;
+      final od = dfdCtl(other, otab);
       od.pasteText(text);
       final n = other.dfdOf(otab).nodes.single;
       expect((n.tableId, n.tableDocId), (null, null));

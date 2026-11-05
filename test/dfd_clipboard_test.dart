@@ -6,6 +6,8 @@ import 'package:nsl_dev/core/models/workspace.dart';
 import 'package:nsl_dev/state/dfd_controller.dart';
 import 'package:nsl_dev/state/project_controller.dart';
 
+import 'support/project_helpers.dart';
+
 import 'migration_fixtures.dart';
 
 void main() {
@@ -15,8 +17,8 @@ void main() {
 
   setUp(() {
     pc = ProjectController(base());
-    d = DfdController(pc);
     tabA = pc.addDiagram(DocType.dfd, name: 'A')!.id;
+    d = dfdCtl(pc, tabA);
   });
 
   DfdDiagram dia(String id) => pc.dfdOf(id);
@@ -36,15 +38,16 @@ void main() {
     final text = d.copySelectionText()!;
 
     final tabB = pc.addDiagram(DocType.dfd, name: 'B')!.id;
-    expect(d.pasteText(text), 3);
+    final db = dfdCtl(pc, tabB);
+    expect(db.pasteText(text), 3);
     final b = dia(tabB);
     expect(b.nodes.length, 3);
     expect(b.flows.map((f) => f.label).toSet(), {'in', 'out'});
     expect(b.nodes.map((n) => n.id).toSet().intersection({e.id, p.id, s.id}), isEmpty);
     expect(b.nodes.firstWhere((n) => n.kind == DfdKind.process).number, '1.0'); // แผนภาพใหม่ ไม่ซ้ำจึงได้เลขเดิม
-    expect(d.selectedNodeIds.length, 3);
-    expect(b.nodeById(d.selectedNodeIds.first), isNotNull);
-    pc.undo();
+    expect(db.selectedNodeIds.length, 3);
+    expect(b.nodeById(db.selectedNodeIds.first), isNotNull);
+    db.undo();
     expect(dia(tabB).nodes, isEmpty);
   });
 
@@ -66,15 +69,14 @@ void main() {
 
   test('tableId ที่ไม่มีในโปรเจกต์ปลายทางถูกตัดออก แต่ที่มีอยู่คงไว้', () {
     final (_, _, s) = build();
-    d.setStoreTable(s.id, 'tu');
+    d.setStoreTable(s.id, tableRef(pc, 'tu'));
     d.setNodeSelection({s.id});
     final text = d.copySelectionText()!;
     expect(d.pasteText(text), 1);
     expect(dia(tabA).nodes.where((n) => n.tableId == 'tu').length, 2);
 
     final other = ProjectController(); // โปรเจกต์ว่าง ไม่มีตาราง tu
-    final d2 = DfdController(other);
-    other.addDiagram(DocType.dfd);
+    final d2 = dfdCtl(other, other.addDiagram(DocType.dfd)!.id);
     expect(d2.pasteText(text), 1);
     expect(other.dfdOf(other.activeDiagramId).nodes.single.tableId, isNull);
   });
@@ -108,6 +110,7 @@ void main() {
     d.setNodeSelection({e.id});
     final text = d.copySelectionText()!;
     pc.selectDiagram(kErDiagramId);
-    expect(d.pasteText(text), 0);
+    expect(pc.workspaceController.currentDfd.pasteText(text), 0);
+    expect(dia(tabA).nodes.length, 3);
   });
 }

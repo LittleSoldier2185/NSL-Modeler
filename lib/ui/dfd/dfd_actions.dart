@@ -41,9 +41,9 @@ class DfdActions {
       case Cmd.help:
         showShortcutsHelp(context);
       case Cmd.undo:
-        c.undo();
+        d.undo();
       case Cmd.redo:
-        c.redo();
+        d.redo();
       case Cmd.delete:
         d.deleteSelection();
       case Cmd.rename:

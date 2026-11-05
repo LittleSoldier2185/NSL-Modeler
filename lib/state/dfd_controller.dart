@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -8,33 +9,65 @@ import '../core/layout/dfd_layout.dart';
 import '../core/layout/dfd_resize.dart';
 import '../core/layout/diagram_geometry.dart' show snapToGrid, kGridSize;
 import '../core/models/dfd_model.dart';
+import '../core/models/doc_ref.dart';
 import '../core/models/workspace.dart';
-import 'project_controller.dart';
+import 'doc_controller.dart';
 import 'workspace_controller.dart';
 
 enum DfdTool { select, entity, process, store, flow }
 
-/// สถานะหน้าจอและคำสั่งแก้ไขของแท็บ DFD ที่เปิดอยู่ (เครื่องมือ การเลือก มุมมอง) — เนื้อหาและประวัติ undo อยู่ที่ [ProjectController]
-class DfdController extends ChangeNotifier {
-  DfdController(this.pc) {
-    pc.addListener(_onProject);
-  }
+/// controller ของเอกสาร DFD หนึ่งชิ้น: เนื้อหา + ประวัติ undo/redo ของเอกสารนี้ และสถานะหน้าจอ (เครื่องมือ การเลือก มุมมอง)
+///
+/// งานข้ามเอกสาร (สร้างแผนภาพย่อย, เปิดแท็บอื่น, ไปที่ตาราง ER) ทำผ่าน [workspace]
+class DfdController extends DocController {
+  /// controller ของเอกสาร DFD [doc] ใน [workspace] (สร้างโดย workspace controller)
+  DfdController.forDoc(super.doc, this.workspace) : assert(doc.content is DfdDiagram);
 
-  final ProjectController pc;
+  /// ตัวแทนตอนไม่มีเอกสาร DFD ที่ใช้งานอยู่: แผนภาพว่างที่ไม่อยู่ในโปรเจกต์ แก้ไขไม่ได้
+  DfdController.detached(this.workspace) : super(ProjectDocument.dfd(id: '', name: '', content: DfdDiagram()));
 
-  WorkspaceController get _w => pc.workspaceController;
-
-  @override
-  void dispose() {
-    pc.removeListener(_onProject);
-    super.dispose();
-  }
+  /// workspace ที่เอกสารนี้อยู่
+  final WorkspaceController workspace;
 
   // ---------- ข้อมูล ----------
 
-  bool get active => _w.activeDocument.type == DocType.dfd;
+  /// เอกสารนี้ยังอยู่ในโปรเจกต์ (ตัวแทนที่ไม่ผูกเอกสาร/เอกสารที่ถูกลบ = false แก้ไขไม่ได้)
+  bool get active => !disposed && identical(workspace.documentById(docId), doc);
 
-  DfdDiagram get diagram => _w.dfdOf(_w.activeId);
+  DfdDiagram get diagram => doc.dfd!;
+
+  @override
+  @protected
+  String snapshot() => jsonEncode(diagram.toJson());
+
+  @override
+  @protected
+  void restoreSnapshot(String snap) => doc.content = DfdDiagram.fromJson(jsonDecode(snap) as Map<String, dynamic>);
+
+  /// undo/redo อาจทำให้ของที่เลือกหายไป
+  @override
+  @protected
+  void afterRestore() => _pruneSelection();
+
+  /// แก้เนื้อหาแบบมีประวัติ (undo ขั้นเดียว)
+  void _edit(void Function(DfdDiagram d) change) {
+    if (!active) return;
+    editWithHistory(() => change(diagram));
+  }
+
+  /// แก้แบบสดระหว่างลาก — ครอบด้วย beginGesture / endGesture (undo ขั้นเดียว)
+  void _live(void Function(DfdDiagram d) change) {
+    if (!active) return;
+    change(diagram);
+    markLive();
+    notifyListeners();
+  }
+
+  @override
+  void beginGesture() {
+    if (!active) return;
+    super.beginGesture();
+  }
 
   // ---------- เครื่องมือ / การเลือก ----------
 
@@ -132,18 +165,13 @@ class DfdController extends ChangeNotifier {
     }
   }
 
-  void _onProject() {
-    // undo/ลบแท็บอาจทำให้ของที่เลือกหายไป
-    if (!active) return;
+  /// ตัดของที่เลือกซึ่งไม่มีในเนื้อหาแล้วออก (หลัง undo/redo)
+  void _pruneSelection() {
     final d = diagram;
-    final before = _nodes.length;
     _nodes.removeWhere((id) => d.nodeById(id) == null);
-    final lostFlow = _flow != null && d.flowById(_flow!) == null;
-    if (lostFlow) _flow = null;
+    if (_flow != null && d.flowById(_flow!) == null) _flow = null;
     if (_linkSource != null && d.nodeById(_linkSource!) == null) _linkSource = null;
-    final lostBoundary = _boundary != null && d.boundaryById(_boundary!) == null;
-    if (lostBoundary) _boundary = null;
-    if (before != _nodes.length || lostFlow || lostBoundary) notifyListeners();
+    if (_boundary != null && d.boundaryById(_boundary!) == null) _boundary = null;
   }
 
   // ---------- วัตถุ ----------
@@ -164,9 +192,9 @@ class DfdController extends ChangeNotifier {
       y = snapToGrid(y);
     }
     late DfdNode node;
-    pc.dfdEdit((d) {
+    _edit((d) {
       node = DfdNode(
-        id: pc.newId('n'),
+        id: workspace.newId('n'),
         kind: kind,
         name: _defaultName(kind),
         number: switch (kind) {
@@ -191,7 +219,7 @@ class DfdController extends ChangeNotifier {
   void updateNode(String id, void Function(DfdNode n) change) {
     final n = diagram.nodeById(id);
     if (n == null) return;
-    pc.dfdEdit((d) => change(d.nodeById(id)!));
+    _edit((d) => change(d.nodeById(id)!));
   }
 
   void renameNode(String id, String name) {
@@ -200,26 +228,31 @@ class DfdController extends ChangeNotifier {
     updateNode(id, (n) => n.name = name);
   }
 
-  /// ผูกที่เก็บข้อมูลกับตาราง ER ([tableId] null = เลิกผูก) ; ถ้าที่เก็บข้อมูลยังไม่มีชื่อ ใช้ชื่อตารางให้ — undo ขั้นเดียว
-  void setStoreTable(String id, String? tableId) {
+  /// ผูกที่เก็บข้อมูลกับตาราง [table] (เอกสาร ER + id ตาราง ; null หรือตารางที่ไม่มีอยู่ = เลิกผูก)
+  /// ถ้าที่เก็บข้อมูลยังไม่มีชื่อ ใช้ชื่อตารางให้ — undo ขั้นเดียว
+  void setStoreTable(String id, DocRef? table) {
     final n = diagram.nodeById(id);
-    if (n == null || n.kind != DfdKind.store || n.tableId == tableId) return;
-    final t = tableId == null ? null : pc.project.tableById(tableId);
+    if (n == null || n.kind != DfdKind.store) return;
+    final tid = table?.elementId;
+    final t = table == null || tid == null ? null : workspace.documentById(table.docId)?.er?.tableById(tid);
+    final docId = t == null ? null : table!.docId;
+    if (n.tableId == t?.id && (t == null || n.tableDocId == docId)) return;
     updateNode(id, (n) {
       n.tableId = t?.id;
-      n.tableDocId = t == null ? null : pc.erDocumentId;
+      n.tableDocId = docId;
       if (t != null && n.name.trim().isEmpty) n.name = t.name;
     });
   }
 
-  /// สลับไปแท็บ ER แรก แล้วเลือกตารางที่ที่เก็บข้อมูลนี้ผูกอยู่
+  /// เปิดแท็บเอกสาร ER ที่ที่เก็บข้อมูลนี้ผูกอยู่ แล้วเลือกตารางนั้น
   void gotoLinkedTable(String id) {
-    final tid = diagram.nodeById(id)?.tableId;
-    if (tid == null || pc.project.tableById(tid) == null) return;
-    final er = _w.documents.where((t) => t.type == DocType.er).firstOrNull;
-    if (er == null) return;
-    _w.openDocument(er.id);
-    pc.selectTable(tid);
+    final n = diagram.nodeById(id);
+    final tid = n?.tableId;
+    if (n == null || tid == null) return;
+    final er = workspace.erController(n.tableDocId ?? workspace.mainEr.docId);
+    if (er == null || er.project.tableById(tid) == null) return;
+    workspace.openDocument(er.docId);
+    er.selectTable(tid);
   }
 
   void setNodeNumber(String id, String number) {
@@ -232,7 +265,7 @@ class DfdController extends ChangeNotifier {
   void setNodesColor(Iterable<String> ids, int? argb) {
     final list = [for (final id in ids) if (diagram.nodeById(id) != null) id];
     if (list.isEmpty || list.every((id) => diagram.nodeById(id)!.color == argb)) return;
-    pc.dfdEdit((d) {
+    _edit((d) {
       for (final id in list) {
         d.nodeById(id)!.color = argb;
       }
@@ -244,7 +277,7 @@ class DfdController extends ChangeNotifier {
     if (_boundary != null) {
       final id = _boundary!;
       if (diagram.boundaryById(id) == null) return 0;
-      pc.dfdEdit((d) => d.boundaries.removeWhere((b) => b.id == id));
+      _edit((d) => d.boundaries.removeWhere((b) => b.id == id));
       _boundary = null;
       notifyListeners();
       return 1;
@@ -252,14 +285,14 @@ class DfdController extends ChangeNotifier {
     if (_flow != null) {
       final id = _flow!;
       if (diagram.flowById(id) == null) return 0;
-      pc.dfdEdit((d) => d.flows.removeWhere((f) => f.id == id));
+      _edit((d) => d.flows.removeWhere((f) => f.id == id));
       _flow = null;
       notifyListeners();
       return 1;
     }
     final ids = _nodes.where((id) => diagram.nodeById(id) != null).toSet();
     if (ids.isEmpty) return 0;
-    pc.dfdEdit((d) {
+    _edit((d) {
       d.nodes.removeWhere((n) => ids.contains(n.id));
       d.flows.removeWhere((f) => ids.contains(f.fromId) || ids.contains(f.toId));
     });
@@ -274,7 +307,7 @@ class DfdController extends ChangeNotifier {
   double _rawDx = 0, _rawDy = 0;
 
   void beginMove() {
-    pc.dfdBeginGesture();
+    beginGesture();
     _origin = {
       for (final id in _nodes)
         if (diagram.nodeById(id) != null) id: (diagram.nodeById(id)!.x, diagram.nodeById(id)!.y),
@@ -295,7 +328,7 @@ class DfdController extends ChangeNotifier {
       sx = snapToGrid(ref.$1 + _rawDx, grid) - ref.$1;
       sy = snapToGrid(ref.$2 + _rawDy, grid) - ref.$2;
     }
-    pc.dfdLive((d) {
+    _live((d) {
       for (final e in o.entries) {
         final n = d.nodeById(e.key);
         if (n == null) continue;
@@ -307,7 +340,7 @@ class DfdController extends ChangeNotifier {
 
   void endMove() {
     _origin = null;
-    pc.dfdEndGesture();
+    endGesture();
   }
 
   // ---------- ปรับขนาดด้วยการลากจุดจับ ----------
@@ -331,7 +364,7 @@ class DfdController extends ChangeNotifier {
     final b = selectedBoundary;
     final n = selectedNode;
     if (b == null && n == null) return;
-    pc.dfdBeginGesture();
+    beginGesture();
     _resizeIsBoundary = b != null;
     _resizeId = b?.id ?? n!.id;
     _resizeHandle = h;
@@ -350,7 +383,7 @@ class DfdController extends ChangeNotifier {
     final r = isB
         ? resizeDfdRect(r0, h, _resizeDx, _resizeDy, grid: grid, minW: 80, minH: kDfdBoundaryLabelH + 20, maxSide: 4000)
         : resizeDfdRect(r0, h, _resizeDx, _resizeDy, grid: grid);
-    pc.dfdLive((d) {
+    _live((d) {
       if (isB) {
         d.boundaryById(id)
           ?..x = r.left
@@ -373,14 +406,14 @@ class DfdController extends ChangeNotifier {
     _resizeId = null;
     _resizeHandle = null;
     _resizeStart = null;
-    pc.dfdEndGesture();
+    endGesture();
   }
 
   /// ขยับวัตถุที่เลือกด้วยปุ่มลูกศร (undo ต่อการกด)
   bool nudge(double dx, double dy) {
     final ids = _nodes.where((id) => diagram.nodeById(id) != null).toList();
     if (ids.isEmpty) return false;
-    pc.dfdEdit((d) {
+    _edit((d) {
       for (final id in ids) {
         final n = d.nodeById(id)!;
         n.x += dx;
@@ -396,10 +429,10 @@ class DfdController extends ChangeNotifier {
     if (src.isEmpty) return 0;
     final map = <String, String>{};
     final created = <String>[];
-    pc.dfdEdit((d) {
+    _edit((d) {
       for (final n in src) {
         final copy = DfdNode(
-          id: pc.newId('n'),
+          id: workspace.newId('n'),
           kind: n.kind,
           name: n.name,
           number: switch (n.kind) {
@@ -422,7 +455,7 @@ class DfdController extends ChangeNotifier {
       for (final f in List.of(d.flows)) {
         if (map.containsKey(f.fromId) && map.containsKey(f.toId)) {
           d.flows.add(DfdFlow(
-            id: pc.newId('f'),
+            id: workspace.newId('f'),
             fromId: map[f.fromId]!,
             toId: map[f.toId]!,
             label: f.label,
@@ -464,8 +497,8 @@ class DfdController extends ChangeNotifier {
 
   DfdBoundary _addBoundary(double x, double y, double w, double h, String? name) {
     late DfdBoundary b;
-    pc.dfdEdit((d) {
-      b = DfdBoundary(id: pc.newId('b'), name: name ?? tr('ขอบเขตระบบ'), x: x, y: y, w: w, h: h);
+    _edit((d) {
+      b = DfdBoundary(id: workspace.newId('b'), name: name ?? tr('ขอบเขตระบบ'), x: x, y: y, w: w, h: h);
       d.boundaries.add(b);
     });
     _nodes.clear();
@@ -478,13 +511,13 @@ class DfdController extends ChangeNotifier {
   void renameBoundary(String id, String name) {
     final b = diagram.boundaryById(id);
     if (b == null || b.name == name) return;
-    pc.dfdEdit((d) => d.boundaryById(id)!.name = name);
+    _edit((d) => d.boundaryById(id)!.name = name);
   }
 
   void setBoundaryColor(String id, int? argb) {
     final b = diagram.boundaryById(id);
     if (b == null || b.color == argb) return;
-    pc.dfdEdit((d) => d.boundaryById(id)!.color = argb);
+    _edit((d) => d.boundaryById(id)!.color = argb);
   }
 
   Map<String, (double, double)>? _bOrigin; // วัตถุที่อยู่ในกรอบตอนเริ่มลาก
@@ -495,7 +528,7 @@ class DfdController extends ChangeNotifier {
   void beginBoundaryMove() {
     final b = selectedBoundary;
     if (b == null) return;
-    pc.dfdBeginGesture();
+    beginGesture();
     _bStart = (b.x, b.y);
     _bOrigin = {
       for (final n in diagram.nodes)
@@ -515,7 +548,7 @@ class DfdController extends ChangeNotifier {
       sx = snapToGrid(start.$1 + _bDx, grid) - start.$1;
       sy = snapToGrid(start.$2 + _bDy, grid) - start.$2;
     }
-    pc.dfdLive((d) {
+    _live((d) {
       final b = d.boundaryById(id);
       if (b == null) return;
       b
@@ -532,14 +565,14 @@ class DfdController extends ChangeNotifier {
   void endBoundaryMove() {
     _bOrigin = null;
     _bStart = null;
-    pc.dfdEndGesture();
+    endGesture();
   }
 
   // ---------- แตกรายละเอียด Level 0 → Level 1 ----------
 
   /// แท็บ DFD อื่นที่ลิงก์เป็นแผนภาพย่อยของกระบวนการในแท็บ [fromTabId] ได้ (ไม่ใช่ตัวเอง และไม่ทำให้ลิงก์วนเป็นวง)
   List<ProjectDocument> childCandidates(String fromTabId) {
-    final w = _w.workspace;
+    final w = workspace.workspace;
     return [
       for (final t in w.documents)
         if (t.type == DocType.dfd && t.id != fromTabId && !_reaches(w, t.id, fromTabId)) t,
@@ -564,7 +597,7 @@ class DfdController extends ChangeNotifier {
   bool setProcessChild(String nodeId, String? childTabId) {
     final n = diagram.nodeById(nodeId);
     if (!active || n == null || n.kind != DfdKind.process) return false;
-    if (childTabId != null && !childCandidates(_w.activeId).any((t) => t.id == childTabId)) return false;
+    if (childTabId != null && !childCandidates(docId).any((t) => t.id == childTabId)) return false;
     if (n.childId == childTabId) return true;
     updateNode(nodeId, (n) => n.childId = childTabId);
     return true;
@@ -573,19 +606,19 @@ class DfdController extends ChangeNotifier {
   /// สร้างแผนภาพย่อยใหม่ของกระบวนการ [nodeId] : ใส่ผู้ใช้ภายนอก/ที่เก็บข้อมูลที่ต่ออยู่ + กระบวนการย่อย 1 ตัว
   /// และเส้นข้อมูลเดียวกับแม่ (เริ่มต้นสมดุลพอดี ให้ผู้ใช้แตกกระบวนการต่อเอง) แล้วลิงก์และเปิดแท็บนั้น
   ProjectDocument? createChildFor(String nodeId) {
-    final parentTab = _w.activeId;
     final parent = diagram;
     final proc = parent.nodeById(nodeId);
     if (!active || proc == null || proc.kind != DfdKind.process) return null;
     final base = proc.name.trim().isEmpty ? proc.number : proc.name.trim();
-    final tab = _w.addDocument(DocType.dfd, name: 'L1 – $base');
-    if (tab == null) return null;
+    final tab = workspace.addDocument(DocType.dfd, name: 'L1 – $base');
+    final child = tab == null ? null : workspace.dfdController(tab.id);
+    if (tab == null || child == null) return null;
     final dot = proc.number.indexOf('.');
     final prefix = proc.number.trim().isEmpty ? null : (dot > 0 ? proc.number.substring(0, dot) : proc.number.trim());
-    pc.dfdEdit((d) {
+    child._edit((d) {
       final map = <String, String>{}; // วัตถุแม่ -> วัตถุในแผนภาพย่อย (รวมกระบวนการแม่ -> กระบวนการย่อย)
       final sub = DfdNode(
-        id: pc.newId('n'),
+        id: workspace.newId('n'),
         kind: DfdKind.process,
         name: proc.name,
         number: prefix == null ? d.nextProcessNumber() : '$prefix.1',
@@ -600,7 +633,7 @@ class DfdController extends ChangeNotifier {
         if (other == null || other.kind == DfdKind.process) continue; // เพื่อนบ้านที่เป็นกระบวนการอื่นไม่มีตัวแทนในแผนภาพย่อย
         final copyId = map.putIfAbsent(otherId, () {
           final c = DfdNode(
-            id: pc.newId('n'),
+            id: workspace.newId('n'),
             kind: other.kind,
             name: other.name,
             number: other.kind == DfdKind.store ? other.number : '',
@@ -612,7 +645,7 @@ class DfdController extends ChangeNotifier {
           return c.id;
         });
         d.flows.add(DfdFlow(
-          id: pc.newId('f'),
+          id: workspace.newId('f'),
           fromId: f.fromId == proc.id ? sub.id : copyId,
           toId: f.toId == proc.id ? sub.id : copyId,
           label: f.label,
@@ -621,26 +654,24 @@ class DfdController extends ChangeNotifier {
         ));
       }
     });
-    autoLayout();
-    _w.openDocument(parentTab);
+    child.autoLayout();
     updateNode(nodeId, (n) => n.childId = tab.id);
-    _w.openDocument(tab.id);
+    workspace.openDocument(tab.id);
     return tab;
   }
 
   /// เปิดแท็บแผนภาพย่อยของกระบวนการ [nodeId] ; คืน false ถ้าไม่มี
   bool openChild(String nodeId) {
     final cid = diagram.nodeById(nodeId)?.childId;
-    if (cid == null || _w.documentById(cid) == null) return false;
-    _w.openDocument(cid);
-    return true;
+    if (cid == null) return false;
+    return workspace.openDocument(cid);
   }
 
   /// กระบวนการ (และแท็บของมัน) ที่ลิงก์มาที่แท็บ [tabId] เป็นแผนภาพย่อย
   List<(ProjectDocument, DfdNode)> parentsOf(String tabId) => [
-        for (final t in _w.documents)
+        for (final t in workspace.documents)
           if (t.type == DocType.dfd)
-            for (final n in _w.dfdOf(t.id).nodes)
+            for (final n in t.dfd!.nodes)
               if (n.kind == DfdKind.process && n.childId == tabId) (t, n),
       ];
 
@@ -658,12 +689,13 @@ class DfdController extends ChangeNotifier {
   int pasteText(String? text, {double offset = 30}) {
     final payload = decodeDfdClipboard(text);
     if (!active || payload == null) return 0;
+    final er = workspace.currentEr;
     final map = <String, String>{};
     final created = <String>[];
     String? createdBoundary;
-    pc.dfdEdit((d) {
+    _edit((d) {
       for (final src in payload.nodes) {
-        final newId = pc.newId('n');
+        final newId = workspace.newId('n');
         map[src.id] = newId;
         final number = switch (src.kind) {
           DfdKind.process => d.nodes.any((n) => n.kind == DfdKind.process && n.number == src.number) || src.number.isEmpty
@@ -675,7 +707,7 @@ class DfdController extends ChangeNotifier {
           DfdKind.entity => '',
         };
         final tid = src.tableId;
-        final keep = tid != null && pc.project.tableById(tid) != null;
+        final keep = tid != null && er.project.tableById(tid) != null;
         d.nodes.add(DfdNode(
           id: newId,
           kind: src.kind,
@@ -687,7 +719,7 @@ class DfdController extends ChangeNotifier {
           h: src.h,
           color: src.color,
           tableId: keep ? tid : null,
-          tableDocId: keep ? pc.erDocumentId : null,
+          tableDocId: keep ? er.docId : null,
         ));
         created.add(newId);
       }
@@ -695,7 +727,7 @@ class DfdController extends ChangeNotifier {
         final a = map[f.fromId], b = map[f.toId];
         if (a == null || b == null) continue;
         d.flows.add(DfdFlow(
-          id: pc.newId('f'),
+          id: workspace.newId('f'),
           fromId: a,
           toId: b,
           label: f.label,
@@ -705,7 +737,7 @@ class DfdController extends ChangeNotifier {
       }
       for (final b in payload.boundaries) {
         final nb = DfdBoundary(
-          id: pc.newId('b'),
+          id: workspace.newId('b'),
           name: b.name,
           x: b.x + offset,
           y: b.y + offset,
@@ -752,8 +784,8 @@ class DfdController extends ChangeNotifier {
   DfdFlow? addFlow(String fromId, String toId, {String label = ''}) {
     if (!active || fromId == toId || diagram.nodeById(fromId) == null || diagram.nodeById(toId) == null) return null;
     late DfdFlow f;
-    pc.dfdEdit((d) {
-      f = DfdFlow(id: pc.newId('f'), fromId: fromId, toId: toId, label: label);
+    _edit((d) {
+      f = DfdFlow(id: workspace.newId('f'), fromId: fromId, toId: toId, label: label);
       d.flows.add(f);
     });
     _nodes.clear();
@@ -764,7 +796,7 @@ class DfdController extends ChangeNotifier {
 
   void updateFlow(String id, void Function(DfdFlow f) change) {
     if (diagram.flowById(id) == null) return;
-    pc.dfdEdit((d) => change(d.flowById(id)!));
+    _edit((d) => change(d.flowById(id)!));
   }
 
   void setFlowLabel(String id, String label) {
@@ -797,13 +829,15 @@ class DfdController extends ChangeNotifier {
   // ---------- มุมมอง (เลื่อน/ซูม) แยกต่อแท็บ ----------
 
   static const minScale = 0.2, maxScale = 3.0;
-  final Map<String, ({Offset offset, double scale})> _views = {};
+  Offset _offset = const Offset(120, 90);
+  double _scale = 1;
 
-  Offset get offset => _views[_w.activeId]?.offset ?? const Offset(120, 90);
-  double get scale => _views[_w.activeId]?.scale ?? 1;
+  Offset get offset => _offset;
+  double get scale => _scale;
 
   void _setView(Offset o, double s) {
-    _views[_w.activeId] = (offset: o, scale: s.clamp(minScale, maxScale).toDouble());
+    _offset = o;
+    _scale = s.clamp(minScale, maxScale).toDouble();
     notifyListeners();
   }
 
@@ -832,7 +866,7 @@ class DfdController extends ChangeNotifier {
       return p != null && (p.x != n.x || p.y != n.y);
     });
     if (!moved) return false;
-    pc.dfdEdit((d) {
+    _edit((d) {
       for (final n in d.nodes) {
         final p = pos[n.id];
         if (p == null) continue;

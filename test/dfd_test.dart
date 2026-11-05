@@ -239,8 +239,8 @@ void main() {
 
     setUp(() {
       pc = ProjectController(base());
-      d = DfdController(pc);
       tab = pc.addDiagram(DocType.dfd)!.id;
+      d = dfdCtl(pc, tab);
     });
 
     test('วางวัตถุ: เลขลำดับ/รหัสอัตโนมัติ ถูกเลือก กลับโหมดเลือก; ER วางไม่ได้', () {
@@ -253,7 +253,7 @@ void main() {
       expect(d.tool, DfdTool.select);
       expect(d.diagram.nodes.length, 3);
       pc.selectDiagram(kErDiagramId);
-      expect(d.addNode(DfdKind.entity, 0, 0), isNull);
+      expect(pc.workspaceController.currentDfd.addNode(DfdKind.entity, 0, 0), isNull);
     });
 
     test('snap: ตำแหน่งปัดเข้าช่อง 20', () {
@@ -302,26 +302,27 @@ void main() {
       d.moveBy(5, 5, grid: 20);
       d.endMove();
       expect(d.diagram.nodeById(b.id)!.x - d.diagram.nodeById(a.id)!.x, bx - ax);
-      pc.undo();
+      d.undo();
       expect(d.diagram.nodeById(a.id)!.x, ax);
       expect(d.diagram.nodeById(b.id)!.x, bx);
-      pc.redo();
+      d.redo();
       expect(d.diagram.nodeById(a.id)!.x, isNot(ax));
     });
 
     test('ไม่ขยับ = ไม่มีประวัติ', () {
       d.addNode(DfdKind.entity, 0, 0);
-      pc.undo();
-      pc.redo();
+      d.undo();
+      d.redo();
       d.beginMove();
       d.endMove();
-      pc.undo();
+      d.undo();
       expect(d.diagram.nodes, isEmpty);
     });
 
     test('undo/redo แยกต่อแท็บ และไม่ปนกับ ER', () {
+      final w = pc.workspaceController;
       final other = pc.addDiagram(DocType.dfd)!.id;
-      d.addNode(DfdKind.entity, 0, 0); // อยู่ในแท็บ "other" (เปิดอยู่)
+      dfdCtl(pc, other).addNode(DfdKind.entity, 0, 0); // อยู่ในแท็บ "other" (เปิดอยู่)
       pc.selectDiagram(tab);
       d.addNode(DfdKind.entity, 0, 0);
       d.addNode(DfdKind.process, 300, 0);
@@ -330,34 +331,34 @@ void main() {
       expect(pc.canUndo, true);
 
       // undo ที่แท็บ ER ย้อนตาราง ไม่แตะ DFD
-      pc.undo();
+      w.undo();
       expect(pc.project.tables.any((t) => t.name == 'x'), false);
       expect(pc.dfdOf(tab).nodes.length, 2);
       expect(pc.dfdOf(other).nodes.length, 1);
 
       // undo ที่แท็บ DFD ย้อนเฉพาะแท็บนั้น
       pc.selectDiagram(tab);
-      pc.undo();
+      w.undo();
       expect(pc.dfdOf(tab).nodes.length, 1);
       expect(pc.dfdOf(other).nodes.length, 1);
       pc.selectDiagram(other);
-      expect(pc.canUndo, true);
-      pc.undo();
+      expect(w.canUndo, true);
+      w.undo();
       expect(pc.dfdOf(other).nodes, isEmpty);
       expect(pc.dfdOf(tab).nodes.length, 1);
       pc.selectDiagram(tab);
-      pc.redo();
+      w.redo();
       expect(pc.dfdOf(tab).nodes.length, 2);
       // undo ของ ER ไม่ทำให้เนื้อหา DFD หาย
       pc.selectDiagram(kErDiagramId);
-      pc.redo();
+      w.redo();
       expect(pc.dfdOf(tab).nodes.length, 2);
     });
 
     test('undo ทำให้ของที่เลือกหายไป = ล้างการเลือกที่ค้าง', () {
       final a = d.addNode(DfdKind.entity, 0, 0)!;
       expect(d.selectedNodeIds, {a.id});
-      pc.undo();
+      d.undo();
       expect(d.selectedNodeIds, isEmpty);
     });
 
@@ -385,7 +386,7 @@ void main() {
       expect(d.scale, DfdController.maxScale);
       final other = pc.addDiagram(DocType.dfd)!.id;
       expect(other, isNot(tab));
-      expect(d.scale, 1); // แท็บใหม่ใช้มุมมองของตัวเอง
+      expect(dfdCtl(pc, other).scale, 1); // แท็บใหม่ใช้มุมมองของตัวเอง
       pc.selectDiagram(tab);
       expect(d.scale, DfdController.maxScale);
       d.addNode(DfdKind.entity, 5000, 5000);
@@ -452,10 +453,10 @@ void main() {
       await tester.pumpWidget(NslDevApp(settings: AppSettings(lang: lang)));
       final ctx = tester.element(find.byType(HomePage));
       c = ctx.read<ProjectController>();
-      d = ctx.read<DfdController>();
       final tab = c.addDiagram(DocType.dfd, name: 'L1')!;
       if (withSample) setDfd(c, tab.id, sample());
       await tester.pump();
+      d = ctx.read<DfdController>(); // controller ของแท็บ DFD ที่เพิ่งเปิด
       d.setTool(DfdTool.select);
       d.panBy(Offset.zero);
       await tester.pump();
@@ -549,7 +550,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
       expect(d.diagram.nodeById('p')!.x, greaterThan(x0 + 30));
       expect(d.selectedNodeIds, {'p'});
-      c.undo();
+      d.undo();
       expect(d.diagram.nodeById('p')!.x, x0);
 
       // กรอบเลือกครอบ Customer + Order
@@ -580,7 +581,7 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.delete);
       await tester.pump();
       expect(d.diagram.flowById('f1'), isNull);
-      c.undo();
+      d.undo();
       expect(d.diagram.flowById('f1'), isNotNull);
     });
 

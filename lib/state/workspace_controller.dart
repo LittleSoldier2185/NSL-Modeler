@@ -7,6 +7,7 @@ import '../core/models/diagram.dart';
 import '../core/models/doc_ref.dart';
 import '../core/models/project.dart';
 import '../core/models/workspace.dart';
+import 'dfd_controller.dart';
 import 'doc_controller.dart';
 import 'project_controller.dart';
 
@@ -64,11 +65,17 @@ class WorkspaceController extends ChangeNotifier {
     if (doc == null) return null;
     final DocController? c = switch (doc.type) {
       DocType.er => ProjectController.forDoc(doc, this),
-      DocType.dfd => null,
+      DocType.dfd => DfdController.forDoc(doc, this),
       null => null,
     };
     if (c != null) _register(c);
     return c;
+  }
+
+  /// controller ของเอกสาร DFD [id] (null = ไม่ใช่เอกสาร DFD)
+  DfdController? dfdController(String id) {
+    final c = controllerOf(id);
+    return c is DfdController ? c : null;
   }
 
   ProjectController? erController(String id) {
@@ -158,8 +165,6 @@ class WorkspaceController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// นับว่าโปรเจกต์มีการแก้ที่ยังไม่บันทึก (ไม่ได้ผ่าน controller ของเอกสาร)
-  void markDirty() => _structureDirty = true;
 
   // ---------- เอกสาร ----------
 
@@ -370,6 +375,15 @@ class WorkspaceController extends ChangeNotifier {
     return (d.type == DocType.er ? erController(d.id) : null) ?? _mainEr;
   }
 
+  /// ตัวแทนตอนเอกสารที่ใช้งานไม่ใช่ DFD (แผนภาพว่าง แก้ไขไม่ได้)
+  late final DfdController _noDfd = DfdController.detached(this);
+
+  /// controller ของ DFD ที่ใช้งานอยู่ (แท็บที่เปิดไม่ใช่ DFD = ตัวแทนที่ว่างและแก้ไขไม่ได้)
+  DfdController get currentDfd {
+    final d = activeDocument;
+    return (d.type == DocType.dfd ? dfdController(d.id) : null) ?? _noDfd;
+  }
+
   /// controller ของเอกสารที่ใช้งานอยู่
   DocController get activeController => controllerOf(activeId) ?? _mainEr;
 
@@ -384,6 +398,7 @@ class WorkspaceController extends ChangeNotifier {
       _unregister(id);
     }
     _mainEr.dispose();
+    _noDfd.dispose();
     super.dispose();
   }
 }

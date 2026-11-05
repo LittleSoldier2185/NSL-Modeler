@@ -137,6 +137,7 @@ void main() {
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
       expect(c.activeDiagramId, tab.id);
+      d = dfdCtl(c, tab.id);
       expect(d.selectedNodeIds, {'n1'});
       // เลื่อนไปที่วัตถุ: จุดกึ่งกลางจอ = กึ่งกลางวัตถุ
       final n = d.diagram.nodeById('n1')!;

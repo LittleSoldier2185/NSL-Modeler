@@ -7,6 +7,8 @@ import 'package:nsl_dev/core/models/workspace.dart';
 import 'package:nsl_dev/state/dfd_controller.dart';
 import 'package:nsl_dev/state/project_controller.dart';
 
+import 'support/project_helpers.dart';
+
 import 'migration_fixtures.dart';
 
 void main() {
@@ -61,8 +63,7 @@ void main() {
 
     setUp(() {
       pc = ProjectController(base());
-      d = DfdController(pc);
-      pc.addDiagram(DocType.dfd);
+      d = dfdCtl(pc, pc.addDiagram(DocType.dfd)!.id);
       n = d.addNode(DfdKind.process, 300, 200)!;
     });
 
@@ -77,7 +78,7 @@ void main() {
       d.resizeBy(0, 20);
       d.endResize();
       expect((cur().w, cur().h), (w0 + 30, h0 + 20));
-      pc.undo();
+      d.undo();
       expect((cur().w, cur().h), (w0, h0));
     });
 

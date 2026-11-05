@@ -19,7 +19,6 @@ import '../core/models/workspace.dart';
 import '../core/validate/issue.dart';
 import '../core/validate/validator.dart';
 import 'doc_controller.dart';
-import 'snapshot_history.dart';
 import 'workspace_controller.dart';
 
 /// controller ของเอกสาร ER หนึ่งชิ้น: เนื้อหา ([project]) + selection + undo/redo ของเอกสารนี้
@@ -140,8 +139,6 @@ class ProjectController extends DocController {
     _attOrigin = null;
     _groupOrigin = null;
     _resizeOrigin = null;
-    _histories.clear();
-    _dfdGestureId = null;
     notifyListeners();
   }
 
@@ -205,108 +202,6 @@ class ProjectController extends DocController {
 
   @Deprecated('ใช้ workspaceController.reorderTab')
   void moveDiagram(String id, int toIndex) => workspaceController.reorderTab(id, toIndex);
-
-  // ---------- undo / redo ----------
-
-  // --- ประวัติของแท็บ DFD: แยกต่อเอกสาร (snapshot เฉพาะเนื้อหาของเอกสารนั้น) ---
-
-  /// ประวัติ undo/redo ของเอกสาร DFD (key = id เอกสาร)
-  final Map<String, SnapshotHistory> _histories = {};
-
-  SnapshotHistory _hist(String docId) =>
-      _histories.putIfAbsent(docId, () => SnapshotHistory(max: DocController.maxHistory));
-
-  /// แท็บ DFD ที่กำลังลากอยู่ (ลากได้ทีละแท็บ)
-  String? _dfdGestureId;
-
-  /// เอกสาร DFD ที่เปิดอยู่ (null = แท็บที่เปิดไม่ใช่ DFD)
-  ProjectDocument? get _activeDfdDoc {
-    final d = workspaceController.activeDocument;
-    return d.type == DocType.dfd ? d : null;
-  }
-
-  String _dfdSnapshot(ProjectDocument doc) => jsonEncode(doc.dfd!.toJson());
-
-  /// แก้เนื้อหา DFD ของแท็บที่เปิดอยู่แบบมีประวัติ (undo ขั้นเดียว)
-  void dfdEdit(void Function(DfdDiagram d) change) {
-    final doc = _activeDfdDoc;
-    if (doc == null) return;
-    _hist(doc.id).push(_dfdSnapshot(doc));
-    change(doc.dfd!);
-    workspaceController.markDirty();
-    notifyListeners();
-  }
-
-  /// แก้ DFD แบบสดระหว่างลาก — ครอบด้วย dfdBeginGesture / dfdEndGesture (undo ขั้นเดียว)
-  void dfdLive(void Function(DfdDiagram d) change) {
-    final doc = _activeDfdDoc;
-    if (doc == null) return;
-    change(doc.dfd!);
-    notifyListeners();
-  }
-
-  void dfdBeginGesture() {
-    final doc = _activeDfdDoc;
-    if (_dfdGestureId != null || doc == null) return;
-    _dfdGestureId = doc.id;
-    _hist(doc.id).beginGesture(_dfdSnapshot(doc));
-  }
-
-  void dfdEndGesture() {
-    final id = _dfdGestureId;
-    _dfdGestureId = null;
-    if (id == null) return;
-    final h = _histories[id];
-    final doc = workspaceController.documentById(id);
-    if (h == null || !h.gestureActive || doc?.dfd == null) {
-      h?.cancelGesture();
-      return;
-    }
-    if (h.endGesture(_dfdSnapshot(doc!))) workspaceController.markDirty();
-    notifyListeners();
-  }
-
-  void _dfdUndoRedo(ProjectDocument doc, bool undo) {
-    final h = _histories[doc.id];
-    if (h == null || !(undo ? h.canUndo : h.canRedo)) return;
-    final cur = _dfdSnapshot(doc);
-    final snap = undo ? h.undo(cur)! : h.redo(cur)!;
-    doc.content = DfdDiagram.fromJson(jsonDecode(snap));
-    workspaceController.markDirty();
-    notifyListeners();
-  }
-
-  @override
-  bool get canUndo {
-    final dfd = _activeDfdDoc;
-    return dfd != null ? (_histories[dfd.id]?.canUndo ?? false) : super.canUndo;
-  }
-
-  @override
-  bool get canRedo {
-    final dfd = _activeDfdDoc;
-    return dfd != null ? (_histories[dfd.id]?.canRedo ?? false) : super.canRedo;
-  }
-
-  @override
-  void undo() {
-    final dfd = _activeDfdDoc;
-    if (dfd != null) {
-      _dfdUndoRedo(dfd, true);
-      return;
-    }
-    super.undo();
-  }
-
-  @override
-  void redo() {
-    final dfd = _activeDfdDoc;
-    if (dfd != null) {
-      _dfdUndoRedo(dfd, false);
-      return;
-    }
-    super.redo();
-  }
 
   // ---------- gesture (ลาก) : นับเป็น 1 ขั้น undo ----------
 

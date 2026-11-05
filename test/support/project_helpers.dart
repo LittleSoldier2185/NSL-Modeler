@@ -1,4 +1,6 @@
 import 'package:nsl_dev/core/models/dfd_model.dart';
+import 'package:nsl_dev/core/models/doc_ref.dart';
+import 'package:nsl_dev/state/dfd_controller.dart';
 import 'package:nsl_dev/core/models/project.dart';
 import 'package:nsl_dev/core/models/workspace.dart';
 import 'package:nsl_dev/core/storage/project_file.dart';
@@ -16,9 +18,16 @@ Project erOf(Workspace w) => w.firstEr!.er!;
 /// เนื้อหา DFD ของเอกสาร [id] ใน [w] (ต้องมีอยู่)
 DfdDiagram dfdIn(Workspace w, String id) => w.documentById(id)!.dfd!;
 
+/// controller ของเอกสาร DFD [id] ในโปรเจกต์ของ [c]
+DfdController dfdCtl(ProjectController c, String id) => c.workspaceController.dfdController(id)!;
+
+/// อ้างถึงตาราง [tableId] ในเอกสาร ER ของ [c] (ใช้ผูกที่เก็บข้อมูล)
+DocRef tableRef(ProjectController c, String tableId) =>
+    DocRef(docId: c.erDocumentId, elementId: tableId, kind: DocRefKind.storeTable);
+
 /// แทนเนื้อหาของเอกสาร DFD [id] ในโปรเจกต์ที่ controller ถืออยู่ (เตรียมข้อมูลเทสต์ ไม่เข้าประวัติ undo)
 void setDfd(ProjectController c, String id, DfdDiagram d) {
-  final doc = c.documentById(id)!;
+  final doc = c.workspaceController.documentById(id)!;
   assert(doc.type == DocType.dfd);
   doc.content = d;
 }

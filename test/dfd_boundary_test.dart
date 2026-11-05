@@ -16,8 +16,8 @@ void main() {
 
   setUp(() {
     pc = ProjectController(base());
-    d = DfdController(pc);
     tab = pc.addDiagram(DocType.dfd)!.id;
+    d = dfdCtl(pc, tab);
     a = d.addNode(DfdKind.process, 200, 200)!;
     b = d.addNode(DfdKind.store, 500, 200)!;
   });
@@ -36,7 +36,7 @@ void main() {
     }
     expect(d.selectedBoundaryId, k.id);
     expect(d.selectedNodeIds, isEmpty);
-    pc.undo();
+    d.undo();
     expect(dia().boundaries, isEmpty);
   });
 
@@ -60,7 +60,7 @@ void main() {
     expect((dia().nodeById(a.id)!.x, dia().nodeById(a.id)!.y), (ax + 40, ay + 20));
     expect(dia().nodeById(outside.id)!.x, ox);
     expect(dia().boundaryById(k.id)!.x, k.x);
-    pc.undo();
+    d.undo();
     expect((dia().nodeById(a.id)!.x, dia().nodeById(a.id)!.y), (ax, ay));
   });
 

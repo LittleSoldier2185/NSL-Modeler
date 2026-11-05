@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/l10n/l10n.dart';
 import '../../core/models/dfd_model.dart';
+import '../../core/models/doc_ref.dart';
 import '../../core/validate/dfd_validator.dart';
 import '../../core/validate/issue.dart';
 import '../../state/dfd_controller.dart';
@@ -504,7 +505,8 @@ class _StoreTable extends StatelessWidget {
             value: value,
             items: ids,
             labelOf: (id) => id == none ? tr('— ไม่ผูก —') : pc.project.tableById(id)!.name,
-            onChanged: (id) => d.setStoreTable(node.id, id == none ? null : id),
+            onChanged: (id) => d.setStoreTable(
+                node.id, id == none ? null : DocRef(docId: pc.erDocumentId, elementId: id, kind: DocRefKind.storeTable)),
           ),
         ),
         if (node.tableId != null && linked == null)
@@ -755,7 +757,7 @@ class _Issues extends StatelessWidget {
               borderRadius: BorderRadius.circular(6),
               onTap: () {
                 w.openDocument(tab.id);
-                d.selectNode(proc.id);
+                w.dfdController(tab.id)?.selectNode(proc.id);
               },
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4),

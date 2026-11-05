@@ -20,8 +20,8 @@ void main() {
 
   setUp(() {
     pc = ProjectController(base());
-    d = DfdController(pc);
     l0 = pc.addDiagram(DocType.dfd, name: 'L0')!.id;
+    d = dfdCtl(pc, l0);
     cust = d.addNode(DfdKind.entity, 100, 100)!;
     d.renameNode(cust.id, 'Customer');
     proc = d.addNode(DfdKind.process, 400, 100)!;
@@ -48,9 +48,10 @@ void main() {
   test('แผนภาพย่อยขาดเส้น = เตือนไม่สมดุล (ขาด) ; เติมกลับแล้วหาย', () {
     final tab = d.createChildFor(proc.id)!;
     final child = pc.dfdOf(tab.id);
+    final cd = dfdCtl(pc, tab.id);
     final receipt = child.flows.firstWhere((f) => f.label == 'receipt');
-    d.selectFlow(receipt.id);
-    d.deleteSelection();
+    cd.selectFlow(receipt.id);
+    cd.deleteSelection();
     final issues = validateDfd(pc.dfdOf(l0), workspace: pc.workspace, diagramId: l0);
     final u = issues.singleWhere((i) => i.code == 'dfd_unbalanced');
     expect(u.tableId, proc.id);
@@ -58,7 +59,7 @@ void main() {
     expect(u.message, contains('ขาด'));
     final sub = child.nodes.firstWhere((n) => n.kind == DfdKind.process);
     final c = child.nodes.firstWhere((n) => n.kind == DfdKind.entity);
-    d.addFlow(sub.id, c.id, label: 'receipt');
+    cd.addFlow(sub.id, c.id, label: 'receipt');
     expect(codes(l0), isNot(contains('dfd_unbalanced')));
   });
 
@@ -67,11 +68,12 @@ void main() {
     final child = pc.dfdOf(tab.id);
     final sub = child.nodes.firstWhere((n) => n.kind == DfdKind.process);
     final cust2 = child.nodes.firstWhere((n) => n.kind == DfdKind.entity);
-    final internal = d.addNode(DfdKind.store, 900, 400)!;
-    d.renameNode(internal.id, 'Cache');
-    d.addFlow(sub.id, internal.id, label: 'tmp'); // ภายใน ไม่นับ
+    final cd = dfdCtl(pc, tab.id);
+    final internal = cd.addNode(DfdKind.store, 900, 400)!;
+    cd.renameNode(internal.id, 'Cache');
+    cd.addFlow(sub.id, internal.id, label: 'tmp'); // ภายใน ไม่นับ
     expect(codes(l0), isNot(contains('dfd_unbalanced')));
-    d.addFlow(cust2.id, sub.id, label: 'extra');
+    cd.addFlow(cust2.id, sub.id, label: 'extra');
     final u = validateDfd(pc.dfdOf(l0), workspace: pc.workspace, diagramId: l0)
         .singleWhere((i) => i.code == 'dfd_unbalanced');
     expect(u.message, contains('extra'));
@@ -90,9 +92,10 @@ void main() {
 
     // other -> l0 จะวนเป็นวง
     pc.selectDiagram(other.id);
-    final p2 = d.addNode(DfdKind.process, 100, 100)!;
-    expect(d.childCandidates(other.id), isEmpty);
-    expect(d.setProcessChild(p2.id, l0), false);
+    final od = dfdCtl(pc, other.id);
+    final p2 = od.addNode(DfdKind.process, 100, 100)!;
+    expect(od.childCandidates(other.id), isEmpty);
+    expect(od.setProcessChild(p2.id, l0), false);
   });
 
   test('แท็บย่อยถูกลบ = เตือน child_missing ; เลิกลิงก์ได้ ; undo ลิงก์', () {
@@ -102,7 +105,7 @@ void main() {
     expect(codes(l0), contains('dfd_child_missing'));
     expect(d.setProcessChild(proc.id, null), true);
     expect(codes(l0), isNot(contains('dfd_child_missing')));
-    pc.undo();
+    d.undo();
     expect(pc.dfdOf(l0).nodeById(proc.id)!.childId, tab.id);
   });
 

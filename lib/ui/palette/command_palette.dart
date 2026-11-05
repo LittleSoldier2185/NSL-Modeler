@@ -226,9 +226,9 @@ List<PaletteEntry> buildPaletteEntries(BuildContext context) {
 
 /// เปิดแท็บ DFD [tabId] แล้วเลือกวัตถุ/เส้นที่ต้องการและเลื่อนไปให้เห็น (รอเฟรมถัดไปเพื่อให้แคนวาสของแท็บนั้นสร้างเสร็จและรู้ขนาด)
 void _gotoDfd(BuildContext context, String tabId, {String? node, String? flow}) {
-  final c = context.read<ProjectController>();
-  final d = context.read<DfdController>();
-  c.workspaceController.openDocument(tabId);
+  final w = context.read<ProjectController>().workspaceController;
+  final d = w.dfdController(tabId);
+  if (d == null || !w.openDocument(tabId)) return;
   void apply() {
     if (node != null) {
       d.selectNode(node);
