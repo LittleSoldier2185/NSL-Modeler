@@ -1,7 +1,7 @@
 import '../l10n/l10n.dart';
 import '../models/column_model.dart';
-import '../models/diagram.dart';
 import '../models/project.dart';
+import '../models/workspace.dart';
 import '../models/table_model.dart';
 import '../types/type_label.dart';
 import 'dfd_svg.dart';
@@ -11,7 +11,9 @@ import 'svg_export.dart';
 /// - มีสารบัญ ภาพแผนภาพ ER (SVG ฝัง) แผนภาพ DFD และรายละเอียดทุกตาราง
 /// - ปรับสีตามโหมดมืด/สว่างของเครื่องผู้อ่าน และมี CSS สำหรับพิมพ์ — เปิดในเบราว์เซอร์แล้วสั่งพิมพ์เป็น PDF ได้
 /// ผลลัพธ์คงที่ (ไม่มีวันที่/สุ่ม)
-String exportHtmlDocument(Project p, {bool includeDiagrams = true}) {
+/// เนื้อหา ER มาจากเอกสาร ER ชิ้นแรกของ [w] (ไม่มี = โปรเจกต์ว่าง) ; DFD = เอกสาร DFD ทุกชิ้นที่มีวัตถุ ตามลำดับเอกสาร
+String exportHtmlDocument(Workspace w, {bool includeDiagrams = true}) {
+  final p = w.documentsOf(DocType.er).firstOrNull?.er ?? Project(name: w.name);
   final b = StringBuffer();
   final title = _esc(p.name.trim().isEmpty ? 'schema' : p.name.trim());
   b.writeln('<!DOCTYPE html>');
@@ -30,14 +32,14 @@ String exportHtmlDocument(Project p, {bool includeDiagrams = true}) {
   b.writeln('</header>');
 
   // สารบัญ
-  final dfdTabs = [for (final d in p.diagrams) if (d.kind == DiagramKind.dfd && p.dfdOf(d.id).nodes.isNotEmpty) d];
+  final dfdTabs = [for (final d in w.documentsOf(DocType.dfd)) if (d.dfd!.nodes.isNotEmpty) d];
   final erSvg = includeDiagrams ? exportSvg(p, includeNotes: true) : null;
   if (p.tables.isNotEmpty || dfdTabs.isNotEmpty) {
     b.writeln('<nav aria-label="${_esc(tr('สารบัญ'))}">');
     b.writeln('<h2>${_esc(tr('สารบัญ'))}</h2>');
     b.writeln('<ul>');
     if (erSvg != null) b.writeln('<li><a href="#er-diagram">${_esc(tr('แผนภาพ ER'))}</a></li>');
-    for (final d in includeDiagrams ? dfdTabs : const <DiagramTab>[]) {
+    for (final d in includeDiagrams ? dfdTabs : const <ProjectDocument>[]) {
       b.writeln('<li><a href="#dfd-${_esc(d.id)}">DFD: ${_esc(d.name)}</a></li>');
     }
     for (final t in p.tables) {
@@ -56,7 +58,7 @@ String exportHtmlDocument(Project p, {bool includeDiagrams = true}) {
   }
   if (includeDiagrams) {
     for (final d in dfdTabs) {
-      final svg = exportDfdSvg(p.dfdOf(d.id), title: d.name);
+      final svg = exportDfdSvg(d.dfd!, title: d.name);
       if (svg == null) continue;
       b.writeln('<section id="dfd-${_esc(d.id)}">');
       b.writeln('<h2>DFD: ${_esc(d.name)}</h2>');

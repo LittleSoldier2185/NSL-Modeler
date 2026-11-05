@@ -390,7 +390,7 @@ class _ProcessChild extends StatelessWidget {
     final pc = context.watch<ProjectController>();
     final cands = d.childCandidates(pc.activeDiagramId);
     final cid = node.childId;
-    final linked = cid == null ? null : pc.project.diagramById(cid);
+    final linked = cid == null ? null : pc.documentById(cid);
     const none = '';
     final ids = [none, ...cands.map((t) => t.id)];
     final value = linked != null && ids.contains(linked.id) ? linked.id : none;
@@ -402,7 +402,7 @@ class _ProcessChild extends StatelessWidget {
           child: Dropdown<String>(
             value: value,
             items: ids,
-            labelOf: (id) => id == none ? tr('— ไม่มี —') : pc.project.diagramById(id)!.name,
+            labelOf: (id) => id == none ? tr('— ไม่มี —') : pc.documentById(id)!.name,
             onChanged: (id) => d.setProcessChild(node.id, id == none ? null : id),
           ),
         ),
@@ -729,7 +729,7 @@ class _Issues extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final d = context.read<DfdController>();
-    final issues = validateDfd(diagram, project: context.read<ProjectController>().project, diagramId: context.read<ProjectController>().activeDiagramId);
+    final issues = validateDfd(diagram, workspace: context.read<ProjectController>().workspace, diagramId: context.read<ProjectController>().activeDiagramId);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

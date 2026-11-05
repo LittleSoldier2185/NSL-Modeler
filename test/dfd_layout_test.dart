@@ -67,13 +67,13 @@ void main() {
     d.setTool(DfdTool.flow);
     d.linkClick(a.id);
     d.linkClick(b.id);
-    final before = {for (final n in pc.project.dfdOf(tab).nodes) n.id: (n.x, n.y)};
+    final before = {for (final n in pc.dfdOf(tab).nodes) n.id: (n.x, n.y)};
     expect(d.autoLayout(), true);
-    final after = pc.project.dfdOf(tab);
+    final after = pc.dfdOf(tab);
     expect(after.nodeById(a.id)!.x, lessThan(after.nodeById(b.id)!.x));
     expect(d.autoLayout(), false);
     pc.undo();
-    for (final n in pc.project.dfdOf(tab).nodes) {
+    for (final n in pc.dfdOf(tab).nodes) {
       expect((n.x, n.y), before[n.id]);
     }
   });

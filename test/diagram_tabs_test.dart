@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nsl_dev/core/l10n/l10n.dart';
 import 'package:nsl_dev/core/models/diagram.dart';
 import 'package:nsl_dev/core/models/project.dart';
+import 'package:nsl_dev/core/models/workspace.dart';
 import 'package:nsl_dev/core/storage/project_file.dart';
 import 'package:nsl_dev/main.dart';
 import 'package:nsl_dev/state/app_settings.dart';
@@ -15,6 +16,17 @@ import 'package:provider/provider.dart';
 import 'migration_fixtures.dart';
 
 void main() {
+  test('accessor เอกสาร: documents / documentById / dfdOf ตรงกับแท็บและเนื้อหา DFD', () {
+    final c = ProjectController(base());
+    final a = c.addDiagram(DiagramKind.dfd, name: 'A')!;
+    expect(c.documents.map((d) => (d.id, d.type, d.name)), [(kErDiagramId, DocType.er, 'ER'), (a.id, DocType.dfd, 'A')]);
+    expect(identical(c.documentById(kErDiagramId)!.er, c.project), isTrue);
+    expect(identical(c.documentById(a.id)!.dfd, c.dfdOf(a.id)), isTrue);
+    expect(c.documentById('nope'), isNull);
+    c.renameDiagram(a.id, 'B');
+    expect(c.documentById(a.id)!.name, 'B');
+  });
+
   group('โมเดล / ไฟล์', () {
     test('โปรเจกต์ใหม่มีแท็บ ER อันเดียว; ไฟล์ ER ล้วนไม่มีฟิลด์ diagrams และยังเป็นเวอร์ชัน 1', () {
       final p = base();
@@ -88,7 +100,7 @@ void main() {
       expect(c.renameDiagram(a.id, '  '), false);
       expect(c.renameDiagram(a.id, 'er'), false); // ซ้ำกับแท็บ ER (ไม่สนตัวพิมพ์)
       expect(c.renameDiagram(a.id, 'ORDERS'), true);
-      expect(c.project.diagramById(a.id)!.name, 'ORDERS');
+      expect(c.documentById(a.id)!.name, 'ORDERS');
       expect(c.renameDiagram(kErDiagramId, 'Shop ER'), true);
       expect(c.renameDiagram('nope', 'x'), false);
     });
@@ -102,7 +114,7 @@ void main() {
       expect(c.activeDiagramId, a.id);
       expect(c.deleteDiagram(a.id), true);
       expect(c.activeDiagramId, kErDiagramId);
-      expect(c.project.diagrams.length, 1);
+      expect(c.documents.length, 1);
     });
 
     test('ย้ายลำดับ', () {
@@ -110,11 +122,11 @@ void main() {
       final a = c.addDiagram(DiagramKind.dfd, name: 'A')!;
       final b = c.addDiagram(DiagramKind.dfd, name: 'B')!;
       c.moveDiagram(b.id, 0);
-      expect(c.project.diagrams.map((d) => d.name), ['B', 'ER', 'A']);
+      expect(c.documents.map((d) => d.name), ['B', 'ER', 'A']);
       c.moveDiagram(a.id, 99);
-      expect(c.project.diagrams.map((d) => d.name), ['B', 'ER', 'A']);
+      expect(c.documents.map((d) => d.name), ['B', 'ER', 'A']);
       c.moveDiagram(kErDiagramId, 2);
-      expect(c.project.diagrams.map((d) => d.name), ['B', 'A', 'ER']);
+      expect(c.documents.map((d) => d.name), ['B', 'A', 'ER']);
     });
 
     test('แท็บไม่เข้า undo และ undo ของเนื้อหา ER ไม่ทำให้แท็บหาย', () {
@@ -125,9 +137,9 @@ void main() {
       c.selectDiagram(kErDiagramId); // undo ทำงานกับแท็บที่เปิดอยู่
       c.undo(); // ย้อนการเพิ่มตาราง
       expect(c.project.tables.any((t) => t.name == 'x'), false);
-      expect(c.project.diagramById(d.id)!.name, 'Flow 2');
+      expect(c.documentById(d.id)!.name, 'Flow 2');
       c.redo();
-      expect(c.project.diagramById(d.id), isNotNull);
+      expect(c.documentById(d.id), isNotNull);
       expect(c.canUndo, true);
     });
 
@@ -221,13 +233,13 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('ยกเลิก'));
       await tester.pumpAndSettle();
-      expect(c.project.diagramById(id), isNotNull);
+      expect(c.documentById(id), isNotNull);
 
       await tester.tap(find.byKey(ValueKey('tab-close-$id')));
       await tester.pumpAndSettle();
       await tester.tap(find.text('ลบ'));
       await tester.pumpAndSettle();
-      expect(c.project.diagramById(id), isNull);
+      expect(c.documentById(id), isNull);
       expect(c.activeDiagram.kind, DiagramKind.er);
     });
 
@@ -246,7 +258,7 @@ void main() {
       }
       await g.up();
       await tester.pumpAndSettle();
-      expect(c.project.diagrams.first.id, id);
+      expect(c.documents.first.id, id);
     });
 
     testWidgets('ภาษาอังกฤษ: ข้อความของแท็บแปลครบ', (tester) async {

@@ -6,6 +6,7 @@ import '../../core/layout/diagram_geometry.dart' show noteHeight;
 import '../../core/models/dfd_model.dart';
 import '../../core/models/diagram.dart';
 import '../../core/models/enums.dart';
+import '../../core/models/workspace.dart';
 import '../../core/validate/dfd_validator.dart';
 import '../../state/dfd_controller.dart';
 import '../dfd/dfd_panels.dart' show dfdKindName;
@@ -169,8 +170,8 @@ List<PaletteEntry> buildPaletteEntries(BuildContext context) {
         }),
       ),
     // ---- แผนภาพ DFD ทุกแท็บ: วัตถุ เส้นข้อมูล และปัญหาของแท็บที่เปิดอยู่ ----
-    for (final tab in c.project.diagrams.where((t) => t.kind == DiagramKind.dfd)) ...[
-      for (final n in c.project.dfdOf(tab.id).nodes)
+    for (final tab in c.documents.where((t) => t.type == DocType.dfd)) ...[
+      for (final n in c.dfdOf(tab.id).nodes)
         PaletteEntry(
           kind: PaletteKind.dfdNode,
           title: n.title.isEmpty ? tr('(ไม่มีชื่อ)') : n.title,
@@ -178,17 +179,17 @@ List<PaletteEntry> buildPaletteEntries(BuildContext context) {
           search: '${n.title} ${tab.name}',
           run: () => _gotoDfd(context, tab.id, node: n.id),
         ),
-      for (final f in c.project.dfdOf(tab.id).flows)
+      for (final f in c.dfdOf(tab.id).flows)
         PaletteEntry(
           kind: PaletteKind.dfdFlow,
           title: f.label.isEmpty ? tr('(ไม่มีชื่อ)') : f.label,
-          subtitle: '${tab.name} · ${c.project.dfdOf(tab.id).nodeById(f.fromId)?.title ?? '?'} → ${c.project.dfdOf(tab.id).nodeById(f.toId)?.title ?? '?'}',
-          search: '${f.label} ${tab.name} ${c.project.dfdOf(tab.id).nodeById(f.fromId)?.title ?? ''} ${c.project.dfdOf(tab.id).nodeById(f.toId)?.title ?? ''}',
+          subtitle: '${tab.name} · ${c.dfdOf(tab.id).nodeById(f.fromId)?.title ?? '?'} → ${c.dfdOf(tab.id).nodeById(f.toId)?.title ?? '?'}',
+          search: '${f.label} ${tab.name} ${c.dfdOf(tab.id).nodeById(f.fromId)?.title ?? ''} ${c.dfdOf(tab.id).nodeById(f.toId)?.title ?? ''}',
           run: () => _gotoDfd(context, tab.id, flow: f.id),
         ),
     ],
     if (c.activeDiagram.kind == DiagramKind.dfd)
-      for (final i in validateDfd(c.project.dfdOf(c.activeDiagramId), project: c.project, diagramId: c.activeDiagramId))
+      for (final i in validateDfd(c.dfdOf(c.activeDiagramId), workspace: c.workspace, diagramId: c.activeDiagramId))
         PaletteEntry(
           kind: PaletteKind.issue,
           title: i.title,

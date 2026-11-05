@@ -249,7 +249,7 @@ class TopBar extends StatelessWidget {
             tr('จัดวางอัตโนมัติ'),
             '',
             c.activeDiagram.kind == DiagramKind.dfd
-                ? (c.project.dfdOf(c.activeDiagramId).nodes.length < 2
+                ? (c.dfdOf(c.activeDiagramId).nodes.length < 2
                     ? null
                     : () {
                         final d = context.read<DfdController>();

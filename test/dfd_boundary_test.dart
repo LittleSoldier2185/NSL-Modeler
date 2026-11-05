@@ -22,7 +22,7 @@ void main() {
     b = d.addNode(DfdKind.store, 500, 200)!;
   });
 
-  DfdDiagram dia() => pc.project.dfdOf(tab);
+  DfdDiagram dia() => pc.dfdOf(tab);
 
   test('ครอบวัตถุที่เลือกด้วยขอบเขต: ครอบคลุมทุกตัวพร้อมเผื่อขอบ และถูกเลือก', () {
     d.setNodeSelection({a.id, b.id});

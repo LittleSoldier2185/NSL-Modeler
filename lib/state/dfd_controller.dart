@@ -9,6 +9,7 @@ import '../core/layout/dfd_resize.dart';
 import '../core/layout/diagram_geometry.dart' show snapToGrid, kGridSize;
 import '../core/models/dfd_model.dart';
 import '../core/models/diagram.dart';
+import '../core/models/workspace.dart';
 import 'project_controller.dart';
 
 enum DfdTool { select, entity, process, store, flow }
@@ -31,7 +32,7 @@ class DfdController extends ChangeNotifier {
 
   bool get active => pc.activeDiagram.kind == DiagramKind.dfd;
 
-  DfdDiagram get diagram => pc.project.dfdOf(pc.activeDiagramId);
+  DfdDiagram get diagram => pc.dfdOf(pc.activeDiagramId);
 
   // ---------- เครื่องมือ / การเลือก ----------
 
@@ -212,7 +213,7 @@ class DfdController extends ChangeNotifier {
   void gotoLinkedTable(String id) {
     final tid = diagram.nodeById(id)?.tableId;
     if (tid == null || pc.project.tableById(tid) == null) return;
-    final er = pc.project.diagrams.where((t) => t.kind == DiagramKind.er).firstOrNull;
+    final er = pc.documents.where((t) => t.type == DocType.er).firstOrNull;
     if (er == null) return;
     pc.selectDiagram(er.id);
     pc.selectTable(tid);
@@ -533,21 +534,24 @@ class DfdController extends ChangeNotifier {
   // ---------- แตกรายละเอียด Level 0 → Level 1 ----------
 
   /// แท็บ DFD อื่นที่ลิงก์เป็นแผนภาพย่อยของกระบวนการในแท็บ [fromTabId] ได้ (ไม่ใช่ตัวเอง และไม่ทำให้ลิงก์วนเป็นวง)
-  List<DiagramTab> childCandidates(String fromTabId) => [
-        for (final t in pc.project.diagrams)
-          if (t.kind == DiagramKind.dfd && t.id != fromTabId && !_reaches(t.id, fromTabId)) t,
-      ];
+  List<ProjectDocument> childCandidates(String fromTabId) {
+    final w = pc.workspace;
+    return [
+      for (final t in w.documents)
+        if (t.type == DocType.dfd && t.id != fromTabId && !_reaches(w, t.id, fromTabId)) t,
+    ];
+  }
 
   /// จาก [from] ตามลิงก์แผนภาพย่อยไปถึง [target] ได้หรือไม่ (กันลิงก์วนเป็นวง)
-  bool _reaches(String from, String target, [Set<String>? seen]) {
+  bool _reaches(Workspace w, String from, String target, [Set<String>? seen]) {
     final s = seen ?? <String>{};
     if (!s.add(from)) return false;
-    final d = pc.project.dfd[from];
+    final d = w.documentById(from)?.dfd;
     if (d == null) return false;
     for (final n in d.nodes) {
       final c = n.childId;
       if (c == null) continue;
-      if (c == target || _reaches(c, target, s)) return true;
+      if (c == target || _reaches(w, c, target, s)) return true;
     }
     return false;
   }
@@ -622,16 +626,16 @@ class DfdController extends ChangeNotifier {
   /// เปิดแท็บแผนภาพย่อยของกระบวนการ [nodeId] ; คืน false ถ้าไม่มี
   bool openChild(String nodeId) {
     final cid = diagram.nodeById(nodeId)?.childId;
-    if (cid == null || pc.project.diagramById(cid) == null) return false;
+    if (cid == null || pc.documentById(cid) == null) return false;
     pc.selectDiagram(cid);
     return true;
   }
 
   /// กระบวนการ (และแท็บของมัน) ที่ลิงก์มาที่แท็บ [tabId] เป็นแผนภาพย่อย
-  List<(DiagramTab, DfdNode)> parentsOf(String tabId) => [
-        for (final t in pc.project.diagrams)
-          if (t.kind == DiagramKind.dfd)
-            for (final n in pc.project.dfdOf(t.id).nodes)
+  List<(ProjectDocument, DfdNode)> parentsOf(String tabId) => [
+        for (final t in pc.documents)
+          if (t.type == DocType.dfd)
+            for (final n in pc.dfdOf(t.id).nodes)
               if (n.kind == DfdKind.process && n.childId == tabId) (t, n),
       ];
 

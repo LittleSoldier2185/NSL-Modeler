@@ -203,7 +203,7 @@ void main() {
       final c = tester.element(find.byType(HomePage)).read<ProjectController>();
       await tester.pump();
       final add = find.byKey(const ValueKey('tab-add'));
-      double gap() => tester.getRect(add).left - tester.getRect(find.byKey(ValueKey('tab-${c.project.diagrams.last.id}'))).right;
+      double gap() => tester.getRect(add).left - tester.getRect(find.byKey(ValueKey('tab-${c.documents.last.id}'))).right;
       expect(gap(), lessThan(8));
       final x0 = tester.getRect(add).left;
       c.addDiagram(DiagramKind.dfd);

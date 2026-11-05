@@ -40,9 +40,9 @@ class StatusBar extends StatelessWidget {
       issues = c.issues;
       zoom = cv.scale;
     } else {
-      final d = p.dfdOf(c.activeDiagramId);
+      final d = c.dfdOf(c.activeDiagramId);
       summary = tr('{0} วัตถุ · {1} เส้นข้อมูล', [d.nodes.length, d.flows.length]);
-      issues = validateDfd(d, project: p, diagramId: c.activeDiagramId);
+      issues = validateDfd(d, workspace: c.workspace, diagramId: c.activeDiagramId);
       zoom = dfd.scale;
     }
     final errors = issues.where((i) => i.severity == Severity.error).length;

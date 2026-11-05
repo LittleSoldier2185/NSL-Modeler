@@ -1,7 +1,6 @@
 import '../l10n/l10n.dart';
 import '../models/dfd_model.dart';
-import '../models/diagram.dart';
-import '../models/project.dart';
+import '../models/workspace.dart';
 import 'issue.dart';
 
 /// เส้นข้อมูลที่ขอบของกระบวนการ : ข้อมูล [label] ไหล "เข้า" ([incoming]) หรือ "ออก" จากกระบวนการ ไปหา/มาจากวัตถุภายนอก [neighbor]
@@ -75,15 +74,15 @@ List<_Edge> _childEdges(DfdDiagram child, Set<String> known) {
 /// ตรวจการแตกรายละเอียด (Level 0 → Level 1) ของกระบวนการทุกตัวใน [diagramId] :
 /// - warning `dfd_child_missing` : แผนภาพย่อยที่ชี้ไว้ถูกลบ/ไม่ใช่ DFD
 /// - warning `dfd_unbalanced` : เส้นข้อมูลเข้า/ออกของกระบวนการไม่ตรงกับแผนภาพย่อย (ขาดหรือเกิน)
-List<Issue> dfdBalanceIssues(Project p, String diagramId) {
-  final parent = p.dfd[diagramId];
+List<Issue> dfdBalanceIssues(Workspace w, String diagramId) {
+  final parent = w.documentById(diagramId)?.dfd;
   if (parent == null) return const [];
   final out = <Issue>[];
   for (final n in parent.nodes) {
     final cid = n.childId;
     if (n.kind != DfdKind.process || cid == null) continue;
-    final tab = p.diagrams.where((t) => t.id == cid && t.kind == DiagramKind.dfd).firstOrNull;
-    final child = tab == null ? null : p.dfd[cid];
+    final tab = w.documentById(cid);
+    final child = tab?.dfd;
     final label = n.title.isEmpty ? tr('(ไม่มีชื่อ)') : n.title;
     if (tab == null || child == null) {
       out.add(Issue(

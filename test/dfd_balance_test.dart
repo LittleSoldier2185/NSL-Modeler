@@ -15,7 +15,7 @@ void main() {
   late DfdNode cust, proc, store;
 
   List<String> codes(String tab) =>
-      validateDfd(pc.project.dfdOf(tab), project: pc.project, diagramId: tab).map((i) => i.code).toList();
+      validateDfd(pc.dfdOf(tab), workspace: pc.workspace, diagramId: tab).map((i) => i.code).toList();
 
   setUp(() {
     pc = ProjectController(base());
@@ -35,22 +35,22 @@ void main() {
   test('สร้างแผนภาพย่อย: ลิงก์ เปิดแท็บใหม่ มีเพื่อนบ้านและเส้นเดียวกับแม่ และเริ่มต้นสมดุล', () {
     final tab = d.createChildFor(proc.id)!;
     expect(pc.activeDiagramId, tab.id);
-    final child = pc.project.dfdOf(tab.id);
+    final child = pc.dfdOf(tab.id);
     expect(child.nodes.where((n) => n.kind == DfdKind.process).single.number, '1.1');
     expect(child.nodes.map((n) => n.name).toSet(), {'Customer', 'Order', 'Orders'});
     expect(child.flows.map((f) => f.label).toSet(), {'order', 'receipt', 'save'});
-    expect(pc.project.dfdOf(l0).nodeById(proc.id)!.childId, tab.id);
+    expect(pc.dfdOf(l0).nodeById(proc.id)!.childId, tab.id);
     expect(codes(l0).where((c) => c == 'dfd_unbalanced' || c == 'dfd_child_missing'), isEmpty);
     expect(d.parentsOf(tab.id).single.$2.id, proc.id);
   });
 
   test('แผนภาพย่อยขาดเส้น = เตือนไม่สมดุล (ขาด) ; เติมกลับแล้วหาย', () {
     final tab = d.createChildFor(proc.id)!;
-    final child = pc.project.dfdOf(tab.id);
+    final child = pc.dfdOf(tab.id);
     final receipt = child.flows.firstWhere((f) => f.label == 'receipt');
     d.selectFlow(receipt.id);
     d.deleteSelection();
-    final issues = validateDfd(pc.project.dfdOf(l0), project: pc.project, diagramId: l0);
+    final issues = validateDfd(pc.dfdOf(l0), workspace: pc.workspace, diagramId: l0);
     final u = issues.singleWhere((i) => i.code == 'dfd_unbalanced');
     expect(u.tableId, proc.id);
     expect(u.message, contains('receipt'));
@@ -63,7 +63,7 @@ void main() {
 
   test('แผนภาพย่อยมีเส้นเกินที่แม่ไม่มี = เตือน ; ที่เก็บข้อมูลภายในแผนภาพย่อยเท่านั้นไม่นับ', () {
     final tab = d.createChildFor(proc.id)!;
-    final child = pc.project.dfdOf(tab.id);
+    final child = pc.dfdOf(tab.id);
     final sub = child.nodes.firstWhere((n) => n.kind == DfdKind.process);
     final cust2 = child.nodes.firstWhere((n) => n.kind == DfdKind.entity);
     final internal = d.addNode(DfdKind.store, 900, 400)!;
@@ -71,7 +71,7 @@ void main() {
     d.addFlow(sub.id, internal.id, label: 'tmp'); // ภายใน ไม่นับ
     expect(codes(l0), isNot(contains('dfd_unbalanced')));
     d.addFlow(cust2.id, sub.id, label: 'extra');
-    final u = validateDfd(pc.project.dfdOf(l0), project: pc.project, diagramId: l0)
+    final u = validateDfd(pc.dfdOf(l0), workspace: pc.workspace, diagramId: l0)
         .singleWhere((i) => i.code == 'dfd_unbalanced');
     expect(u.message, contains('extra'));
     expect(u.message, contains('เกิน'));
@@ -102,7 +102,7 @@ void main() {
     expect(d.setProcessChild(proc.id, null), true);
     expect(codes(l0), isNot(contains('dfd_child_missing')));
     pc.undo();
-    expect(pc.project.dfdOf(l0).nodeById(proc.id)!.childId, tab.id);
+    expect(pc.dfdOf(l0).nodeById(proc.id)!.childId, tab.id);
   });
 
   test('บันทึก-โหลดไฟล์คง childId ; คัดลอก-วาง/ทำสำเนาไม่พาลิงก์ตามไป ; childId เฉพาะ process', () {
@@ -113,10 +113,10 @@ void main() {
 
     d.setNodeSelection({proc.id});
     d.duplicateSelection();
-    expect(pc.project.dfdOf(l0).nodes.where((n) => n.childId != null).length, 1);
+    expect(pc.dfdOf(l0).nodes.where((n) => n.childId != null).length, 1);
     d.setNodeSelection({proc.id});
     d.pasteText(d.copySelectionText());
-    expect(pc.project.dfdOf(l0).nodes.where((n) => n.childId != null).length, 1);
+    expect(pc.dfdOf(l0).nodes.where((n) => n.childId != null).length, 1);
 
     final bad = DfdNode.tryFromJson({'id': 'e', 'kind': 'entity', 'child': 'x'})!;
     expect(bad.childId, isNull);
@@ -126,7 +126,7 @@ void main() {
     pc.selectDiagram(l0);
     final lone = d.addNode(DfdKind.process, 400, 500)!;
     final tab = d.createChildFor(lone.id)!;
-    expect(pc.project.dfdOf(tab.id).nodes.length, 1);
+    expect(pc.dfdOf(tab.id).nodes.length, 1);
     expect(codes(l0), isNot(contains('dfd_unbalanced')));
   });
 }

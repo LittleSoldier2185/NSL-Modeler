@@ -308,7 +308,7 @@ class FileActions {
   /// Export แผนภาพ DFD ที่เปิดอยู่เป็น PNG/SVG (ตัดเฉพาะส่วนที่มีวัตถุ)
   static Future<void> _exportDfdImage(BuildContext context, ProjectController c) async {
     final tab = c.activeDiagram;
-    final d = c.project.dfdOf(tab.id);
+    final d = c.dfdOf(tab.id);
     if (d.nodes.isEmpty) {
       _toast(context, tr('ยังไม่มีวัตถุให้ Export เป็นภาพ'));
       return;

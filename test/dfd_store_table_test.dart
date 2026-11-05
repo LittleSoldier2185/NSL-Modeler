@@ -21,7 +21,7 @@ void main() {
     store = d.addNode(DfdKind.store, 100, 100)!;
   });
 
-  DfdNode node() => pc.project.dfdOf(tab).nodeById(store.id)!;
+  DfdNode node() => pc.dfdOf(tab).nodeById(store.id)!;
 
   test('ผูกกับตาราง: เก็บ tableId และตั้งชื่อให้เมื่อยังว่าง, undo ขั้นเดียว', () {
     d.renameNode(store.id, '');
@@ -46,7 +46,7 @@ void main() {
   test('entity / process ผูกตารางไม่ได้', () {
     final p = d.addNode(DfdKind.process, 300, 100)!;
     d.setStoreTable(p.id, 'tu');
-    expect(pc.project.dfdOf(tab).nodeById(p.id)!.tableId, isNull);
+    expect(pc.dfdOf(tab).nodeById(p.id)!.tableId, isNull);
   });
 
   test('บันทึก-โหลดไฟล์แล้ว tableId ยังอยู่ ; ทำสำเนาวัตถุแล้วผูกตารางเดิมต่อ', () {
@@ -56,17 +56,17 @@ void main() {
 
     d.selectNode(store.id);
     d.duplicateSelection();
-    final copies = pc.project.dfdOf(tab).nodes.where((n) => n.kind == DfdKind.store && n.id != store.id);
+    final copies = pc.dfdOf(tab).nodes.where((n) => n.kind == DfdKind.store && n.id != store.id);
     expect(copies.single.tableId, 'tu');
   });
 
   test('ตัวตรวจ: ตารางที่ผูกถูกลบ = เตือน ; ไม่ส่ง project = ไม่ตรวจ', () {
     d.setStoreTable(store.id, 'tu');
-    expect(validateDfd(pc.project.dfdOf(tab), project: pc.project).any((i) => i.code == 'dfd_store_table_missing'), false);
+    expect(validateDfd(pc.dfdOf(tab), workspace: pc.workspace).any((i) => i.code == 'dfd_store_table_missing'), false);
     pc.removeTable('tu');
-    final issues = validateDfd(pc.project.dfdOf(tab), project: pc.project);
+    final issues = validateDfd(pc.dfdOf(tab), workspace: pc.workspace);
     expect(issues.where((i) => i.code == 'dfd_store_table_missing').single.tableId, store.id);
-    expect(validateDfd(pc.project.dfdOf(tab)).any((i) => i.code == 'dfd_store_table_missing'), false);
+    expect(validateDfd(pc.dfdOf(tab)).any((i) => i.code == 'dfd_store_table_missing'), false);
   });
 
   test('gotoLinkedTable สลับไปแท็บ ER และเลือกตาราง', () {

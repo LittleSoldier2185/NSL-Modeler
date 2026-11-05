@@ -16,6 +16,7 @@ import '../core/models/note_model.dart';
 import '../core/models/project.dart';
 import '../core/models/relation_model.dart';
 import '../core/models/table_model.dart';
+import '../core/models/workspace.dart';
 import '../core/validate/issue.dart';
 import '../core/validate/validator.dart';
 import 'snapshot_history.dart';
@@ -128,6 +129,22 @@ class ProjectController extends ChangeNotifier {
     _dirty = false;
     notifyListeners();
   }
+
+  // ---------- เอกสาร (มุมมองแบบ workspace) ----------
+  //
+  // UI อ่านรายการเอกสาร/เนื้อหา DFD ผ่าน accessor เหล่านี้แทนการอ่าน project.diagrams / project.dfd ตรง ๆ
+  // ตอนนี้ยังสร้างจากโปรเจกต์รูปแบบเดิม (Workspace.fromLegacy — ใช้ object เดิม ไม่คัดลอกเนื้อหา)
+
+  /// มุมมอง workspace ของโปรเจกต์ปัจจุบัน (สร้างใหม่ทุกครั้งที่เรียก — อย่าเก็บไว้ข้ามการแก้ไข)
+  Workspace get workspace => Workspace.fromLegacy(_project);
+
+  /// เอกสารทั้งหมดตามลำดับแท็บ
+  List<ProjectDocument> get documents => workspace.documents;
+
+  ProjectDocument? documentById(String id) => workspace.documentById(id);
+
+  /// เนื้อหา DFD ของเอกสาร [id] (สร้างให้ถ้ายังไม่มี)
+  DfdDiagram dfdOf(String id) => _project.dfdOf(id);
 
   // ---------- แท็บแผนภาพ ----------
   //

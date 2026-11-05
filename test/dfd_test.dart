@@ -327,26 +327,26 @@ void main() {
       // undo ที่แท็บ ER ย้อนตาราง ไม่แตะ DFD
       pc.undo();
       expect(pc.project.tables.any((t) => t.name == 'x'), false);
-      expect(pc.project.dfdOf(tab).nodes.length, 2);
-      expect(pc.project.dfdOf(other).nodes.length, 1);
+      expect(pc.dfdOf(tab).nodes.length, 2);
+      expect(pc.dfdOf(other).nodes.length, 1);
 
       // undo ที่แท็บ DFD ย้อนเฉพาะแท็บนั้น
       pc.selectDiagram(tab);
       pc.undo();
-      expect(pc.project.dfdOf(tab).nodes.length, 1);
-      expect(pc.project.dfdOf(other).nodes.length, 1);
+      expect(pc.dfdOf(tab).nodes.length, 1);
+      expect(pc.dfdOf(other).nodes.length, 1);
       pc.selectDiagram(other);
       expect(pc.canUndo, true);
       pc.undo();
-      expect(pc.project.dfdOf(other).nodes, isEmpty);
-      expect(pc.project.dfdOf(tab).nodes.length, 1);
+      expect(pc.dfdOf(other).nodes, isEmpty);
+      expect(pc.dfdOf(tab).nodes.length, 1);
       pc.selectDiagram(tab);
       pc.redo();
-      expect(pc.project.dfdOf(tab).nodes.length, 2);
+      expect(pc.dfdOf(tab).nodes.length, 2);
       // undo ของ ER ไม่ทำให้เนื้อหา DFD หาย
       pc.selectDiagram(kErDiagramId);
       pc.redo();
-      expect(pc.project.dfdOf(tab).nodes.length, 2);
+      expect(pc.dfdOf(tab).nodes.length, 2);
     });
 
     test('undo ทำให้ของที่เลือกหายไป = ล้างการเลือกที่ค้าง', () {

@@ -8,6 +8,7 @@ import 'package:nsl_dev/core/models/index_model.dart';
 import 'package:nsl_dev/core/models/project.dart';
 import 'package:nsl_dev/core/models/relation_model.dart';
 import 'package:nsl_dev/core/models/table_model.dart';
+import 'package:nsl_dev/core/models/workspace.dart';
 
 Project sample() => Project(name: 'ร้าน <A&B>', dialect: Dialect.mysql, tables: [
       TableModel(id: 't1', name: 'users', comment: 'ผู้ใช้\nระบบ', x: 20, y: 20, columns: [
@@ -26,7 +27,7 @@ Project sample() => Project(name: 'ร้าน <A&B>', dialect: Dialect.mysql, 
 
 void main() {
   test('เอกสาร HTML: โครง สารบัญ ตาราง FK และ SVG ฝัง', () {
-    final h = exportHtmlDocument(sample());
+    final h = exportHtmlDocument(Workspace.fromLegacy(sample()));
     expect(h, startsWith('<!DOCTYPE html>'));
     expect(h, contains('<meta charset="utf-8">'));
     expect(h, contains('id="er-diagram"'));
@@ -44,7 +45,7 @@ void main() {
   });
 
   test('ข้อความของผู้ใช้ถูก escape (ชื่อโปรเจกต์ หมายเหตุ)', () {
-    final h = exportHtmlDocument(sample());
+    final h = exportHtmlDocument(Workspace.fromLegacy(sample()));
     expect(h, contains('ร้าน &lt;A&amp;B&gt;'));
     expect(h, contains('a&lt;b&gt;'));
     expect(h, isNot(contains('<A&B>')));
@@ -53,14 +54,14 @@ void main() {
 
   test('includeDiagrams=false ไม่ฝังภาพ ; ผลลัพธ์คงที่', () {
     final p = sample();
-    final h = exportHtmlDocument(p, includeDiagrams: false);
+    final h = exportHtmlDocument(Workspace.fromLegacy(p), includeDiagrams: false);
     expect(h, isNot(contains('<svg')));
     expect(h, isNot(contains('er-diagram')));
-    expect(exportHtmlDocument(p), exportHtmlDocument(p));
+    expect(exportHtmlDocument(Workspace.fromLegacy(p)), exportHtmlDocument(Workspace.fromLegacy(p)));
   });
 
   test('โปรเจกต์ว่างไม่ล้ม', () {
-    final h = exportHtmlDocument(Project());
+    final h = exportHtmlDocument(Workspace.fromLegacy(Project()));
     expect(h, contains('</html>'));
   });
 
@@ -71,7 +72,7 @@ void main() {
     p.dfd[tab.id] = DfdDiagram(nodes: [
       DfdNode(id: 'n1', kind: DfdKind.process, name: 'ชำระเงิน', x: 100, y: 100),
     ]);
-    final h = exportHtmlDocument(p);
+    final h = exportHtmlDocument(Workspace.fromLegacy(p));
     expect(h, contains('id="dfd-d1"'));
     expect(h, contains('DFD: Level 0'));
     expect(RegExp('<svg').allMatches(h).length, 2);

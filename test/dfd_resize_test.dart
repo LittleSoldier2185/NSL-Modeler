@@ -66,7 +66,7 @@ void main() {
       n = d.addNode(DfdKind.process, 300, 200)!;
     });
 
-    DfdNode cur() => pc.project.dfdOf(pc.activeDiagramId).nodeById(n.id)!;
+    DfdNode cur() => pc.dfdOf(pc.activeDiagramId).nodeById(n.id)!;
 
     test('ลากจุดจับ = ปรับขนาดสด และ undo กลับขั้นเดียว', () {
       final w0 = cur().w, h0 = cur().h;

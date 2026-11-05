@@ -18,7 +18,7 @@ void main() {
     tabA = pc.addDiagram(DiagramKind.dfd, name: 'A')!.id;
   });
 
-  DfdDiagram dia(String id) => pc.project.dfdOf(id);
+  DfdDiagram dia(String id) => pc.dfdOf(id);
 
   (DfdNode, DfdNode, DfdNode) build() {
     final e = d.addNode(DfdKind.entity, 100, 100)!;
@@ -75,7 +75,7 @@ void main() {
     final d2 = DfdController(other);
     other.addDiagram(DiagramKind.dfd);
     expect(d2.pasteText(text), 1);
-    expect(other.project.dfdOf(other.activeDiagramId).nodes.single.tableId, isNull);
+    expect(other.dfdOf(other.activeDiagramId).nodes.single.tableId, isNull);
   });
 
   test('คัดลอกขอบเขตที่เลือกอย่างเดียว และวางได้', () {

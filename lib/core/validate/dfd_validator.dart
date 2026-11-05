@@ -1,6 +1,6 @@
 import '../l10n/l10n.dart';
 import '../models/dfd_model.dart';
-import '../models/project.dart';
+import '../models/workspace.dart';
 import 'dfd_balance.dart';
 import 'issue.dart';
 
@@ -9,9 +9,10 @@ import 'issue.dart';
 /// - error: flow ระหว่างสองวัตถุที่ไม่ใช่ process (entity↔entity, entity↔store, store↔store) — ข้อมูลต้องผ่าน process เสมอ
 /// - warning: process ไม่มีข้อมูลเข้า/ออก, flow ไม่มีชื่อ, เลขลำดับ/รหัสซ้ำหรือว่าง, วัตถุไม่มีชื่อ
 /// - info: entity/store ที่ไม่ได้เชื่อมกับอะไรเลย
-List<Issue> validateDfd(DfdDiagram d, {Project? project, String? diagramId}) {
+/// [workspace] = ใช้ตรวจตาราง ER ที่ที่เก็บข้อมูลผูกไว้ และความสมดุลกับแผนภาพย่อย (ต้องมี [diagramId] ด้วย)
+List<Issue> validateDfd(DfdDiagram d, {Workspace? workspace, String? diagramId}) {
   final out = <Issue>[];
-  if (project != null && diagramId != null) out.addAll(dfdBalanceIssues(project, diagramId));
+  if (workspace != null && diagramId != null) out.addAll(dfdBalanceIssues(workspace, diagramId));
   String name(DfdNode n) => n.title.isEmpty ? tr('(ไม่มีชื่อ)') : n.title;
 
   final incoming = <String, int>{}, outgoing = <String, int>{};
@@ -108,7 +109,7 @@ List<Issue> validateDfd(DfdDiagram d, {Project? project, String? diagramId}) {
         }
       case DfdKind.store:
         final tid = n.tableId;
-        if (project != null && tid != null && project.tableById(tid) == null) {
+        if (workspace != null && tid != null && !_tableExists(workspace, n.tableDocId, tid)) {
           out.add(Issue(
             severity: Severity.warning,
             code: 'dfd_store_table_missing',
@@ -150,4 +151,10 @@ List<Issue> validateDfd(DfdDiagram d, {Project? project, String? diagramId}) {
   }
   out.sort((a, b) => a.severity.index.compareTo(b.severity.index));
   return out;
+}
+
+/// ตาราง [tableId] มีอยู่ในเอกสาร ER [docId] หรือไม่ (ไม่ระบุเอกสาร = หาในเอกสาร ER ทุกชิ้น)
+bool _tableExists(Workspace w, String? docId, String tableId) {
+  if (docId != null) return w.documentById(docId)?.er?.tableById(tableId) != null;
+  return w.documentsOf(DocType.er).any((e) => e.er?.tableById(tableId) != null);
 }
