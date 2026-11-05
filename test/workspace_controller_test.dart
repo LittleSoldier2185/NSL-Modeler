@@ -6,10 +6,14 @@ import 'package:nsl_dev/core/clipboard/dfd_clipboard.dart';
 import 'package:nsl_dev/core/models/dfd_model.dart';
 import 'package:nsl_dev/core/models/project.dart';
 import 'package:nsl_dev/core/models/workspace.dart';
+import 'package:nsl_dev/core/models/diagram.dart';
+import 'package:nsl_dev/core/storage/autosave.dart';
 import 'package:nsl_dev/core/storage/project_codec.dart';
 import 'package:nsl_dev/core/storage/project_file.dart';
+import 'package:nsl_dev/state/autosave_coordinator.dart';
 import 'package:nsl_dev/state/dfd_controller.dart';
 import 'package:nsl_dev/state/project_controller.dart';
+import 'package:nsl_dev/state/workspace_controller.dart';
 
 import 'migration_fixtures.dart';
 import 'support/project_helpers.dart';
@@ -189,4 +193,168 @@ void main() {
     expect(erOf(copy).tables.any((t) => t.name == 'later'), isFalse);
     expect(dfdIn(copy, tab).nodes, isEmpty);
   });
+
+  group('WorkspaceController: controller ต่อเอกสาร', () {
+    late WorkspaceController w;
+    late ProjectController er;
+    late String a, b;
+    late DfdController da, db;
+
+    setUp(() {
+      w = WorkspaceController(Workspace.single(base()));
+      er = w.mainEr;
+      a = w.addDocument(DocType.dfd, name: 'A')!.id;
+      b = w.addDocument(DocType.dfd, name: 'B')!.id;
+      da = w.dfdController(a)!;
+      db = w.dfdController(b)!;
+    });
+    tearDown(() => w.dispose());
+
+    test('dirty รวมทุกเอกสาร: แก้ DFD ใด ๆ = โปรเจกต์ยังไม่บันทึก ; บันทึกแล้วล้างทุกเอกสาร', () {
+      w.markSaved('x.nsld');
+      expect(w.dirty, isFalse);
+      db.addNode(DfdKind.entity, 0, 0);
+      expect((w.dirty, db.docDirty, da.docDirty, er.docDirty, w.structureDirty), (true, true, false, false, false));
+      expect(er.dirty, isTrue); // ProjectController.dirty = ทั้งโปรเจกต์ (ของเดิม)
+      w.markSaved('x.nsld');
+      expect((w.dirty, db.docDirty), (false, false));
+      expect(w.renameDocument(a, 'A2'), isTrue);
+      expect((w.dirty, w.structureDirty, da.docDirty), (true, true, false));
+      w.markSaved('x.nsld');
+      er.addTable(name: 'later');
+      expect((w.dirty, er.docDirty), (true, true));
+    });
+
+    test('ลบเอกสาร = ทิ้ง controller ของมัน และคืนลิงก์จากเอกสารอื่นที่ใช้ไม่ได้แล้ว', () {
+      final p = da.addNode(DfdKind.process, 100, 100)!;
+      expect(da.setProcessChild(p.id, b), isTrue);
+      expect(w.backlinksOf(b), hasLength(1));
+      final broken = w.deleteDocument(b)!;
+      expect(broken.single.$1, a);
+      expect(db.disposed, isTrue);
+      expect(w.hasController(b), isFalse);
+      expect(w.dfdController(b), isNull);
+      expect(w.deleteDocument(er.docId), isNull); // ER หลักลบไม่ได้
+      expect(er.disposed, isFalse);
+    });
+
+    test('เปิดไฟล์ใหม่ (v2 เก่า / loadProject): ใช้ ProjectController ตัวเดิม ; controller ของ DFD เดิมถูกทิ้ง', () async {
+      final c = ProjectController(base());
+      final wc = c.workspaceController;
+      final old = wc.dfdController(wc.addDocument(DocType.dfd)!.id)!;
+      wc.loadWorkspace(await ProjectFile.load('test/fixtures/v2_er_dfd.nsld'), null);
+      expect(identical(wc.mainEr, c), isTrue);
+      expect(identical(wc.currentEr, c), isTrue);
+      expect(old.disposed, isTrue);
+      expect(c.project.tables, isNotEmpty);
+      expect(identical(wc.documentById(c.erDocumentId)!.er, c.project), isTrue);
+
+      final p2 = Project(name: 'other');
+      // ignore: deprecated_member_use_from_same_package
+      c.loadProject(p2, null);
+      expect(identical(wc.mainEr, c), isTrue);
+      expect(identical(c.project, p2), isTrue);
+      expect(c.canUndo, isFalse);
+      expect(wc.dirty, isFalse);
+    });
+
+    test('undo แยกต่อเอกสาร: ย้อนเอกสารหนึ่งไม่แตะเอกสารอื่น ; undo ของ workspace = เอกสารที่ใช้งานอยู่', () {
+      da.addNode(DfdKind.entity, 0, 0);
+      db.addNode(DfdKind.process, 0, 0);
+      db.addNode(DfdKind.process, 300, 0);
+      er.addTable(name: 'x');
+      expect((da.canUndo, db.canUndo, er.canUndo), (true, true, true));
+
+      db.undo();
+      expect((da.diagram.nodes.length, db.diagram.nodes.length), (1, 1));
+      expect(er.project.tables.any((t) => t.name == 'x'), isTrue);
+
+      er.undo();
+      expect(er.project.tables.any((t) => t.name == 'x'), isFalse);
+      expect((da.diagram.nodes.length, db.diagram.nodes.length), (1, 1));
+
+      w.openDocument(a);
+      w.undo();
+      expect((da.diagram.nodes.length, db.diagram.nodes.length), (0, 1));
+      expect(w.canUndo, isFalse);
+      w.openDocument(b);
+      expect(w.canUndo, isTrue);
+      w.redo();
+      expect(db.diagram.nodes.length, 2);
+    });
+
+    test('auto-save ได้ยินการแก้ของทุกเอกสาร', () async {
+      final store = _CountingStore();
+      final auto = AutosaveCoordinator(w, store, debounce: const Duration(milliseconds: 5));
+      addTearDown(auto.dispose);
+      w.markSaved('x.nsld');
+      await auto.idle();
+
+      da.addNode(DfdKind.entity, 0, 0);
+      await auto.flush();
+      expect(store.writes, 1);
+      expect(dfdIn(store.last!, a).nodes, hasLength(1));
+
+      db.addNode(DfdKind.process, 0, 0);
+      await auto.flush();
+      expect(store.writes, 2);
+      expect(dfdIn(store.last!, b).nodes, hasLength(1));
+
+      er.addTable(name: 'later');
+      await auto.flush();
+      expect(store.writes, 3);
+      expect(erOf(store.last!).tables.any((t) => t.name == 'later'), isTrue);
+
+      // ลากสด (ยังไม่จบ) ไม่นับว่าแก้ ; จบการลากแล้วนับ
+      w.markSaved('x.nsld');
+      await auto.idle();
+      da.selectAll();
+      da.beginMove();
+      da.moveBy(40, 0);
+      expect(w.dirty, isFalse);
+      da.endMove();
+      expect(w.dirty, isTrue);
+    });
+
+    test('สลับเอกสาร: การเลือกของแต่ละเอกสารคงอยู่ ; provider ได้ controller ของแท็บที่ใช้งาน', () {
+      final na = da.addNode(DfdKind.entity, 0, 0)!;
+      final nb = db.addNode(DfdKind.process, 0, 0)!;
+      w.openDocument(a);
+      da.selectNode(na.id);
+      w.openDocument(b);
+      expect(identical(w.currentDfd, db), isTrue);
+      db.selectNode(nb.id);
+      w.openDocument(er.docId);
+      expect(w.currentDfd.active, isFalse); // แท็บ ER: ตัวแทนว่าง
+      expect(w.currentDfd.addNode(DfdKind.entity, 0, 0), isNull);
+      er.selectTable('tu');
+
+      w.openDocument(a);
+      expect(identical(w.currentDfd, da), isTrue);
+      expect(da.selectedNodeIds, {na.id});
+      w.openDocument(b);
+      expect(db.selectedNodeIds, {nb.id});
+      w.openDocument(kErDiagramId);
+      expect(identical(w.currentEr, er), isTrue);
+      expect(er.selectedTableId, 'tu');
+    });
+  });
+}
+
+/// ที่เก็บ auto-save ในหน่วยความจำ: นับจำนวนครั้งที่เขียน และเก็บสำเนาล่าสุด
+class _CountingStore implements AutosaveStore {
+  int writes = 0;
+  Workspace? last;
+
+  @override
+  Future<void> write(Workspace w, {String? originalPath, DateTime? now}) async {
+    writes++;
+    last = w;
+  }
+
+  @override
+  Future<AutosaveInfo?> readRecoverable() async => null;
+
+  @override
+  Future<void> clear() async {}
 }
