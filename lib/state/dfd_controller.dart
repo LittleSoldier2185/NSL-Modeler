@@ -10,6 +10,7 @@ import '../core/layout/diagram_geometry.dart' show snapToGrid, kGridSize;
 import '../core/models/dfd_model.dart';
 import '../core/models/workspace.dart';
 import 'project_controller.dart';
+import 'workspace_controller.dart';
 
 enum DfdTool { select, entity, process, store, flow }
 
@@ -21,6 +22,8 @@ class DfdController extends ChangeNotifier {
 
   final ProjectController pc;
 
+  WorkspaceController get _w => pc.workspaceController;
+
   @override
   void dispose() {
     pc.removeListener(_onProject);
@@ -29,9 +32,9 @@ class DfdController extends ChangeNotifier {
 
   // ---------- ข้อมูล ----------
 
-  bool get active => pc.activeDiagram.type == DocType.dfd;
+  bool get active => _w.activeDocument.type == DocType.dfd;
 
-  DfdDiagram get diagram => pc.dfdOf(pc.activeDiagramId);
+  DfdDiagram get diagram => _w.dfdOf(_w.activeId);
 
   // ---------- เครื่องมือ / การเลือก ----------
 
@@ -213,9 +216,9 @@ class DfdController extends ChangeNotifier {
   void gotoLinkedTable(String id) {
     final tid = diagram.nodeById(id)?.tableId;
     if (tid == null || pc.project.tableById(tid) == null) return;
-    final er = pc.documents.where((t) => t.type == DocType.er).firstOrNull;
+    final er = _w.documents.where((t) => t.type == DocType.er).firstOrNull;
     if (er == null) return;
-    pc.selectDiagram(er.id);
+    _w.openDocument(er.id);
     pc.selectTable(tid);
   }
 
@@ -536,7 +539,7 @@ class DfdController extends ChangeNotifier {
 
   /// แท็บ DFD อื่นที่ลิงก์เป็นแผนภาพย่อยของกระบวนการในแท็บ [fromTabId] ได้ (ไม่ใช่ตัวเอง และไม่ทำให้ลิงก์วนเป็นวง)
   List<ProjectDocument> childCandidates(String fromTabId) {
-    final w = pc.workspace;
+    final w = _w.workspace;
     return [
       for (final t in w.documents)
         if (t.type == DocType.dfd && t.id != fromTabId && !_reaches(w, t.id, fromTabId)) t,
@@ -561,7 +564,7 @@ class DfdController extends ChangeNotifier {
   bool setProcessChild(String nodeId, String? childTabId) {
     final n = diagram.nodeById(nodeId);
     if (!active || n == null || n.kind != DfdKind.process) return false;
-    if (childTabId != null && !childCandidates(pc.activeDiagramId).any((t) => t.id == childTabId)) return false;
+    if (childTabId != null && !childCandidates(_w.activeId).any((t) => t.id == childTabId)) return false;
     if (n.childId == childTabId) return true;
     updateNode(nodeId, (n) => n.childId = childTabId);
     return true;
@@ -570,12 +573,12 @@ class DfdController extends ChangeNotifier {
   /// สร้างแผนภาพย่อยใหม่ของกระบวนการ [nodeId] : ใส่ผู้ใช้ภายนอก/ที่เก็บข้อมูลที่ต่ออยู่ + กระบวนการย่อย 1 ตัว
   /// และเส้นข้อมูลเดียวกับแม่ (เริ่มต้นสมดุลพอดี ให้ผู้ใช้แตกกระบวนการต่อเอง) แล้วลิงก์และเปิดแท็บนั้น
   ProjectDocument? createChildFor(String nodeId) {
-    final parentTab = pc.activeDiagramId;
+    final parentTab = _w.activeId;
     final parent = diagram;
     final proc = parent.nodeById(nodeId);
     if (!active || proc == null || proc.kind != DfdKind.process) return null;
     final base = proc.name.trim().isEmpty ? proc.number : proc.name.trim();
-    final tab = pc.addDiagram(DocType.dfd, name: 'L1 – $base');
+    final tab = _w.addDocument(DocType.dfd, name: 'L1 – $base');
     if (tab == null) return null;
     final dot = proc.number.indexOf('.');
     final prefix = proc.number.trim().isEmpty ? null : (dot > 0 ? proc.number.substring(0, dot) : proc.number.trim());
@@ -619,25 +622,25 @@ class DfdController extends ChangeNotifier {
       }
     });
     autoLayout();
-    pc.selectDiagram(parentTab);
+    _w.openDocument(parentTab);
     updateNode(nodeId, (n) => n.childId = tab.id);
-    pc.selectDiagram(tab.id);
+    _w.openDocument(tab.id);
     return tab;
   }
 
   /// เปิดแท็บแผนภาพย่อยของกระบวนการ [nodeId] ; คืน false ถ้าไม่มี
   bool openChild(String nodeId) {
     final cid = diagram.nodeById(nodeId)?.childId;
-    if (cid == null || pc.documentById(cid) == null) return false;
-    pc.selectDiagram(cid);
+    if (cid == null || _w.documentById(cid) == null) return false;
+    _w.openDocument(cid);
     return true;
   }
 
   /// กระบวนการ (และแท็บของมัน) ที่ลิงก์มาที่แท็บ [tabId] เป็นแผนภาพย่อย
   List<(ProjectDocument, DfdNode)> parentsOf(String tabId) => [
-        for (final t in pc.documents)
+        for (final t in _w.documents)
           if (t.type == DocType.dfd)
-            for (final n in pc.dfdOf(t.id).nodes)
+            for (final n in _w.dfdOf(t.id).nodes)
               if (n.kind == DfdKind.process && n.childId == tabId) (t, n),
       ];
 
@@ -796,11 +799,11 @@ class DfdController extends ChangeNotifier {
   static const minScale = 0.2, maxScale = 3.0;
   final Map<String, ({Offset offset, double scale})> _views = {};
 
-  Offset get offset => _views[pc.activeDiagramId]?.offset ?? const Offset(120, 90);
-  double get scale => _views[pc.activeDiagramId]?.scale ?? 1;
+  Offset get offset => _views[_w.activeId]?.offset ?? const Offset(120, 90);
+  double get scale => _views[_w.activeId]?.scale ?? 1;
 
   void _setView(Offset o, double s) {
-    _views[pc.activeDiagramId] = (offset: o, scale: s.clamp(minScale, maxScale).toDouble());
+    _views[_w.activeId] = (offset: o, scale: s.clamp(minScale, maxScale).toDouble());
     notifyListeners();
   }
 

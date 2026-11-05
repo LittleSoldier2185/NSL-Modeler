@@ -8,6 +8,7 @@ import '../core/storage/autosave.dart';
 import '../state/app_settings.dart';
 import '../state/autosave_coordinator.dart';
 import '../state/project_controller.dart';
+import '../state/workspace_controller.dart';
 import 'app_actions.dart';
 import 'canvas/canvas_controller.dart';
 import 'canvas/canvas_view.dart';
@@ -78,7 +79,7 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _offerRecovery(AutosaveInfo info) async {
     if (!mounted) return;
-    final c = context.read<ProjectController>();
+    final w = context.read<WorkspaceController>();
     final cv = context.read<CanvasController>();
     final auto = context.read<AutosaveCoordinator?>();
     final restore = await showDialog<bool>(
@@ -87,8 +88,8 @@ class _HomePageState extends State<HomePage> {
       builder: (_) => RecoveryDialog(info: info),
     );
     if (restore == true) {
-      c.restoreWorkspace(info.workspace, info.originalPath);
-      cv.fit(c.project);
+      w.restoreWorkspace(info.workspace, info.originalPath);
+      cv.fit(w.currentEr.project);
     } else {
       await auto?.discard();
     }
@@ -141,7 +142,9 @@ class _HomePageState extends State<HomePage> {
           final dockH = layout.effectiveDock(box.maxHeight);
           final collapsed = context.select<CanvasController, bool>((cv) => cv.dockCollapsed);
           // แท็บ DFD: แผงซ้าย/ขวาและพื้นที่วาดของแผนภาพนั้น (ไม่มีแผง SQL)
-          final isEr = context.select<ProjectController, DocType?>((c) => c.activeDiagram.type) == DocType.er;
+          final isEr = context.select<WorkspaceController, DocType?>((w) => w.activeDocument.type) == DocType.er;
+          // แคนวาสผูกกับเอกสาร: สลับเอกสาร = สร้าง State ใหม่ (ตัวฟัง/ตัวแปรที่จับ controller ของเอกสารเดิมไว้ไม่ค้าง)
+          final docId = context.select<WorkspaceController, String>((w) => isEr ? w.currentEr.docId : w.activeId);
           return Stack(children: [
             Row(children: [
               SizedBox(width: leftW, child: isEr ? _leftPanel : _dfdLeft),
@@ -150,10 +153,10 @@ class _HomePageState extends State<HomePage> {
                   foregroundPainter: const _EdgeShadow(),
                   child: isEr
                       ? Column(children: [
-                          Expanded(child: _canvas),
+                          Expanded(child: KeyedSubtree(key: ValueKey('er-canvas-$docId'), child: _canvas)),
                           SizedBox(height: collapsed ? 44 : dockH, child: _sqlDock),
                         ])
-                      : _dfdCanvas,
+                      : KeyedSubtree(key: ValueKey('dfd-canvas-$docId'), child: _dfdCanvas),
                 ),
               ),
               SizedBox(width: rightW, child: isEr ? _rightPanel : _dfdRight),

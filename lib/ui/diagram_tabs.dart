@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../core/l10n/l10n.dart';
 import '../core/models/workspace.dart';
-import '../state/project_controller.dart';
+import '../state/workspace_controller.dart';
 import 'canvas/context_menu.dart';
 import 'prompt_dialog.dart';
 import 'theme.dart';
@@ -34,9 +34,9 @@ class _DiagramTabBarState extends State<DiagramTabBar> {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.watch<ProjectController>();
+    final c = context.watch<WorkspaceController>();
     final tabs = c.tabDocuments;
-    final active = c.activeDiagramId;
+    final active = c.activeId;
     final addButton = Padding(
       padding: const EdgeInsets.only(left: 2),
       child: PopupMenuButton<DocType>(
@@ -49,7 +49,7 @@ class _DiagramTabBarState extends State<DiagramTabBar> {
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         ),
         icon: Icon(Icons.add_rounded, size: 18, color: C.muted),
-        onSelected: (k) => c.addDiagram(k),
+        onSelected: (k) => c.addDocument(k),
         itemBuilder: (_) => [
           PopupMenuItem(
             value: DocType.dfd,
@@ -106,7 +106,7 @@ class _DiagramTabBarState extends State<DiagramTabBar> {
                   buildDefaultDragHandles: false,
                   padding: const EdgeInsets.only(left: 8, top: 4),
                   itemCount: tabs.length,
-                  onReorderItem: (from, to) => c.moveDiagram(tabs[from].id, to),
+                  onReorderItem: (from, to) => c.reorderTab(tabs[from].id, to),
                   proxyDecorator: (child, _, _) =>
                       Material(color: Colors.transparent, child: child),
                   itemBuilder: (_, i) => ReorderableDragStartListener(
@@ -140,7 +140,7 @@ class _TabState extends State<_Tab> {
   bool _hover = false;
 
   Future<void> _rename(BuildContext context) async {
-    final c = context.read<ProjectController>();
+    final c = context.read<WorkspaceController>();
     final r = await showDialog<PromptResult>(
       context: context,
       builder: (_) => TextPromptDialog(
@@ -150,7 +150,7 @@ class _TabState extends State<_Tab> {
       ),
     );
     if (r == null || !context.mounted) return;
-    if (!c.renameDiagram(widget.tab.id, r.text)) {
+    if (!c.renameDocument(widget.tab.id, r.text)) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(tr('ชื่อว่างหรือซ้ำกับแผนภาพอื่น'))),
       );
@@ -158,7 +158,7 @@ class _TabState extends State<_Tab> {
   }
 
   Future<void> _delete(BuildContext context) async {
-    final c = context.read<ProjectController>();
+    final c = context.read<WorkspaceController>();
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -179,12 +179,12 @@ class _TabState extends State<_Tab> {
         ],
       ),
     );
-    if (ok == true) c.deleteDiagram(widget.tab.id);
+    if (ok == true) c.deleteDocument(widget.tab.id);
   }
 
   @override
   Widget build(BuildContext context) {
-    final c = context.read<ProjectController>();
+    final c = context.read<WorkspaceController>();
     final t = widget.tab;
     final closable = t.type == DocType.dfd;
     return MouseRegion(
@@ -192,9 +192,9 @@ class _TabState extends State<_Tab> {
       onExit: (_) => setState(() => _hover = false),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: () => c.selectDiagram(t.id),
+        onTap: () => c.openDocument(t.id),
         onSecondaryTapDown: (d) {
-          c.selectDiagram(t.id);
+          c.openDocument(t.id);
           showContextMenu(context, d.globalPosition, [
             MenuSpec(
               tr('เปลี่ยนชื่อ…'),

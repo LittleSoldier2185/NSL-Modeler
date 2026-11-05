@@ -2,7 +2,7 @@ import 'dart:async';
 
 import '../core/storage/project_codec.dart';
 import '../core/storage/autosave.dart';
-import 'project_controller.dart';
+import 'workspace_controller.dart';
 
 /// ดูแลการ auto-save: เมื่อมีงานที่ยังไม่บันทึก จะเขียนสำเนาไว้เป็นระยะ
 /// และลบสำเนาทิ้งทันทีที่บันทึกจริง / เริ่มโปรเจกต์ใหม่ / เปิดไฟล์
@@ -20,7 +20,8 @@ class AutosaveCoordinator {
     controller.addListener(_onChange);
   }
 
-  final ProjectController controller;
+  /// โปรเจกต์ที่ดูแล (ได้ยินการแก้ของทุกเอกสาร)
+  final WorkspaceController controller;
   final AutosaveStore store;
   final Duration debounce;
   final Duration maxWait;

@@ -10,6 +10,7 @@ import '../core/validate/issue.dart';
 import '../state/app_settings.dart';
 import '../state/dfd_controller.dart';
 import '../state/project_controller.dart';
+import '../state/workspace_controller.dart';
 import 'canvas/canvas_controller.dart';
 import 'theme.dart';
 import 'whats_new_dialog.dart';
@@ -24,14 +25,15 @@ class StatusBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.watch<ProjectController>();
+    final w = context.watch<WorkspaceController>();
     final settings = context.watch<AppSettings>();
-    final isEr = c.activeDiagram.type == DocType.er;
+    final isEr = w.activeDocument.type == DocType.er;
     final dfd = context.watch<DfdController>();
     final cv = context.watch<CanvasController>();
 
     final p = c.project;
     // ชื่อไฟล์ที่เปิดอยู่ (ยังไม่บันทึก = ชื่อโปรเจกต์ + .nsld)
-    final fileName = c.filePath == null ? '${p.name}.$kProjectExt' : c.filePath!.split(RegExp(r'[\\/]')).last;
+    final fileName = w.filePath == null ? '${p.name}.$kProjectExt' : w.filePath!.split(RegExp(r'[\\/]')).last;
     final String summary;
     final List<Issue> issues;
     final double zoom;
@@ -40,9 +42,9 @@ class StatusBar extends StatelessWidget {
       issues = c.issues;
       zoom = cv.scale;
     } else {
-      final d = c.dfdOf(c.activeDiagramId);
+      final d = w.dfdOf(w.activeId);
       summary = tr('{0} วัตถุ · {1} เส้นข้อมูล', [d.nodes.length, d.flows.length]);
-      issues = validateDfd(d, workspace: c.workspace, diagramId: c.activeDiagramId);
+      issues = validateDfd(d, workspace: w.workspace, diagramId: w.activeId);
       zoom = dfd.scale;
     }
     final errors = issues.where((i) => i.severity == Severity.error).length;
@@ -85,7 +87,7 @@ class StatusBar extends StatelessWidget {
         // ---- ขวา ----
         Flexible(
           child: Text(
-            '$fileName · ${c.activeDiagram.name} · $summary',
+            '$fileName · ${w.activeDocument.name} · $summary',
             key: const ValueKey('status-summary'),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -96,10 +98,10 @@ class StatusBar extends StatelessWidget {
         _IssueBadge(errors: errors, warnings: warnings, onTap: isEr ? () => cv.showDock(DockTab.issues) : null),
         sep(),
         Text('${(zoom * 100).round()}%', key: const ValueKey('status-zoom'), style: small),
-        if (c.dirty) ...[
+        if (w.dirty) ...[
           sep(),
           Text(tr('● ยังไม่ได้บันทึก'), key: const ValueKey('status-dirty'), style: small),
-        ] else if (c.filePath != null) ...[
+        ] else if (w.filePath != null) ...[
           sep(),
           Text(tr('✓ บันทึกแล้ว'), key: const ValueKey('status-saved'), style: small),
         ],

@@ -29,6 +29,26 @@ class CanvasController extends ChangeNotifier {
 
   double _scale = 1;
   Offset _offset = Offset.zero;
+
+  // ---- มุมมองแยกต่อเอกสาร ER (สลับแท็บแล้วกลับมาได้มุมมองเดิม) ----
+  String? _docId;
+  final Map<String, ({Offset offset, double scale})> _views = {};
+
+  /// เอกสาร ER ที่แคนวาสแสดงอยู่
+  String? get docId => _docId;
+
+  /// สลับไปแสดงเอกสาร ER [id]: จำมุมมองของเอกสารเดิมไว้ แล้วใช้มุมมองที่จำไว้ของ [id] (ยังไม่เคยเปิด = มุมมองเริ่มต้น)
+  void showDoc(String id) {
+    if (id == _docId) return;
+    final prev = _docId;
+    if (prev != null) _views[prev] = (offset: _offset, scale: _scale);
+    _docId = id;
+    if (prev == null) return; // ครั้งแรก: ใช้มุมมองปัจจุบัน
+    final v = _views[id];
+    _offset = v?.offset ?? Offset.zero;
+    _scale = v?.scale ?? 1;
+    notifyListeners();
+  }
   CanvasTool _tool = CanvasTool.select;
   ({String tableId, String columnId})? _fkSource;
 

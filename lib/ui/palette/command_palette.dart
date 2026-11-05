@@ -55,6 +55,7 @@ class PaletteEntry {
 /// รายการทั้งหมดที่ palette ค้นได้: คำสั่ง + ตาราง + คอลัมน์ของโปรเจกต์ปัจจุบัน
 List<PaletteEntry> buildPaletteEntries(BuildContext context) {
   final c = context.read<ProjectController>();
+  final w = c.workspaceController;
   final cv = context.read<CanvasController>();
   PaletteEntry cmd(String title, String keywords, VoidCallback run, {String? shortcut}) => PaletteEntry(
         kind: PaletteKind.command,
@@ -104,7 +105,7 @@ List<PaletteEntry> buildPaletteEntries(BuildContext context) {
     }),
     cmd(tr('จัดวาง DFD อัตโนมัติ'), tr('auto layout dfd จัดตำแหน่ง แผนภาพกระแสข้อมูล'), () {
       final d = context.read<DfdController>();
-      if (c.activeDiagram.type == DocType.dfd && d.autoLayout()) d.fit(d.viewport);
+      if (w.activeDocument.type == DocType.dfd && d.autoLayout()) d.fit(d.viewport);
     }),
     byCmd(tr('พอดีหน้าจอ'), 'fit zoom', Cmd.fit),
     byCmd(tr('ซูม 100%'), 'zoom reset', Cmd.zoom100),
@@ -127,7 +128,7 @@ List<PaletteEntry> buildPaletteEntries(BuildContext context) {
 
   /// กระโดดไปแท็บ ER ก่อน (ถ้าอยู่แท็บ DFD) แล้วทำต่อ
   void inEr(VoidCallback f) {
-    c.selectDiagram(c.erDocumentId);
+    w.openDocument(c.erDocumentId);
     f();
   }
 
@@ -169,8 +170,8 @@ List<PaletteEntry> buildPaletteEntries(BuildContext context) {
         }),
       ),
     // ---- แผนภาพ DFD ทุกแท็บ: วัตถุ เส้นข้อมูล และปัญหาของแท็บที่เปิดอยู่ ----
-    for (final tab in c.documents.where((t) => t.type == DocType.dfd)) ...[
-      for (final n in c.dfdOf(tab.id).nodes)
+    for (final tab in w.documents.where((t) => t.type == DocType.dfd)) ...[
+      for (final n in w.dfdOf(tab.id).nodes)
         PaletteEntry(
           kind: PaletteKind.dfdNode,
           title: n.title.isEmpty ? tr('(ไม่มีชื่อ)') : n.title,
@@ -178,23 +179,23 @@ List<PaletteEntry> buildPaletteEntries(BuildContext context) {
           search: '${n.title} ${tab.name}',
           run: () => _gotoDfd(context, tab.id, node: n.id),
         ),
-      for (final f in c.dfdOf(tab.id).flows)
+      for (final f in w.dfdOf(tab.id).flows)
         PaletteEntry(
           kind: PaletteKind.dfdFlow,
           title: f.label.isEmpty ? tr('(ไม่มีชื่อ)') : f.label,
-          subtitle: '${tab.name} · ${c.dfdOf(tab.id).nodeById(f.fromId)?.title ?? '?'} → ${c.dfdOf(tab.id).nodeById(f.toId)?.title ?? '?'}',
-          search: '${f.label} ${tab.name} ${c.dfdOf(tab.id).nodeById(f.fromId)?.title ?? ''} ${c.dfdOf(tab.id).nodeById(f.toId)?.title ?? ''}',
+          subtitle: '${tab.name} · ${w.dfdOf(tab.id).nodeById(f.fromId)?.title ?? '?'} → ${w.dfdOf(tab.id).nodeById(f.toId)?.title ?? '?'}',
+          search: '${f.label} ${tab.name} ${w.dfdOf(tab.id).nodeById(f.fromId)?.title ?? ''} ${w.dfdOf(tab.id).nodeById(f.toId)?.title ?? ''}',
           run: () => _gotoDfd(context, tab.id, flow: f.id),
         ),
     ],
-    if (c.activeDiagram.type == DocType.dfd)
-      for (final i in validateDfd(c.dfdOf(c.activeDiagramId), workspace: c.workspace, diagramId: c.activeDiagramId))
+    if (w.activeDocument.type == DocType.dfd)
+      for (final i in validateDfd(w.dfdOf(w.activeId), workspace: w.workspace, diagramId: w.activeId))
         PaletteEntry(
           kind: PaletteKind.issue,
           title: i.title,
           subtitle: i.message,
           search: '${i.title} ${i.message} ${i.code}',
-          run: () => _gotoDfd(context, c.activeDiagramId, node: i.tableId, flow: i.relationId),
+          run: () => _gotoDfd(context, w.activeId, node: i.tableId, flow: i.relationId),
         ),
     for (final t in c.project.tables) ...[
       PaletteEntry(
@@ -227,7 +228,7 @@ List<PaletteEntry> buildPaletteEntries(BuildContext context) {
 void _gotoDfd(BuildContext context, String tabId, {String? node, String? flow}) {
   final c = context.read<ProjectController>();
   final d = context.read<DfdController>();
-  c.selectDiagram(tabId);
+  c.workspaceController.openDocument(tabId);
   void apply() {
     if (node != null) {
       d.selectNode(node);

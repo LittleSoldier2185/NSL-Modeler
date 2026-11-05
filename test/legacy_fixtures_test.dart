@@ -162,7 +162,7 @@ void main() {
     expectErGolden(erOf(back), 'v2_er_dfd.er.json');
 
     // แก้ต่อแล้ว auto-save ใหม่: เขียนเป็น v3 และอ่านกลับได้ทั้ง ER และ DFD
-    final a = AutosaveCoordinator(c, store, debounce: const Duration(milliseconds: 5));
+    final a = AutosaveCoordinator(c.workspaceController, store, debounce: const Duration(milliseconds: 5));
     addTearDown(a.dispose);
     c.addTable(name: 'later');
     await a.flush();

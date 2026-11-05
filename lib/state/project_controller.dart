@@ -9,7 +9,6 @@ import '../core/clipboard/table_clipboard.dart';
 import '../core/layout/auto_layout.dart';
 import '../core/models/column_model.dart';
 import '../core/models/dfd_model.dart';
-import '../core/models/diagram.dart';
 import '../core/models/enums.dart';
 import '../core/models/index_model.dart';
 import '../core/models/note_model.dart';
@@ -19,52 +18,46 @@ import '../core/models/table_model.dart';
 import '../core/models/workspace.dart';
 import '../core/validate/issue.dart';
 import '../core/validate/validator.dart';
+import 'doc_controller.dart';
 import 'snapshot_history.dart';
+import 'workspace_controller.dart';
 
-/// ถือโปรเจกต์ปัจจุบัน ([Workspace] — เอกสาร ER + DFD) + selection + undo/redo (แบบ snapshot แยกต่อเอกสาร)
+/// controller ของเอกสาร ER หนึ่งชิ้น: เนื้อหา ([project]) + selection + undo/redo ของเอกสารนี้
 ///
-/// [project] คือเนื้อหาของเอกสาร ER ที่โปรแกรมแก้อยู่ (ตอนนี้มี ER เอกสารเดียวและลบไม่ได้)
-class ProjectController extends ChangeNotifier {
-  ProjectController([Project? project]) : _workspace = Workspace.single(project ?? Project()) {
-    _erDoc = _ensureEr(_workspace);
-  }
+/// ไฟล์ แท็บ และเอกสารอื่นอยู่ที่ [workspaceController] (เมธอดระดับไฟล์/แท็บที่เหลืออยู่ที่นี่เป็นทางผ่านไปที่นั่น)
+class ProjectController extends DocController {
+  /// ใช้แบบเดี่ยว ๆ (เทสต์/ข้อมูลที่สร้างในโปรแกรม): สร้าง [WorkspaceController] ที่มี ER เอกสารเดียวให้ด้วย
+  /// แล้วคืน controller ของ ER นั้น
+  factory ProjectController([Project? project]) => WorkspaceController(Workspace.single(project ?? Project())).mainEr;
 
-  static const _maxHistory = 100;
+  /// controller ของเอกสาร ER [doc] ใน [workspaceController] (สร้างโดย workspace controller)
+  ProjectController.forDoc(super.doc, this.workspaceController) : assert(doc.content is Project);
 
-  Workspace _workspace;
+  /// workspace ที่เอกสารนี้อยู่
+  final WorkspaceController workspaceController;
 
-  /// เอกสาร ER ที่แก้อยู่ — undo/redo เปลี่ยนเนื้อหา ([ProjectDocument.content]) เป็น object ใหม่ทุกครั้ง
-  late ProjectDocument _erDoc;
-  String? _filePath;
-  bool _dirty = false;
   String? _selectedTableId;
   String? _selectedColumnId;
 
   /// ตารางที่เลือกเพิ่มจากตัวหลัก [_selectedTableId] (เลือกหลายตารางด้วย Ctrl/Shift+คลิก หรือ Ctrl+A)
   final Set<String> _extra = {};
 
-  /// ประวัติ undo/redo แยกต่อเอกสาร (key = id เอกสาร; snapshot = เนื้อหาของเอกสารนั้นเท่านั้น)
-  final Map<String, SnapshotHistory> _histories = {};
   int _idCounter = 0;
 
-  SnapshotHistory _hist(String docId) => _histories.putIfAbsent(docId, () => SnapshotHistory(max: _maxHistory));
-
-  /// ประวัติของเอกสาร ER
-  SnapshotHistory get _history => _hist(_erDoc.id);
-
-  /// เนื้อหาของเอกสาร ER ที่แก้อยู่ (object จริงในเอกสาร — undo/redo เปลี่ยน object นี้)
-  Project get _project => _erDoc.content as Project;
+  /// เนื้อหาของเอกสาร ER นี้ (object จริงในเอกสาร — undo/redo เปลี่ยน object นี้)
+  Project get _project => doc.content as Project;
 
   Project get project => _project;
 
-  /// id ของเอกสาร ER ที่แก้อยู่ (ที่เก็บข้อมูลใน DFD ที่ผูกตารางชี้มาที่เอกสารนี้)
-  String get erDocumentId => _erDoc.id;
-  String? get filePath => _filePath;
-  bool get dirty => _dirty;
+  /// id ของเอกสาร ER นี้ (ที่เก็บข้อมูลใน DFD ที่ผูกตารางชี้มาที่เอกสารนี้)
+  String get erDocumentId => docId;
+
+  /// มีอะไรยังไม่บันทึกทั้งโปรเจกต์ (ของเอกสารนี้อย่างเดียวดูที่ [docDirty])
+  @override
+  bool get dirty => workspaceController.dirty;
+
   String? get selectedTableId => _selectedTableId;
   String? get selectedColumnId => _selectedColumnId;
-  bool get canUndo => _histories[activeDiagramId]?.canUndo ?? false;
-  bool get canRedo => _histories[activeDiagramId]?.canRedo ?? false;
 
   List<Issue>? _issues;
 
@@ -84,21 +77,36 @@ class ProjectController extends ChangeNotifier {
   String newId(String prefix) =>
       '$prefix${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}${_idCounter++}';
 
-  String _snapshot() => jsonEncode(_project.toContentJson());
+  @override
+  @protected
+  String snapshot() => jsonEncode(_project.toContentJson());
+
+  /// ใส่เนื้อหา ER จาก snapshot กลับเข้าเอกสาร (object ใหม่ — สิ่งที่บันทึกลงไฟล์คือค่านี้)
+  @override
+  @protected
+  void restoreSnapshot(String snap) {
+    doc.content = Project.fromContentJson(jsonDecode(snap) as Map<String, dynamic>);
+    _syncWorkspaceName();
+    _issues = null;
+  }
+
+  @override
+  @protected
+  void afterRestore() => _fixSelection();
 
   /// แก้ข้อมูลแบบมีประวัติ
   void _edit(void Function() change) {
-    _history.push(_snapshot());
-    change();
-    _syncWorkspaceName();
-    _dirty = true;
-    _issues = null;
-    notifyListeners();
+    editWithHistory(() {
+      change();
+      _syncWorkspaceName();
+      _issues = null;
+    });
   }
 
   /// ชื่อโปรเจกต์ (ชื่อ workspace ในไฟล์) ตามชื่อของเอกสาร ER — ตอนนี้แก้ชื่อได้ที่ ER อย่างเดียว
   void _syncWorkspaceName() {
-    if (_workspace.documentsOf(DocType.er).length == 1) _workspace.name = _project.name;
+    final w = workspaceController.workspace;
+    if (w.documentsOf(DocType.er).length == 1) w.name = _project.name;
   }
 
   void _fixSelection() {
@@ -118,174 +126,102 @@ class ProjectController extends ChangeNotifier {
     }
   }
 
-  // ---------- ไฟล์ ----------
-
-  void newProject({double boardWidth = kDefaultBoardWidth, double boardHeight = kDefaultBoardHeight}) =>
-      _replace(Workspace.single(Project(boardWidth: boardWidth, boardHeight: boardHeight)), null, dirty: false);
-
-  /// เปิดโปรเจกต์ (เช่น จากไฟล์) — [w] ถูกใช้เป็นข้อมูลจริงของ controller (ไม่คัดลอก)
-  void loadWorkspace(Workspace w, String? path) => _replace(w, path, dirty: false);
-
-  /// เปิดโปรเจกต์ที่มีแต่ ER (สะดวกสำหรับเทสต์/ข้อมูลที่สร้างในโปรแกรม)
-  void loadProject(Project p, String? path) => _replace(Workspace.single(p), path, dirty: false);
-
-  /// กู้คืนงานที่ auto-save ไว้ — ยังไม่ได้บันทึกลงไฟล์จริง จึงถือว่ายังมีการแก้ค้างอยู่
-  void restoreWorkspace(Workspace w, String? originalPath) => _replace(w, originalPath, dirty: true);
-
-  /// โปรเจกต์ที่ได้จากการ import .sql — ยังไม่มีไฟล์โปรเจกต์ จึงถือว่ายังไม่ได้บันทึก
-  void loadImported(Project p) => _replace(Workspace.single(p), null, dirty: true);
-
-  /// ให้ workspace มีเอกสาร ER เสมอ (ไฟล์ v3 อาจไม่มี) — ไม่มี = เพิ่มเอกสาร ER ว่างไว้หน้าสุด ; คืน ER แรก
-  static ProjectDocument _ensureEr(Workspace w) {
-    final er = w.firstEr;
-    if (er != null) return er;
-    var id = kErDiagramId;
-    for (var n = 2; w.documentById(id) != null; n++) {
-      id = '$kErDiagramId$n';
-    }
-    final doc = ProjectDocument.er(id: id, name: w.uniqueDocumentName('ER'), content: Project(name: w.name));
-    w.documents.insert(0, doc);
-    return doc;
-  }
-
-  void _replace(Workspace w, String? path, {required bool dirty}) {
-    _workspace = w;
-    _erDoc = _ensureEr(w);
-    _activeDiagramId = _erDoc.id;
-    _filePath = path;
-    _dirty = dirty;
+  /// ผูก controller นี้กับเอกสาร ER [er] (เปิดโปรเจกต์ใหม่โดยใช้ controller ตัวเดิม) — ล้างการเลือกและประวัติ
+  void attach(ProjectDocument er) {
+    assert(er.content is Project);
+    rebind(er);
     _issues = null;
     _selectedTableId = null;
     _selectedGroupId = null;
     _attached.clear();
     _extra.clear();
     _selectedColumnId = null;
+    _dragOrigin = null;
+    _attOrigin = null;
+    _groupOrigin = null;
+    _resizeOrigin = null;
     _histories.clear();
     _dfdGestureId = null;
     notifyListeners();
   }
 
-  void markSaved(String path) {
-    _filePath = path;
-    _dirty = false;
-    notifyListeners();
-  }
+  // ---------- ไฟล์ / แท็บ: ทางผ่านไปที่ workspaceController (ของเดิม) ----------
 
-  // ---------- เอกสาร (workspace) ----------
-  //
-  // UI อ่านรายการเอกสาร/เนื้อหา DFD ผ่าน accessor เหล่านี้ — คืน object จริงของโปรเจกต์ (ไม่ใช่สำเนา)
+  @Deprecated('ใช้ workspaceController.filePath')
+  String? get filePath => workspaceController.filePath;
 
-  /// โปรเจกต์ทั้งหมด (ข้อมูลจริงที่บันทึกลงไฟล์)
-  Workspace get workspace => _workspace;
+  @Deprecated('ใช้ workspaceController.newProject')
+  void newProject({double boardWidth = kDefaultBoardWidth, double boardHeight = kDefaultBoardHeight}) =>
+      workspaceController.newProject(boardWidth: boardWidth, boardHeight: boardHeight);
 
-  /// เอกสารทั้งหมดตามลำดับในไฟล์ (รวมชนิดที่โปรแกรมรุ่นนี้ไม่รู้จัก)
-  List<ProjectDocument> get documents => _workspace.documents;
+  @Deprecated('ใช้ workspaceController.loadWorkspace')
+  void loadWorkspace(Workspace w, String? path) => workspaceController.loadWorkspace(w, path);
 
-  /// เอกสารที่แสดงเป็นแท็บ (ชนิดที่รู้จัก) ตามลำดับ
-  List<ProjectDocument> get tabDocuments => [for (final d in _workspace.documents) if (d.type != null) d];
+  /// เปิดโปรเจกต์ที่มีแต่ ER — controller ตัวนี้ (ER หลัก) ถูกใช้ต่อกับเอกสารใหม่
+  @Deprecated('ใช้ workspaceController.loadProject')
+  void loadProject(Project p, String? path) => workspaceController.loadProject(p, path);
 
-  ProjectDocument? documentById(String id) => _workspace.documentById(id);
+  @Deprecated('ใช้ workspaceController.restoreWorkspace')
+  void restoreWorkspace(Workspace w, String? originalPath) => workspaceController.restoreWorkspace(w, originalPath);
 
-  /// เนื้อหา DFD ของเอกสาร [id] — ไม่ใช่เอกสาร DFD/ไม่มีอยู่ = แผนภาพว่างชั่วคราว (ไม่ถูกเก็บในโปรเจกต์)
-  DfdDiagram dfdOf(String id) => _workspace.documentById(id)?.dfd ?? DfdDiagram();
+  @Deprecated('ใช้ workspaceController.loadImported')
+  void loadImported(Project p) => workspaceController.loadImported(p);
 
-  // ---------- แท็บแผนภาพ ----------
-  //
-  // การเพิ่ม/ลบ/เปลี่ยนชื่อ/เรียงแท็บไม่เข้าประวัติ undo (เหมือนแท็บเอกสารของโปรแกรมกราฟิก — ลบแท็บมีกล่องยืนยัน)
-  // และ undo/redo ของเนื้อหาไม่ย้อนรายการแท็บ
+  @Deprecated('ใช้ workspaceController.markSaved')
+  void markSaved(String path) => workspaceController.markSaved(path);
 
-  String _activeDiagramId = kErDiagramId;
+  @Deprecated('ใช้ workspaceController.workspace')
+  Workspace get workspace => workspaceController.workspace;
 
-  /// เอกสารที่เปิดอยู่ (ถ้าเอกสารนั้นหายไปจะกลับเป็น ER)
-  ProjectDocument get activeDiagram {
-    final d = _workspace.documentById(_activeDiagramId);
-    return d != null && d.type != null ? d : _erDoc;
-  }
+  @Deprecated('ใช้ workspaceController.documents')
+  List<ProjectDocument> get documents => workspaceController.documents;
 
-  String get activeDiagramId => activeDiagram.id;
+  @Deprecated('ใช้ workspaceController.tabDocuments')
+  List<ProjectDocument> get tabDocuments => workspaceController.tabDocuments;
 
-  void selectDiagram(String id) {
-    final d = _workspace.documentById(id);
-    if (d == null || d.type == null || id == _activeDiagramId) return;
-    _activeDiagramId = id;
-    notifyListeners();
-  }
+  @Deprecated('ใช้ workspaceController.documentById')
+  ProjectDocument? documentById(String id) => workspaceController.documentById(id);
 
-  void _tabsChanged() {
-    _dirty = true;
-    notifyListeners();
-  }
+  @Deprecated('ใช้ workspaceController.dfdOf')
+  DfdDiagram dfdOf(String id) => workspaceController.dfdOf(id);
 
-  /// เพิ่มแผนภาพใหม่ต่อท้ายและเปิดทันที (ตอนนี้เพิ่มได้เฉพาะ DFD — ER มีอันเดียว) ชื่อซ้ำจะต่อเลขให้
-  ProjectDocument? addDiagram(DocType type, {String? name}) {
-    if (type != DocType.dfd) return null;
-    final base = cleanDiagramName(name ?? '');
-    final doc = ProjectDocument.dfd(
-      id: newId('d'),
-      name: _workspace.uniqueDocumentName(base.isEmpty ? 'DFD' : base),
-      content: DfdDiagram(),
-    );
-    _workspace.documents.add(doc);
-    _activeDiagramId = doc.id;
-    _tabsChanged();
-    return doc;
-  }
+  @Deprecated('ใช้ workspaceController.activeDocument')
+  ProjectDocument get activeDiagram => workspaceController.activeDocument;
 
-  /// เปลี่ยนชื่อแท็บ — คืน false ถ้าชื่อว่าง/ซ้ำกับเอกสารอื่น (ไม่สนตัวพิมพ์)
-  bool renameDiagram(String id, String name) {
-    final t = _workspace.documentById(id);
-    final n = cleanDiagramName(name);
-    if (t == null || n.isEmpty) return false;
-    if (_workspace.documents.any((d) => d.id != id && d.name.toLowerCase() == n.toLowerCase())) return false;
-    if (t.name == n) return true;
-    t.name = n;
-    _tabsChanged();
-    return true;
-  }
+  @Deprecated('ใช้ workspaceController.activeId')
+  String get activeDiagramId => workspaceController.activeId;
 
-  /// ลบแท็บ (ลบ ER ไม่ได้) — ถ้าเป็นแท็บที่เปิดอยู่ จะย้ายไปแท็บข้างเคียง
-  bool deleteDiagram(String id) {
-    final tabs = tabDocuments;
-    final i = tabs.indexWhere((d) => d.id == id);
-    if (i < 0 || tabs[i].type != DocType.dfd) return false;
-    _workspace.documents.remove(tabs[i]);
-    tabs.removeAt(i);
-    _histories.remove(id);
-    if (_activeDiagramId == id) {
-      _activeDiagramId = tabs[i > 0 ? i - 1 : 0].id;
-    }
-    _tabsChanged();
-    return true;
-  }
+  @Deprecated('ใช้ workspaceController.openDocument')
+  void selectDiagram(String id) => workspaceController.openDocument(id);
 
-  /// ย้ายแท็บไปตำแหน่ง [toIndex] (ตำแหน่งในรายการแท็บหลังเอาแท็บนั้นออกแล้ว)
-  /// เอกสารชนิดที่ไม่รู้จัก (ไม่มีแท็บ) คงตำแหน่งสัมพัทธ์เดิมในไฟล์
-  void moveDiagram(String id, int toIndex) {
-    final tabs = tabDocuments;
-    final from = tabs.indexWhere((d) => d.id == id);
-    if (from < 0) return;
-    final to = toIndex.clamp(0, tabs.length - 1);
-    if (to == from) return;
-    final doc = tabs.removeAt(from);
-    final docs = _workspace.documents..remove(doc);
-    if (to < tabs.length) {
-      docs.insert(docs.indexOf(tabs[to]), doc);
-    } else {
-      docs.insert(docs.indexOf(tabs.last) + 1, doc);
-    }
-    _tabsChanged();
-  }
+  @Deprecated('ใช้ workspaceController.addDocument')
+  ProjectDocument? addDiagram(DocType type, {String? name}) => workspaceController.addDocument(type, name: name);
+
+  @Deprecated('ใช้ workspaceController.renameDocument')
+  bool renameDiagram(String id, String name) => workspaceController.renameDocument(id, name);
+
+  @Deprecated('ใช้ workspaceController.deleteDocument')
+  bool deleteDiagram(String id) => workspaceController.deleteDocument(id) != null;
+
+  @Deprecated('ใช้ workspaceController.reorderTab')
+  void moveDiagram(String id, int toIndex) => workspaceController.reorderTab(id, toIndex);
 
   // ---------- undo / redo ----------
 
   // --- ประวัติของแท็บ DFD: แยกต่อเอกสาร (snapshot เฉพาะเนื้อหาของเอกสารนั้น) ---
+
+  /// ประวัติ undo/redo ของเอกสาร DFD (key = id เอกสาร)
+  final Map<String, SnapshotHistory> _histories = {};
+
+  SnapshotHistory _hist(String docId) =>
+      _histories.putIfAbsent(docId, () => SnapshotHistory(max: DocController.maxHistory));
 
   /// แท็บ DFD ที่กำลังลากอยู่ (ลากได้ทีละแท็บ)
   String? _dfdGestureId;
 
   /// เอกสาร DFD ที่เปิดอยู่ (null = แท็บที่เปิดไม่ใช่ DFD)
   ProjectDocument? get _activeDfdDoc {
-    final d = activeDiagram;
+    final d = workspaceController.activeDocument;
     return d.type == DocType.dfd ? d : null;
   }
 
@@ -297,7 +233,7 @@ class ProjectController extends ChangeNotifier {
     if (doc == null) return;
     _hist(doc.id).push(_dfdSnapshot(doc));
     change(doc.dfd!);
-    _dirty = true;
+    workspaceController.markDirty();
     notifyListeners();
   }
 
@@ -321,12 +257,12 @@ class ProjectController extends ChangeNotifier {
     _dfdGestureId = null;
     if (id == null) return;
     final h = _histories[id];
-    final doc = _workspace.documentById(id);
+    final doc = workspaceController.documentById(id);
     if (h == null || !h.gestureActive || doc?.dfd == null) {
       h?.cancelGesture();
       return;
     }
-    if (h.endGesture(_dfdSnapshot(doc!))) _dirty = true;
+    if (h.endGesture(_dfdSnapshot(doc!))) workspaceController.markDirty();
     notifyListeners();
   }
 
@@ -336,46 +272,48 @@ class ProjectController extends ChangeNotifier {
     final cur = _dfdSnapshot(doc);
     final snap = undo ? h.undo(cur)! : h.redo(cur)!;
     doc.content = DfdDiagram.fromJson(jsonDecode(snap));
-    _dirty = true;
+    workspaceController.markDirty();
     notifyListeners();
   }
 
-  /// ใส่เนื้อหา ER จาก snapshot กลับเข้าเอกสาร ER (object ใหม่ — สิ่งที่บันทึกลงไฟล์คือค่านี้)
-  /// undo ไม่ย้อนรายการแท็บ/เนื้อหา DFD
-  void _restoreEr(String snap) {
-    _erDoc.content = Project.fromContentJson(jsonDecode(snap) as Map<String, dynamic>);
-    _syncWorkspaceName();
-    _dirty = true;
-    _issues = null;
-    _fixSelection();
-    notifyListeners();
+  @override
+  bool get canUndo {
+    final dfd = _activeDfdDoc;
+    return dfd != null ? (_histories[dfd.id]?.canUndo ?? false) : super.canUndo;
   }
 
+  @override
+  bool get canRedo {
+    final dfd = _activeDfdDoc;
+    return dfd != null ? (_histories[dfd.id]?.canRedo ?? false) : super.canRedo;
+  }
+
+  @override
   void undo() {
     final dfd = _activeDfdDoc;
     if (dfd != null) {
       _dfdUndoRedo(dfd, true);
       return;
     }
-    if (!_history.canUndo) return;
-    _restoreEr(_history.undo(_snapshot())!);
+    super.undo();
   }
 
+  @override
   void redo() {
     final dfd = _activeDfdDoc;
     if (dfd != null) {
       _dfdUndoRedo(dfd, false);
       return;
     }
-    if (!_history.canRedo) return;
-    _restoreEr(_history.redo(_snapshot())!);
+    super.redo();
   }
 
   // ---------- gesture (ลาก) : นับเป็น 1 ขั้น undo ----------
 
+  @override
   void beginGesture() {
-    if (_history.gestureActive) return;
-    _history.beginGesture(_snapshot());
+    if (gestureActive) return;
+    super.beginGesture();
     _dragOrigin = null;
     _attOrigin = null;
   }
@@ -384,20 +322,21 @@ class ProjectController extends ChangeNotifier {
   Map<String, (double, double)>? _dragOrigin;
   double _rawDx = 0, _rawDy = 0;
 
-  /// กำลังลากอยู่ (ตั้งแต่ beginGesture ถึง endGesture)
-  bool get gestureActive => _history.gestureActive;
-
-  void endGesture() {
-    final had = _history.gestureActive;
+  @override
+  bool endGesture() {
+    final had = gestureActive;
     _dragOrigin = null;
     _attOrigin = null;
     _groupOrigin = null;
     _resizeOrigin = null;
-    if (had && _history.endGesture(_snapshot())) {
-      _dirty = true;
+    if (!had) return false;
+    final changed = history.endGesture(snapshot());
+    if (changed) {
+      markEdited();
       _issues = null;
     }
-    if (had) notifyListeners(); // ให้ hint ตอนลากหายไป
+    notifyListeners(); // ให้ hint ตอนลากหายไป
+    return changed;
   }
 
   /// ตั้งข้อมูลตั้งต้นของตาราง (แทนที่ทั้งชุด) เป็น undo ขั้นเดียว — ไม่เปลี่ยนถ้าเหมือนเดิม

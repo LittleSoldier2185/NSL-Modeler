@@ -46,7 +46,7 @@ class FileActions {
 
   /// true = ไปต่อได้ (บันทึกแล้ว / ไม่บันทึก / ไม่มีอะไรค้าง)
   static Future<bool> confirmDiscard(BuildContext context, ProjectController c) async {
-    if (!c.dirty) return true;
+    if (!c.workspaceController.dirty) return true;
     final r = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -71,7 +71,7 @@ class FileActions {
     if (!context.mounted) return;
     final size = await showBoardSizeDialog(context, title: tr('โปรเจกต์ใหม่'), confirmLabel: tr('สร้าง'));
     if (size == null) return;
-    c.newProject(boardWidth: size.width, boardHeight: size.height);
+    c.workspaceController.newProject(boardWidth: size.width, boardHeight: size.height);
   }
 
   /// เปลี่ยนขนาดกระดานของโปรเจกต์ที่เปิดอยู่ (undo ได้)
@@ -96,7 +96,7 @@ class FileActions {
     final path = f?.path;
     if (path == null) return;
     try {
-      c.loadWorkspace(await ProjectFile.load(path), path);
+      c.workspaceController.loadWorkspace(await ProjectFile.load(path), path);
     } on ProjectFormatException catch (e) {
       if (context.mounted) _toast(context, e.message);
     } catch (e) {
@@ -125,7 +125,7 @@ class FileActions {
         builder: (_) => ImportPreviewDialog(result: result, fileName: fileName),
       );
       if (ok != true) return;
-      c.loadImported(result.project);
+      c.workspaceController.loadImported(result.project);
       if (!context.mounted) return;
       final cv = context.read<CanvasController>();
       cv.fit(c.project);
@@ -169,7 +169,7 @@ class FileActions {
       builder: (_) => ImportPreviewDialog(result: read.import, fileName: out.label),
     );
     if (ok != true) return;
-    c.loadImported(read.import.project);
+    c.workspaceController.loadImported(read.import.project);
     if (!context.mounted) return;
     final cv = context.read<CanvasController>();
     cv.fit(c.project);
@@ -252,7 +252,7 @@ class FileActions {
 
   /// Export แผนภาพเป็น PNG หรือ SVG (ทั้งแผนภาพ ไม่ขึ้นกับว่าตอนนี้ซูม/เลื่อนอยู่ตรงไหน)
   static Future<void> exportImage(BuildContext context, ProjectController c, {ImageArea? initialArea}) async {
-    if (c.activeDiagram.type == DocType.dfd) return _exportDfdImage(context, c);
+    if (c.workspaceController.activeDocument.type == DocType.dfd) return _exportDfdImage(context, c);
     final p = c.project;
     if (p.tables.isEmpty && p.notes.isEmpty) {
       _toast(context, tr('ยังไม่มีตารางให้ Export เป็นภาพ'));
@@ -312,8 +312,8 @@ class FileActions {
 
   /// Export แผนภาพ DFD ที่เปิดอยู่เป็น PNG/SVG (ตัดเฉพาะส่วนที่มีวัตถุ)
   static Future<void> _exportDfdImage(BuildContext context, ProjectController c) async {
-    final tab = c.activeDiagram;
-    final d = c.dfdOf(tab.id);
+    final tab = c.workspaceController.activeDocument;
+    final d = c.workspaceController.dfdOf(tab.id);
     if (d.nodes.isEmpty) {
       _toast(context, tr('ยังไม่มีวัตถุให้ Export เป็นภาพ'));
       return;
@@ -369,7 +369,7 @@ class FileActions {
 
   /// คืน true ถ้าบันทึกสำเร็จ
   static Future<bool> save(BuildContext context, ProjectController c) async {
-    final path = c.filePath;
+    final path = c.workspaceController.filePath;
     // ไฟล์ .erd/.nslm เก่า: ไม่เขียนทับ ให้บันทึกเป็น .nsld ใหม่ (ไฟล์เดิมคงอยู่)
     if (path == null || isLegacyProjectPath(path)) return saveAs(context, c);
     return _write(context, c, path);
@@ -380,7 +380,7 @@ class FileActions {
     final uri = await FilePicker.saveFile(
       dialogTitle: tr('บันทึกเป็น'),
       fileName: '$name.$kProjectExt',
-      bytes: utf8.encode(ProjectFile.encode(c.workspace)),
+      bytes: utf8.encode(ProjectFile.encode(c.workspaceController.workspace)),
     );
     if (uri == null) return false;
     final path = withProjectExt(uri.toFilePath());
@@ -483,8 +483,8 @@ class FileActions {
 
   static Future<bool> _write(BuildContext context, ProjectController c, String path) async {
     try {
-      await ProjectFile.save(c.workspace, path);
-      c.markSaved(path);
+      await ProjectFile.save(c.workspaceController.workspace, path);
+      c.workspaceController.markSaved(path);
       return true;
     } catch (e) {
       if (context.mounted) _toast(context, tr('บันทึกไม่ได้: {0}', [e]));

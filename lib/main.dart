@@ -14,6 +14,7 @@ import 'state/app_settings.dart';
 import 'state/autosave_coordinator.dart';
 import 'state/dfd_controller.dart';
 import 'state/project_controller.dart';
+import 'state/workspace_controller.dart';
 import 'ui/canvas/canvas_controller.dart';
 import 'ui/db_connect_dialog.dart';
 import 'ui/home_page.dart';
@@ -80,11 +81,11 @@ class NslDevApp extends StatefulWidget {
 class _NslDevAppState extends State<NslDevApp> with WidgetsBindingObserver {
   late final AppSettings _settings = widget.settings ?? AppSettings(lang: Lang.th);
   bool _recoveryPending = true;
-  late final ProjectController _project = ProjectController();
+  late final WorkspaceController _workspace = WorkspaceController();
   late final CanvasController _canvas = CanvasController();
-  late final DfdController _dfd = DfdController(_project);
+  late final DfdController _dfd = DfdController(_workspace.mainEr);
   late final AutosaveCoordinator? _autosave =
-      widget.autosave == null ? null : AutosaveCoordinator(_project, widget.autosave!);
+      widget.autosave == null ? null : AutosaveCoordinator(_workspace, widget.autosave!);
 
   @override
   void initState() {
@@ -92,10 +93,15 @@ class _NslDevAppState extends State<NslDevApp> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _settings.addListener(_onSettings);
     final p = widget.initialProject;
-    if (p != null) _project.loadWorkspace(p, widget.initialPath);
+    if (p != null) _workspace.loadWorkspace(p, widget.initialPath);
+    _workspace.addListener(_onWorkspace);
+    _onWorkspace();
   }
 
   void _onSettings() => setState(() {});
+
+  /// มุมมอง (เลื่อน/ซูม) ของแคนวาส ER แยกต่อเอกสาร
+  void _onWorkspace() => _canvas.showDoc(_workspace.currentEr.docId);
 
   /// หน้าต่างเสียโฟกัส/ถูกซ่อน/กำลังปิด -> เขียนสำเนาทันที ไม่รอ timer
   @override
@@ -107,10 +113,11 @@ class _NslDevAppState extends State<NslDevApp> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _settings.removeListener(_onSettings);
+    _workspace.removeListener(_onWorkspace);
     _autosave?.dispose();
-    _project.dispose();
-    _canvas.dispose();
     _dfd.dispose();
+    _workspace.dispose();
+    _canvas.dispose();
     super.dispose();
   }
 
@@ -122,19 +129,29 @@ class _NslDevAppState extends State<NslDevApp> with WidgetsBindingObserver {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider.value(value: _settings),
-        ChangeNotifierProvider.value(value: _project),
+        ChangeNotifierProvider.value(value: _workspace),
         ChangeNotifierProvider.value(value: _canvas),
-        ChangeNotifierProvider.value(value: _dfd),
         Provider<AutosaveCoordinator?>.value(value: _autosave),
       ],
-      child: MaterialApp(
-        key: ValueKey('${_settings.lang.code}-${_settings.dark}'),
-        title: 'NSL Dev',
-        debugShowCheckedModeBanner: false,
-        theme: buildTheme(palette),
-        home: HomePage(
-          recovery: _recoveryPending ? widget.recovery : null,
-          onRecoveryOffered: () => _recoveryPending = false,
+      // controller ของเอกสาร ER/DFD ที่ใช้งานอยู่: เปลี่ยนตามแท็บ (วิดเจ็ตเดิมใช้ watch<ProjectController>() ได้ต่อ)
+      child: ListenableBuilder(
+        listenable: _workspace,
+        builder: (context, child) => MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ProjectController>.value(value: _workspace.currentEr),
+            ChangeNotifierProvider<DfdController>.value(value: _dfd),
+          ],
+          child: child,
+        ),
+        child: MaterialApp(
+          key: ValueKey('${_settings.lang.code}-${_settings.dark}'),
+          title: 'NSL Dev',
+          debugShowCheckedModeBanner: false,
+          theme: buildTheme(palette),
+          home: HomePage(
+            recovery: _recoveryPending ? widget.recovery : null,
+            onRecoveryOffered: () => _recoveryPending = false,
+          ),
         ),
       ),
     );

@@ -86,7 +86,7 @@ class AppActions {
 
   /// ทำงานตามคำสั่ง: แท็บ DFD ใช้ชุดคำสั่งของ DFD, แท็บ ER ใช้ชุดเดิม (และเมินคำสั่งของ DFD)
   void run(Cmd cmd) {
-    if (c.activeDiagram.type == DocType.dfd) {
+    if (c.workspaceController.activeDocument.type == DocType.dfd) {
       DfdActions(context).run(cmd);
       return;
     }

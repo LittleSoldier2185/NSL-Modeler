@@ -7,6 +7,7 @@ import '../../core/validate/dfd_validator.dart';
 import '../../core/validate/issue.dart';
 import '../../state/dfd_controller.dart';
 import '../../state/project_controller.dart';
+import '../../state/workspace_controller.dart';
 import '../issue_widgets.dart';
 import '../theme.dart';
 import '../widgets.dart';
@@ -39,7 +40,7 @@ class _DfdLeftPanelState extends State<DfdLeftPanel> {
   @override
   Widget build(BuildContext context) {
     final d = context.watch<DfdController>();
-    final pc = context.watch<ProjectController>();
+    final w = context.watch<WorkspaceController>();
     final dg = d.diagram;
     final q = _q.trim().toLowerCase();
     bool match(String s) => q.isEmpty || s.toLowerCase().contains(q);
@@ -88,7 +89,7 @@ class _DfdLeftPanelState extends State<DfdLeftPanel> {
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 14, 14, 4),
               child: Text(
-                pc.activeDiagram.name,
+                w.activeDocument.name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
@@ -387,10 +388,10 @@ class _ProcessChild extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final d = context.read<DfdController>();
-    final pc = context.watch<ProjectController>();
-    final cands = d.childCandidates(pc.activeDiagramId);
+    final w = context.watch<WorkspaceController>();
+    final cands = d.childCandidates(w.activeId);
     final cid = node.childId;
-    final linked = cid == null ? null : pc.documentById(cid);
+    final linked = cid == null ? null : w.documentById(cid);
     const none = '';
     final ids = [none, ...cands.map((t) => t.id)];
     final value = linked != null && ids.contains(linked.id) ? linked.id : none;
@@ -402,7 +403,7 @@ class _ProcessChild extends StatelessWidget {
           child: Dropdown<String>(
             value: value,
             items: ids,
-            labelOf: (id) => id == none ? tr('— ไม่มี —') : pc.documentById(id)!.name,
+            labelOf: (id) => id == none ? tr('— ไม่มี —') : w.documentById(id)!.name,
             onChanged: (id) => d.setProcessChild(node.id, id == none ? null : id),
           ),
         ),
@@ -729,7 +730,8 @@ class _Issues extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final d = context.read<DfdController>();
-    final issues = validateDfd(diagram, workspace: context.read<ProjectController>().workspace, diagramId: context.read<ProjectController>().activeDiagramId);
+    final w = context.read<WorkspaceController>();
+    final issues = validateDfd(diagram, workspace: w.workspace, diagramId: w.activeId);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -745,14 +747,14 @@ class _Issues extends StatelessWidget {
           ]),
           style: TextStyle(fontSize: 12.5, color: C.muted),
         ),
-        for (final (tab, proc) in d.parentsOf(context.read<ProjectController>().activeDiagramId))
+        for (final (tab, proc) in d.parentsOf(w.activeId))
           Padding(
             padding: const EdgeInsets.only(top: 8),
             child: InkWell(
               key: ValueKey('dfd-parent-${proc.id}'),
               borderRadius: BorderRadius.circular(6),
               onTap: () {
-                context.read<ProjectController>().selectDiagram(tab.id);
+                w.openDocument(tab.id);
                 d.selectNode(proc.id);
               },
               child: Padding(

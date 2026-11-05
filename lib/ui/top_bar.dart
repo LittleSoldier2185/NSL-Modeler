@@ -7,6 +7,7 @@ import '../core/l10n/l10n.dart';
 import '../core/models/workspace.dart';
 import '../state/app_settings.dart';
 import '../state/project_controller.dart';
+import '../state/workspace_controller.dart';
 import 'app_actions.dart';
 import '../state/dfd_controller.dart';
 import 'canvas/canvas_controller.dart';
@@ -25,10 +26,11 @@ class TopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.watch<ProjectController>();
+    final w = context.watch<WorkspaceController>();
 
     // ใช้แถบของแอปเป็นแถบชื่อหน้าต่าง: ลากพื้นที่ว่างเพื่อย้ายหน้าต่าง ปุ่มควบคุมชิดมุมขวา
     final controls = WindowChrome.customControls;
-    final isEr = c.activeDiagram.type == DocType.er;
+    final isEr = w.activeDocument.type == DocType.er;
     return Container(
       height: 52,
       padding: EdgeInsets.only(
@@ -58,7 +60,7 @@ class TopBar extends StatelessWidget {
             const SizedBox(width: 14),
             Container(width: 1, height: 22, color: C.border),
             const SizedBox(width: 8),
-            ..._menus(context, c),
+            ..._menus(context, c, w),
             const SizedBox(width: 8),
             // กลุ่มปุ่มขวา: ชิดขวาติดปุ่มควบคุมหน้าต่าง ได้ขนาดตามจริง (ย่อสัดส่วนลงถ้าที่ไม่พอ)
             // ที่ว่างทางซ้ายของกลุ่มปุ่ม = ช่องค้นหา + ที่จับลากย้ายหน้าต่าง
@@ -79,13 +81,13 @@ class TopBar extends StatelessWidget {
                     _IconBtn(
                       Icons.undo,
                       tr('ย้อนกลับ (Ctrl+Z)'),
-                      c.canUndo ? c.undo : null,
+                      w.canUndo ? w.undo : null,
                     ),
                     const SizedBox(width: 4),
                     _IconBtn(
                       Icons.redo,
                       tr('ทำซ้ำ (Ctrl+Shift+Z)'),
-                      c.canRedo ? c.redo : null,
+                      w.canRedo ? w.redo : null,
                     ),
                     const SizedBox(width: 4),
                     Builder(
@@ -196,7 +198,7 @@ class TopBar extends StatelessWidget {
   }
 
   /// เมนูหลัก: คีย์ลัดที่แสดงมาจาก [shortcutText] (ข้อมูลชุดเดียวกับตัวดักปุ่มจริง)
-  static List<Widget> _menus(BuildContext context, ProjectController c) {
+  static List<Widget> _menus(BuildContext context, ProjectController c, WorkspaceController w) {
     final a = AppActions(context);
     final cv = a.cv;
     PopupMenuEntry<VoidCallback> cmd(
@@ -228,8 +230,8 @@ class TopBar extends StatelessWidget {
       _MenuButton(
         label: tr('แก้ไข'),
         items: [
-          cmd(tr('ย้อนกลับ'), Cmd.undo, enabled: c.canUndo),
-          cmd(tr('ทำซ้ำ'), Cmd.redo, enabled: c.canRedo),
+          cmd(tr('ย้อนกลับ'), Cmd.undo, enabled: w.canUndo),
+          cmd(tr('ทำซ้ำ'), Cmd.redo, enabled: w.canRedo),
           div,
           cmd(tr('คัดลอกตาราง'), Cmd.copy, enabled: hasSel),
           cmd(tr('สร้างตารางแบบฟอร์ม…'), Cmd.createTableForm),
@@ -248,8 +250,8 @@ class TopBar extends StatelessWidget {
           _item(
             tr('จัดวางอัตโนมัติ'),
             '',
-            c.activeDiagram.type == DocType.dfd
-                ? (c.dfdOf(c.activeDiagramId).nodes.length < 2
+            w.activeDocument.type == DocType.dfd
+                ? (w.dfdOf(w.activeId).nodes.length < 2
                     ? null
                     : () {
                         final d = context.read<DfdController>();

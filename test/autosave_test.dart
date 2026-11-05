@@ -155,7 +155,7 @@ void main() {
     late int notified;
     AutosaveCoordinator make({int debounceMs = 30, int maxMs = 1000}) {
       notified = 0;
-      return AutosaveCoordinator(c, store,
+      return AutosaveCoordinator(c.workspaceController, store,
           debounce: Duration(milliseconds: debounceMs),
           maxWait: Duration(milliseconds: maxMs),
           onWrite: () => notified++);
