@@ -1,0 +1,137 @@
+{
+  "format": "nsl-erd",
+  "version": 1,
+  "name": "Shop",
+  "dialect": "postgres",
+  "board": {
+    "width": 3000.0,
+    "height": 1800.0
+  },
+  "lineColor": 4281558681,
+  "tables": [
+    {
+      "id": "t1",
+      "name": "users",
+      "comment": "ผู้ใช้",
+      "x": 40.0,
+      "y": 60.0,
+      "width": 220.0,
+      "color": 2,
+      "font": "Tahoma",
+      "seed": [
+        {
+          "c2": "a@b.c"
+        },
+        {
+          "c1": "7",
+          "c2": null
+        }
+      ],
+      "columns": [
+        {
+          "id": "c1",
+          "name": "id",
+          "type": "integer",
+          "pk": true,
+          "notNull": true,
+          "unique": false,
+          "autoIncrement": true
+        },
+        {
+          "id": "c2",
+          "name": "email",
+          "type": "varchar",
+          "length": 255,
+          "pk": false,
+          "notNull": false,
+          "unique": true,
+          "autoIncrement": false,
+          "comment": "อีเมล"
+        }
+      ],
+      "indexes": [
+        {
+          "id": "i1",
+          "name": "idx_email",
+          "columns": [
+            "c2"
+          ],
+          "unique": true
+        }
+      ]
+    },
+    {
+      "id": "t2",
+      "name": "orders",
+      "x": 400.0,
+      "y": 80.0,
+      "width": 220.0,
+      "fill": 4279383126,
+      "columns": [
+        {
+          "id": "c3",
+          "name": "id",
+          "type": "integer",
+          "pk": true,
+          "notNull": true,
+          "unique": false,
+          "autoIncrement": false
+        },
+        {
+          "id": "c4",
+          "name": "user_id",
+          "type": "integer",
+          "pk": false,
+          "notNull": true,
+          "unique": false,
+          "autoIncrement": false
+        },
+        {
+          "id": "c5",
+          "name": "total",
+          "type": "decimal",
+          "length": 10,
+          "scale": 2,
+          "pk": false,
+          "notNull": false,
+          "unique": false,
+          "autoIncrement": false,
+          "default": "0"
+        }
+      ],
+      "indexes": []
+    }
+  ],
+  "relations": [
+    {
+      "id": "r1",
+      "fromTable": "t2",
+      "fromColumn": "c4",
+      "toTable": "t1",
+      "toColumn": "c1",
+      "onDelete": "cascade",
+      "onUpdate": "noAction",
+      "color": 4289331200
+    }
+  ],
+  "notes": [
+    {
+      "id": "n1",
+      "text": "บันทึก",
+      "x": 10.0,
+      "y": 500.0,
+      "width": 190.0
+    }
+  ],
+  "groups": [
+    {
+      "id": "g1",
+      "name": "Core",
+      "x": 20.0,
+      "y": 20.0,
+      "width": 700.0,
+      "height": 400.0,
+      "color": 1
+    }
+  ]
+}

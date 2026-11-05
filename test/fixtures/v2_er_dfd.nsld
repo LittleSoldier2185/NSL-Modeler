@@ -1,0 +1,238 @@
+{
+  "format": "nsl-erd",
+  "version": 2,
+  "name": "ร้านค้า",
+  "dialect": "mysql",
+  "board": {
+    "width": 2400.0,
+    "height": 1500.0
+  },
+  "diagrams": [
+    {
+      "id": "d0",
+      "name": "Level 0",
+      "kind": "dfd"
+    },
+    {
+      "id": "er",
+      "name": "Schema",
+      "kind": "er"
+    },
+    {
+      "id": "d1",
+      "name": "L1 – Order",
+      "kind": "dfd"
+    },
+    {
+      "id": "d2",
+      "name": "Empty",
+      "kind": "dfd"
+    }
+  ],
+  "tables": [
+    {
+      "id": "t1",
+      "name": "users",
+      "comment": "ผู้ใช้",
+      "x": 40.0,
+      "y": 60.0,
+      "width": 220.0,
+      "color": 2,
+      "font": "Tahoma",
+      "seed": [
+        {
+          "c2": "a@b.c"
+        },
+        {
+          "c1": "7",
+          "c2": null
+        }
+      ],
+      "columns": [
+        {
+          "id": "c1",
+          "name": "id",
+          "type": "integer",
+          "pk": true,
+          "notNull": true,
+          "unique": false,
+          "autoIncrement": true
+        },
+        {
+          "id": "c2",
+          "name": "email",
+          "type": "varchar",
+          "length": 255,
+          "pk": false,
+          "notNull": false,
+          "unique": true,
+          "autoIncrement": false,
+          "comment": "อีเมล"
+        }
+      ],
+      "indexes": [
+        {
+          "id": "i1",
+          "name": "idx_email",
+          "columns": [
+            "c2"
+          ],
+          "unique": true
+        }
+      ]
+    },
+    {
+      "id": "t2",
+      "name": "orders",
+      "x": 400.0,
+      "y": 80.0,
+      "width": 220.0,
+      "fill": 4279383126,
+      "columns": [
+        {
+          "id": "c3",
+          "name": "id",
+          "type": "integer",
+          "pk": true,
+          "notNull": true,
+          "unique": false,
+          "autoIncrement": false
+        },
+        {
+          "id": "c4",
+          "name": "user_id",
+          "type": "integer",
+          "pk": false,
+          "notNull": true,
+          "unique": false,
+          "autoIncrement": false
+        },
+        {
+          "id": "c5",
+          "name": "total",
+          "type": "decimal",
+          "length": 10,
+          "scale": 2,
+          "pk": false,
+          "notNull": false,
+          "unique": false,
+          "autoIncrement": false,
+          "default": "0"
+        }
+      ],
+      "indexes": []
+    }
+  ],
+  "relations": [
+    {
+      "id": "r1",
+      "fromTable": "t2",
+      "fromColumn": "c4",
+      "toTable": "t1",
+      "toColumn": "c1",
+      "onDelete": "cascade",
+      "onUpdate": "noAction",
+      "color": 4289331200
+    }
+  ],
+  "notes": [],
+  "dfd": {
+    "d0": {
+      "nodes": [
+        {
+          "id": "e1",
+          "kind": "entity",
+          "name": "Customer",
+          "x": 40.0,
+          "y": 40.0,
+          "w": 150.0,
+          "h": 56.0
+        },
+        {
+          "id": "p1",
+          "kind": "process",
+          "name": "Order",
+          "number": "1.0",
+          "x": 300.0,
+          "y": 40.0,
+          "w": 180.0,
+          "h": 64.0,
+          "color": 4278233600,
+          "child": "d1"
+        },
+        {
+          "id": "s1",
+          "kind": "store",
+          "name": "Orders",
+          "number": "D1",
+          "x": 600.0,
+          "y": 40.0,
+          "w": 180.0,
+          "h": 48.0,
+          "table": "t2"
+        }
+      ],
+      "flows": [
+        {
+          "id": "f1",
+          "from": "e1",
+          "to": "p1",
+          "label": "order"
+        },
+        {
+          "id": "f2",
+          "from": "p1",
+          "to": "s1",
+          "label": "save",
+          "both": true
+        }
+      ],
+      "boundaries": [
+        {
+          "id": "b1",
+          "name": "System",
+          "x": 250.0,
+          "y": 0.0,
+          "w": 600.0,
+          "h": 200.0,
+          "color": 4278190335
+        }
+      ]
+    },
+    "d1": {
+      "nodes": [
+        {
+          "id": "e2",
+          "kind": "entity",
+          "name": "Customer",
+          "x": 0.0,
+          "y": 0.0,
+          "w": 150.0,
+          "h": 56.0
+        },
+        {
+          "id": "p2",
+          "kind": "process",
+          "name": "Check",
+          "number": "1.1",
+          "x": 300.0,
+          "y": 0.0,
+          "w": 180.0,
+          "h": 64.0
+        }
+      ],
+      "flows": [
+        {
+          "id": "f3",
+          "from": "e2",
+          "to": "p2",
+          "label": "order"
+        }
+      ]
+    },
+    "d2": {
+      "nodes": [],
+      "flows": []
+    }
+  }
+}

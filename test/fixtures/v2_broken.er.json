@@ -1,0 +1,31 @@
+{
+  "name": "Broken",
+  "dialect": "sqlite",
+  "board": {
+    "width": 2400.0,
+    "height": 1500.0
+  },
+  "tables": [
+    {
+      "id": "t1",
+      "name": "a",
+      "x": 0.0,
+      "y": 0.0,
+      "width": 220.0,
+      "columns": [
+        {
+          "id": "c1",
+          "name": "id",
+          "type": "integer",
+          "pk": true,
+          "notNull": false,
+          "unique": false,
+          "autoIncrement": false
+        }
+      ],
+      "indexes": []
+    }
+  ],
+  "relations": [],
+  "notes": []
+}

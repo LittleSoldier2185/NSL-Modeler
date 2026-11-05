@@ -1,0 +1,42 @@
+{
+  "format": "nsl-erd",
+  "version": 2,
+  "name": "Broken",
+  "dialect": "sqlite",
+  "board": {"width": "x", "height": 50},
+  "diagrams": [
+    {"id": "d1", "name": "Flow", "kind": "dfd"},
+    {"id": "er", "name": "", "kind": "er"},
+    {"id": "x", "name": "Two", "kind": "er"},
+    {"id": "d1", "name": "Dup", "kind": "dfd"},
+    {"id": "d2", "name": "flow", "kind": "dfd"},
+    {"id": "d3", "name": "   ", "kind": "dfd"},
+    {"id": "", "name": "bad", "kind": "dfd"},
+    {"id": "d4", "kind": "weird"},
+    5
+  ],
+  "tables": [
+    {"id": "t1", "name": "a", "columns": [{"id": "c1", "name": "id", "type": "integer", "pk": true}], "indexes": []}
+  ],
+  "relations": [],
+  "notes": [],
+  "dfd": {
+    "d1": {
+      "nodes": [
+        {"id": "n1", "kind": "process", "name": "P", "child": "nowhere", "table": "t1"},
+        {"id": "n1", "kind": "entity", "name": "dup"},
+        {"id": "n2", "kind": "store", "name": "S", "table": "tZ", "child": "d2", "w": 1, "h": "z"},
+        {"id": "n3", "kind": "alien"}
+      ],
+      "flows": [
+        {"id": "f1", "from": "n1", "to": "n2", "label": "ok"},
+        {"id": "f2", "from": "n1", "to": "n9"},
+        {"id": "f3", "from": "n1", "to": "n1"},
+        {"id": "f1", "from": "n2", "to": "n1"}
+      ],
+      "boundaries": [{"id": "b1", "w": 5}, {"id": "b1"}]
+    },
+    "orphan": {"nodes": [{"id": "o1", "kind": "entity"}], "flows": []},
+    "d3": "notamap"
+  }
+}
