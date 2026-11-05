@@ -28,6 +28,8 @@ Object? norm(Object? v) => jsonDecode(jsonEncode(v));
 
 void expectErGolden(Project p, String golden) {
   expect(norm(erContentOf(p)), jsonDecode(fixture(golden)));
+  // เนื้อหาเอกสาร ER ของไฟล์ v3 ต้องเหมือนส่วน ER ของไฟล์เก่าทุกคีย์ (เรียงคีย์เดียวกัน)
+  expect(jsonEncode(p.toContentJson()), jsonEncode(erContentOf(p)));
 }
 
 void main() {

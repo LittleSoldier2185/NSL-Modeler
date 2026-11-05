@@ -6,6 +6,7 @@ import 'group_model.dart';
 import 'note_model.dart';
 import 'relation_model.dart';
 import 'table_model.dart';
+import 'workspace.dart';
 
 /// ขนาดกระดานเริ่มต้นและช่วงที่อนุญาตตอนกำหนดเอง (px ในพิกัดโปรเจกต์)
 const double kDefaultBoardWidth = 2400;
@@ -13,7 +14,8 @@ const double kDefaultBoardHeight = 1500;
 const double kMinBoardSide = 800;
 const double kMaxBoardSide = 20000;
 
-class Project {
+/// เนื้อหาของเอกสาร ER หนึ่งชิ้น (ไฟล์ v1/v2 เดิม: ทั้งโปรเจกต์ รวมแท็บ [diagrams] และเนื้อหา DFD [dfd])
+class Project implements DocContent {
   Project({
     this.name = 'untitled',
     this.dialect = Dialect.mysql,
@@ -115,6 +117,23 @@ class Project {
         if (groups.isNotEmpty) 'groups': groups.map((g) => g.toJson()).toList(),
         if (withDfd && dfd.isNotEmpty) 'dfd': {for (final e in dfd.entries) e.key: e.value.toJson()},
       };
+
+  /// เนื้อหา ER สำหรับเอกสารในไฟล์ v3 (คีย์เดียวกับ [toJson] แต่ไม่มีหัวไฟล์ แท็บ และ DFD)
+  @override
+  Map<String, dynamic> toContentJson() => {
+        'name': name,
+        'dialect': dialect.name,
+        'board': {'width': boardWidth, 'height': boardHeight},
+        if (lineColor != null) 'lineColor': lineColor,
+        'tables': tables.map((t) => t.toJson()).toList(),
+        'relations': relations.map((r) => r.toJson()).toList(),
+        'notes': notes.map((n) => n.toJson()).toList(),
+        if (groups.isNotEmpty) 'groups': groups.map((g) => g.toJson()).toList(),
+      };
+
+  /// อ่านเนื้อหา ER ของเอกสาร v3 (ไม่สนคีย์แท็บ/DFD ถ้ามีหลงมา)
+  factory Project.fromContentJson(Map<String, dynamic> j) =>
+      Project.fromJson({...j}..remove('diagrams')..remove('dfd'));
 
   /// ค่าขนาดจากไฟล์: ไม่ใช่ตัวเลข/นอกช่วง -> ใช้ค่าเริ่มต้น (ไฟล์เก่าไม่มีฟิลด์นี้)
   static double _side(Object? v, double fallback) =>

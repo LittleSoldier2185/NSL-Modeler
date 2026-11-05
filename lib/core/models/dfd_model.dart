@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'color_utils.dart';
+import 'workspace.dart';
 
 /// ชนิดของวัตถุใน DFD
 enum DfdKind {
@@ -37,6 +38,7 @@ class DfdNode {
     double? h,
     this.color,
     this.tableId,
+    this.tableDocId,
     this.childId,
   })  : w = w ?? dfdDefaultSize(kind).$1,
         h = h ?? dfdDefaultSize(kind).$2;
@@ -54,6 +56,9 @@ class DfdNode {
 
   /// id ของตาราง ER ที่ที่เก็บข้อมูลนี้แทน (เฉพาะ [DfdKind.store]) — null = ยังไม่ผูก
   String? tableId;
+
+  /// id ของเอกสาร ER ที่ [tableId] อยู่ (ไฟล์ v3) — null = ไม่ระบุ (ไฟล์เก่า / ยังไม่ผูก)
+  String? tableDocId;
 
   /// id ของแท็บ DFD ที่แตกรายละเอียดของกระบวนการนี้ (เฉพาะ [DfdKind.process]) — null = ไม่มี
   String? childId;
@@ -77,6 +82,7 @@ class DfdNode {
         'h': h,
         if (color != null) 'color': color,
         if (tableId != null) 'table': tableId,
+        if (tableId != null && tableDocId != null) 'tableDoc': tableDocId,
         if (childId != null) 'child': childId,
       };
 
@@ -104,6 +110,9 @@ class DfdNode {
       h: side(j['h'], kDfdMinH, d.$2),
       color: parseArgb(j['color']),
       tableId: kind == DfdKind.store && j['table'] is String && (j['table'] as String).isNotEmpty ? j['table'] as String : null,
+      tableDocId: kind == DfdKind.store && j['table'] is String && (j['table'] as String).isNotEmpty && j['tableDoc'] is String && (j['tableDoc'] as String).isNotEmpty
+          ? j['tableDoc'] as String
+          : null,
       childId: kind == DfdKind.process && j['child'] is String && (j['child'] as String).isNotEmpty ? j['child'] as String : null,
     );
   }
@@ -197,7 +206,7 @@ class DfdBoundary {
 }
 
 /// เนื้อหาของแผนภาพ DFD หนึ่งแท็บ
-class DfdDiagram {
+class DfdDiagram implements DocContent {
   DfdDiagram({List<DfdNode>? nodes, List<DfdFlow>? flows, List<DfdBoundary>? boundaries})
       : nodes = nodes ?? [],
         flows = flows ?? [],
@@ -249,6 +258,9 @@ class DfdDiagram {
         'flows': flows.map((f) => f.toJson()).toList(),
         if (boundaries.isNotEmpty) 'boundaries': boundaries.map((b) => b.toJson()).toList(),
       };
+
+  @override
+  Map<String, dynamic> toContentJson() => toJson();
 
   /// ซ่อมข้อมูลผิดปกติ: ข้ามวัตถุที่อ่านไม่ได้/id ซ้ำ, ตัดเส้นที่ชี้ไปวัตถุที่ไม่มี หรือชี้ไปที่ตัวเอง
   factory DfdDiagram.fromJson(Object? j) {
