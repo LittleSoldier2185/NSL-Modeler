@@ -1,9 +1,12 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nsl_dev/core/models/project.dart';
+import 'package:nsl_dev/core/models/dfd_model.dart';
+import 'package:nsl_dev/core/models/workspace.dart';
 import 'package:nsl_dev/core/storage/autosave.dart';
+import 'package:nsl_dev/core/storage/project_codec.dart';
 import 'package:nsl_dev/main.dart';
 import 'package:nsl_dev/state/autosave_coordinator.dart';
 import 'package:nsl_dev/state/project_controller.dart';
@@ -12,6 +15,7 @@ import 'package:nsl_dev/ui/recovery_dialog.dart';
 import 'package:provider/provider.dart';
 
 import 'migration_fixtures.dart';
+import 'support/project_helpers.dart';
 
 /// ที่เก็บในหน่วยความจำ ไว้ทดสอบ UI โดยไม่แตะดิสก์
 class MemoryStore implements AutosaveStore {
@@ -21,10 +25,10 @@ class MemoryStore implements AutosaveStore {
   Object? failWith;
 
   @override
-  Future<void> write(Project p, {String? originalPath, DateTime? now}) async {
+  Future<void> write(Workspace w, {String? originalPath, DateTime? now}) async {
     if (failWith != null) throw failWith!;
     writes++;
-    saved = AutosaveInfo(Project.fromJson(p.toJson()), now ?? DateTime.now(), originalPath);
+    saved = AutosaveInfo(copyWorkspace(w), now ?? DateTime.now(), originalPath);
   }
 
   @override
@@ -59,31 +63,52 @@ void main() {
       p.name = 'ร้านค้า';
       p.tables.first.comment = 'ผู้ใช้';
       final t = DateTime.utc(2026, 11, 3, 10, 30);
-      await store.write(p, originalPath: r'C:\งาน\shop.erd', now: t);
+      await store.write(Workspace.single(p), originalPath: r'C:\งาน\shop.erd', now: t);
       final info = (await store.readRecoverable())!;
-      expect(info.project.name, 'ร้านค้า');
-      expect(info.project.tables.first.comment, 'ผู้ใช้');
-      expect(info.project.tables.length, 2);
-      expect(info.project.relations.length, 1);
+      expect(erOf(info.workspace).name, 'ร้านค้า');
+      expect(erOf(info.workspace).tables.first.comment, 'ผู้ใช้');
+      expect(erOf(info.workspace).tables.length, 2);
+      expect(erOf(info.workspace).relations.length, 1);
       expect(info.originalPath, r'C:\งาน\shop.erd');
       expect(info.savedAt.toUtc(), t);
       expect(File('${store.file.path}.tmp').existsSync(), false); // ไม่ทิ้งไฟล์ชั่วคราว
     });
 
+    test('เก็บทั้ง workspace (ER + DFD) เป็นรูปแบบไฟล์ v3 และอ่านกลับครบ', () async {
+      final c = ProjectController(base());
+      final d = c.addDiagram(DocType.dfd, name: 'Level 0')!;
+      setDfd(c, d.id, DfdDiagram(nodes: [DfdNode(id: 's', kind: DfdKind.store, tableId: c.project.tables.first.id, tableDocId: c.erDocumentId)]));
+      await store.write(c.workspace);
+      final raw = jsonDecode(store.file.readAsStringSync()) as Map<String, dynamic>;
+      expect((raw['project'] as Map)['version'], 3);
+      final info = (await store.readRecoverable())!;
+      expect(info.workspace.documents.map((x) => (x.id, x.name)), [(c.erDocumentId, 'ER'), (d.id, 'Level 0')]);
+      expect(dfdIn(info.workspace, d.id).nodeById('s')!.tableDocId, c.erDocumentId);
+      expect(encodeProjectMap(info.workspace), encodeProjectMap(copyWorkspace(c.workspace)));
+    });
+
+    test('ไฟล์ autosave เวอร์ชันใหม่กว่าที่รองรับ: ไม่กู้ (ถือว่าเสีย)', () async {
+      await store.write(Workspace.single(base()));
+      final raw = jsonDecode(store.file.readAsStringSync()) as Map<String, dynamic>;
+      (raw['project'] as Map)['version'] = 4;
+      store.file.writeAsStringSync(jsonEncode(raw));
+      expect(await store.readRecoverable(), isNull);
+    });
+
     test('โปรเจกต์ที่ยังไม่เคยบันทึก: originalPath เป็น null', () async {
-      await store.write(base());
+      await store.write(Workspace.single(base()));
       expect((await store.readRecoverable())!.originalPath, isNull);
     });
 
     test('เขียนทับครั้งใหม่ได้ค่าล่าสุด', () async {
-      await store.write(base());
+      await store.write(Workspace.single(base()));
       final p = base()..name = 'v2';
-      await store.write(p);
-      expect((await store.readRecoverable())!.project.name, 'v2');
+      await store.write(Workspace.single(p));
+      expect((await store.readRecoverable())!.workspace.name, 'v2');
     });
 
     test('ไฟล์เสีย: คืน null, ย้ายไฟล์ไปเป็น .corrupt และไม่ถามซ้ำ', () async {
-      await store.write(base());
+      await store.write(Workspace.single(base()));
       await store.file.writeAsString('{ไม่ใช่ json');
       expect(await store.readRecoverable(), isNull);
       expect(store.file.existsSync(), false);
@@ -99,7 +124,7 @@ void main() {
 
     test('ไฟล์เดิมถูกบันทึกใหม่กว่า autosave แล้ว: ไม่ต้องกู้ และลบทิ้ง', () async {
       final orig = File('${dir.path}/shop.erd')..writeAsStringSync('{}');
-      await store.write(base(), originalPath: orig.path, now: DateTime.now().subtract(const Duration(hours: 1)));
+      await store.write(Workspace.single(base()), originalPath: orig.path, now: DateTime.now().subtract(const Duration(hours: 1)));
       expect(await store.readRecoverable(), isNull);
       expect(store.file.existsSync(), false);
     });
@@ -107,17 +132,17 @@ void main() {
     test('ไฟล์เดิมเก่ากว่า autosave: ต้องกู้', () async {
       final orig = File('${dir.path}/shop.erd')..writeAsStringSync('{}');
       orig.setLastModifiedSync(DateTime.now().subtract(const Duration(hours: 2)));
-      await store.write(base(), originalPath: orig.path, now: DateTime.now());
+      await store.write(Workspace.single(base()), originalPath: orig.path, now: DateTime.now());
       expect(await store.readRecoverable(), isNotNull);
     });
 
     test('ไฟล์เดิมหายไปแล้ว: ยังกู้ได้', () async {
-      await store.write(base(), originalPath: '${dir.path}/gone.erd');
+      await store.write(Workspace.single(base()), originalPath: '${dir.path}/gone.erd');
       expect(await store.readRecoverable(), isNotNull);
     });
 
     test('clear ลบไฟล์ และเรียกซ้ำได้โดยไม่ error', () async {
-      await store.write(base());
+      await store.write(Workspace.single(base()));
       await store.clear();
       expect(store.file.existsSync(), false);
       await store.clear();
@@ -159,7 +184,7 @@ void main() {
       await wait(120);
       await a.idle();
       expect(store.writes, 1);
-      expect(store.saved!.project.tables.length, 3);
+      expect(erOf(store.saved!.workspace).tables.length, 3);
       expect(notified, 1);
       a.dispose();
     });
@@ -247,7 +272,7 @@ void main() {
       await wait(60);
       await a.idle();
       c.renameTable(c.project.tables.first.id, 'changed');
-      expect(store.saved!.project.tables.first.name, 'first');
+      expect(erOf(store.saved!.workspace).tables.first.name, 'first');
       a.dispose();
     });
 
@@ -280,7 +305,7 @@ void main() {
 
     test('discard ลบสำเนา', () async {
       final a = make();
-      store.saved = AutosaveInfo(base(), DateTime.now(), null);
+      store.saved = AutosaveInfo(Workspace.single(base()), DateTime.now(), null);
       await a.discard();
       expect(store.saved, isNull);
       a.dispose();
@@ -311,7 +336,7 @@ void main() {
       return (ctx.read<ProjectController>(), store);
     }
 
-    final info = AutosaveInfo(base()..name = 'งานค้าง', DateTime(2026, 11, 3, 9, 5), r'C:\งาน\shop.erd');
+    final info = AutosaveInfo(Workspace.single(base()..name = 'งานค้าง'), DateTime(2026, 11, 3, 9, 5), r'C:\งาน\shop.erd');
 
     testWidgets('ไม่มีงานค้าง: ไม่ถาม', (tester) async {
       await boot(tester, null);

@@ -3,7 +3,7 @@ import 'dart:ui';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nsl_dev/core/layout/dfd_resize.dart';
 import 'package:nsl_dev/core/models/dfd_model.dart';
-import 'package:nsl_dev/core/models/diagram.dart';
+import 'package:nsl_dev/core/models/workspace.dart';
 import 'package:nsl_dev/state/dfd_controller.dart';
 import 'package:nsl_dev/state/project_controller.dart';
 
@@ -62,7 +62,7 @@ void main() {
     setUp(() {
       pc = ProjectController(base());
       d = DfdController(pc);
-      pc.addDiagram(DiagramKind.dfd);
+      pc.addDiagram(DocType.dfd);
       n = d.addNode(DfdKind.process, 300, 200)!;
     });
 

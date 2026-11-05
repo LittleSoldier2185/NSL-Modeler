@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/l10n/l10n.dart';
-import '../core/models/diagram.dart';
+import '../core/models/workspace.dart';
 import '../state/project_controller.dart';
 import 'canvas/context_menu.dart';
 import 'prompt_dialog.dart';
@@ -35,11 +35,11 @@ class _DiagramTabBarState extends State<DiagramTabBar> {
   @override
   Widget build(BuildContext context) {
     final c = context.watch<ProjectController>();
-    final tabs = c.project.diagrams;
+    final tabs = c.tabDocuments;
     final active = c.activeDiagramId;
     final addButton = Padding(
       padding: const EdgeInsets.only(left: 2),
-      child: PopupMenuButton<DiagramKind>(
+      child: PopupMenuButton<DocType>(
         key: const ValueKey('tab-add'),
         tooltip: tr('สร้างแผนภาพใหม่'),
         padding: EdgeInsets.zero,
@@ -52,7 +52,7 @@ class _DiagramTabBarState extends State<DiagramTabBar> {
         onSelected: (k) => c.addDiagram(k),
         itemBuilder: (_) => [
           PopupMenuItem(
-            value: DiagramKind.dfd,
+            value: DocType.dfd,
             height: 36,
             child: Text(
               tr('DFD (Data Flow Diagram)'),
@@ -129,7 +129,7 @@ class _DiagramTabBarState extends State<DiagramTabBar> {
 
 class _Tab extends StatefulWidget {
   const _Tab({required this.tab, required this.active});
-  final DiagramTab tab;
+  final ProjectDocument tab;
   final bool active;
 
   @override
@@ -186,7 +186,7 @@ class _TabState extends State<_Tab> {
   Widget build(BuildContext context) {
     final c = context.read<ProjectController>();
     final t = widget.tab;
-    final closable = t.kind != DiagramKind.er;
+    final closable = t.type == DocType.dfd;
     return MouseRegion(
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),
@@ -240,7 +240,7 @@ class _TabState extends State<_Tab> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
-                      t.kind == DiagramKind.er
+                      t.type == DocType.er
                           ? Icons.table_chart_outlined
                           : Icons.account_tree_outlined,
                       size: 14,

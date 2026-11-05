@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
-import '../models/project.dart';
+import '../models/workspace.dart';
+import 'project_codec.dart';
 
 /// เหตุที่เก็บสำเนา
 enum SnapshotKind {
@@ -30,6 +31,7 @@ class SnapshotInfo {
     required this.tables,
     required this.relations,
     required this.digest,
+    this.documents,
   });
 
   /// ชื่อไฟล์ (ไม่รวมนามสกุล) — เรียงตามเวลาได้ด้วยการเทียบสตริง
@@ -39,6 +41,9 @@ class SnapshotInfo {
   final String label;
   final int tables;
   final int relations;
+
+  /// จำนวนเอกสารในโปรเจกต์ (null = สำเนาจากโปรแกรมรุ่นเก่าที่ไม่ได้จดไว้)
+  final int? documents;
 
   /// ลายนิ้วมือของเนื้อหา ใช้ตรวจว่าเหมือนเวอร์ชันล่าสุดหรือไม่
   final String digest;
@@ -74,7 +79,7 @@ class HistoryStore {
   }
 
   /// ลายนิ้วมือเนื้อหาโปรเจกต์ทั้งหมด (รวมตำแหน่ง/สี — เปลี่ยนอะไรก็นับว่าเปลี่ยน)
-  static String digestOf(Project p) => _fnv(jsonEncode(p.toJson()));
+  static String digestOf(Workspace w) => _fnv(jsonEncode(encodeProjectMap(w)));
 
   Directory _dir(String key) => Directory('${root.path}${Platform.pathSeparator}$key');
   File _file(String key, String id) => File('${_dir(key).path}${Platform.pathSeparator}$id.json');
@@ -82,13 +87,13 @@ class HistoryStore {
   /// เก็บสำเนา คืน null ถ้าเหมือนสำเนาล่าสุดทุกประการ (ไม่เก็บซ้ำ) — [force] = เก็บเสมอ
   Future<SnapshotInfo?> add(
     String key,
-    Project p, {
+    Workspace w, {
     SnapshotKind kind = SnapshotKind.save,
     String label = '',
     DateTime? now,
     bool force = false,
   }) async {
-    final digest = digestOf(p);
+    final digest = digestOf(w);
     final existing = await list(key);
     if (!force && existing.isNotEmpty && existing.first.digest == digest) return null;
 
@@ -107,9 +112,11 @@ class HistoryStore {
       'kind': kind.name,
       'label': label,
       'digest': digest,
-      'tables': p.tables.length,
-      'relations': p.relations.length,
-      'project': p.toJson(),
+      // จำนวนตาราง/FK รวมทุกเอกสาร ER (คีย์เดิม — รายการประวัติของโปรแกรมรุ่นเก่ายังอ่านได้)
+      'tables': w.tableCount,
+      'relations': w.relationCount,
+      'documents': w.documents.length,
+      'project': encodeProjectMap(w),
     });
     final f = _file(key, id);
     final tmp = File('${f.path}.tmp');
@@ -121,9 +128,10 @@ class HistoryStore {
       savedAt: at.toLocal(),
       kind: kind,
       label: label,
-      tables: p.tables.length,
-      relations: p.relations.length,
+      tables: w.tableCount,
+      relations: w.relationCount,
       digest: digest,
+      documents: w.documents.length,
     );
   }
 
@@ -148,6 +156,7 @@ class HistoryStore {
           tables: (j['tables'] as num?)?.toInt() ?? 0,
           relations: (j['relations'] as num?)?.toInt() ?? 0,
           digest: j['digest'] as String? ?? '',
+          documents: (j['documents'] as num?)?.toInt(),
         ));
       } catch (_) {}
     }
@@ -159,13 +168,13 @@ class HistoryStore {
   }
 
   /// อ่านสำเนากลับเป็นโปรเจกต์ ; null = ไม่พบ/ไฟล์เสีย
-  Future<Project?> load(String key, String id) async {
+  Future<Workspace?> load(String key, String id) async {
     final f = _file(key, id);
     try {
       if (!await f.exists()) return null;
       final j = jsonDecode(await f.readAsString()) as Map<String, dynamic>;
       if (j['format'] != _fmt) return null;
-      return Project.fromJson(j['project'] as Map<String, dynamic>);
+      return decodeProjectMap(j['project'] as Map<String, dynamic>);
     } catch (_) {
       return null;
     }

@@ -1,10 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nsl_dev/core/models/dfd_model.dart';
 import 'package:nsl_dev/core/models/diagram.dart';
-import 'package:nsl_dev/core/storage/project_file.dart';
+import 'package:nsl_dev/core/models/workspace.dart';
 import 'package:nsl_dev/core/validate/dfd_validator.dart';
 import 'package:nsl_dev/state/dfd_controller.dart';
 import 'package:nsl_dev/state/project_controller.dart';
+import 'support/project_helpers.dart';
 
 import 'migration_fixtures.dart';
 
@@ -17,7 +18,7 @@ void main() {
   setUp(() {
     pc = ProjectController(base());
     d = DfdController(pc);
-    tab = pc.addDiagram(DiagramKind.dfd)!.id;
+    tab = pc.addDiagram(DocType.dfd)!.id;
     store = d.addNode(DfdKind.store, 100, 100)!;
   });
 
@@ -51,8 +52,8 @@ void main() {
 
   test('บันทึก-โหลดไฟล์แล้ว tableId ยังอยู่ ; ทำสำเนาวัตถุแล้วผูกตารางเดิมต่อ', () {
     d.setStoreTable(store.id, 'tu');
-    final back = ProjectFile.decode(ProjectFile.encode(pc.project));
-    expect(back.dfdOf(tab).nodes.firstWhere((n) => n.id == store.id).tableId, 'tu');
+    final back = roundTrip(pc.workspace);
+    expect(dfdIn(back, tab).nodes.firstWhere((n) => n.id == store.id).tableId, 'tu');
 
     d.selectNode(store.id);
     d.duplicateSelection();

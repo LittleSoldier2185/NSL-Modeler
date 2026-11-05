@@ -1,15 +1,20 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nsl_dev/core/models/column_model.dart';
+import 'package:nsl_dev/core/models/dfd_model.dart';
 import 'package:nsl_dev/core/models/project.dart';
 import 'package:nsl_dev/core/models/table_model.dart';
+import 'package:nsl_dev/core/models/workspace.dart';
 import 'package:nsl_dev/core/storage/history_store.dart';
 
-Project proj(int tables) => Project(name: 'p', tables: [
+import 'support/project_helpers.dart';
+
+Workspace proj(int tables) => Workspace.single(Project(name: 'p', tables: [
       for (var i = 0; i < tables; i++)
         TableModel(id: 't$i', name: 'tb$i', columns: [ColumnModel(id: 'c$i', name: 'id', isPrimaryKey: true)]),
-    ]);
+    ]));
 
 void main() {
   late Directory dir;
@@ -35,8 +40,43 @@ void main() {
     expect(l.first.label, 'ก่อนรีแฟกเตอร์');
     expect(l.last.tables, 1);
     final back = await h.load(k, l.first.id);
-    expect(back!.tables.length, 2);
-    expect(back.tables.first.name, 'tb0');
+    expect(erOf(back!).tables.length, 2);
+    expect(erOf(back).tables.first.name, 'tb0');
+    expect(l.first.documents, 1);
+  });
+
+  test('เก็บทั้ง workspace: ข้อมูลประกอบนับรวมทุกเอกสาร ER + จำนวนเอกสาร ; DFD อ่านกลับครบ ; digest เปลี่ยนเมื่อ DFD เปลี่ยน', () async {
+    final h = HistoryStore(dir);
+    final w = proj(2)
+      ..documents.add(ProjectDocument.dfd(
+        id: 'd1',
+        name: 'Level 0',
+        content: DfdDiagram(nodes: [DfdNode(id: 'p', kind: DfdKind.process, name: 'Pay')]),
+      ));
+    final d0 = HistoryStore.digestOf(w);
+    final s = (await h.add('k', w))!;
+    expect((s.tables, s.relations, s.documents), (2, 0, 2));
+    final raw = jsonDecode(File('${dir.path}/k/${s.id}.json').readAsStringSync()) as Map<String, dynamic>;
+    expect((raw['tables'], raw['relations'], raw['documents']), (2, 0, 2));
+    expect((raw['project'] as Map)['version'], 3);
+    final l = await h.list('k');
+    expect(l.single.documents, 2);
+    final back = (await h.load('k', s.id))!;
+    expect(dfdIn(back, 'd1').nodes.single.name, 'Pay');
+    expect(HistoryStore.digestOf(back), d0);
+    dfdIn(back, 'd1').nodes.single.name = 'Refund';
+    expect(HistoryStore.digestOf(back), isNot(d0));
+    expect(await h.add('k', back), isNotNull);
+  });
+
+  test('สำเนาที่เป็นไฟล์เวอร์ชันใหม่กว่าที่รองรับ: load = null', () async {
+    final h = HistoryStore(dir);
+    final s = (await h.add('k', proj(1)))!;
+    final f = File('${dir.path}/k/${s.id}.json');
+    final raw = jsonDecode(f.readAsStringSync()) as Map<String, dynamic>;
+    (raw['project'] as Map)['version'] = 4;
+    f.writeAsStringSync(jsonEncode(raw));
+    expect(await h.load('k', s.id), isNull);
   });
 
   test('เนื้อหาเหมือนล่าสุด = ไม่เก็บซ้ำ (force เก็บได้)', () async {

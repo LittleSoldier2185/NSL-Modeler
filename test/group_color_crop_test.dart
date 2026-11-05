@@ -6,11 +6,11 @@ import 'package:nsl_dev/core/export/svg_export.dart';
 import 'package:nsl_dev/core/layout/diagram_geometry.dart';
 import 'package:nsl_dev/core/models/group_model.dart';
 import 'package:nsl_dev/core/models/project.dart';
-import 'package:nsl_dev/core/storage/project_file.dart';
 import 'package:nsl_dev/main.dart';
 import 'package:nsl_dev/state/project_controller.dart';
 import 'package:nsl_dev/ui/home_page.dart';
 import 'package:provider/provider.dart';
+import 'support/project_helpers.dart';
 
 import 'migration_fixtures.dart';
 
@@ -35,7 +35,7 @@ void main() {
       g.customColor = 0xFF336699;
       expect(g.colorValue, 0xFF336699);
       final p = laid()..groups.add(g);
-      expect(ProjectFile.decode(ProjectFile.encode(p)).groups.single.customColor, 0xFF336699);
+      expect(roundTripEr(p).groups.single.customColor, 0xFF336699);
       expect(GroupModel.fromJson({'id': 'x', 'fill': 'red'}).customColor, isNull);
     });
 

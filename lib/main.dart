@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 
-import 'core/models/project.dart';
+import 'core/models/workspace.dart';
 import 'core/db/saved_connections.dart';
 import 'core/db/secret_codec.dart';
 import 'core/storage/autosave.dart';
@@ -41,7 +41,7 @@ Future<void> main(List<String> args) async {
     store = null;
   }
   // ดับเบิลคลิกไฟล์ .nsld / .nslm / .erd (หรือ nsl_dev.exe <ไฟล์>) = เปิดไฟล์นั้นทันที ไม่ถามกู้คืนงานค้าง
-  Project? initial;
+  Workspace? initial;
   String? initialPath;
   for (final a in args) {
     final lower = a.toLowerCase();
@@ -61,7 +61,7 @@ class NslDevApp extends StatefulWidget {
   const NslDevApp({super.key, this.autosave, this.recovery, this.settings, this.initialProject, this.initialPath});
 
   /// โปรเจกต์ที่เปิดตั้งแต่เริ่ม (จากไฟล์ที่ส่งมาทางบรรทัดคำสั่ง) — null = เริ่มว่าง
-  final Project? initialProject;
+  final Workspace? initialProject;
   final String? initialPath;
 
   /// การตั้งค่าแอป (null = ค่าเริ่มต้น ไทย/สว่าง ไม่ถามภาษา)
@@ -92,7 +92,7 @@ class _NslDevAppState extends State<NslDevApp> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _settings.addListener(_onSettings);
     final p = widget.initialProject;
-    if (p != null) _project.loadProject(p, widget.initialPath);
+    if (p != null) _project.loadWorkspace(p, widget.initialPath);
   }
 
   void _onSettings() => setState(() {});

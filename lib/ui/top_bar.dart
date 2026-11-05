@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/l10n/l10n.dart';
-import '../core/models/diagram.dart';
+import '../core/models/workspace.dart';
 import '../state/app_settings.dart';
 import '../state/project_controller.dart';
 import 'app_actions.dart';
@@ -28,7 +28,7 @@ class TopBar extends StatelessWidget {
 
     // ใช้แถบของแอปเป็นแถบชื่อหน้าต่าง: ลากพื้นที่ว่างเพื่อย้ายหน้าต่าง ปุ่มควบคุมชิดมุมขวา
     final controls = WindowChrome.customControls;
-    final isEr = c.activeDiagram.kind == DiagramKind.er;
+    final isEr = c.activeDiagram.type == DocType.er;
     return Container(
       height: 52,
       padding: EdgeInsets.only(
@@ -248,7 +248,7 @@ class TopBar extends StatelessWidget {
           _item(
             tr('จัดวางอัตโนมัติ'),
             '',
-            c.activeDiagram.kind == DiagramKind.dfd
+            c.activeDiagram.type == DocType.dfd
                 ? (c.dfdOf(c.activeDiagramId).nodes.length < 2
                     ? null
                     : () {

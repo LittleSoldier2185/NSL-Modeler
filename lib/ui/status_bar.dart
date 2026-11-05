@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 import '../core/app_info.dart';
 import '../core/l10n/l10n.dart';
 import '../core/storage/project_file.dart';
-import '../core/models/diagram.dart';
+import '../core/models/workspace.dart';
 import '../core/validate/dfd_validator.dart';
 import '../core/validate/issue.dart';
 import '../state/app_settings.dart';
@@ -25,7 +25,7 @@ class StatusBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.watch<ProjectController>();
     final settings = context.watch<AppSettings>();
-    final isEr = c.activeDiagram.kind == DiagramKind.er;
+    final isEr = c.activeDiagram.type == DocType.er;
     final dfd = context.watch<DfdController>();
     final cv = context.watch<CanvasController>();
 

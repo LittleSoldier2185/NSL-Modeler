@@ -6,9 +6,9 @@ import 'package:nsl_dev/core/models/enums.dart';
 import 'package:nsl_dev/core/models/project.dart';
 import 'package:nsl_dev/core/models/relation_model.dart';
 import 'package:nsl_dev/core/models/table_model.dart';
-import 'package:nsl_dev/core/storage/project_file.dart';
 import 'package:nsl_dev/state/project_controller.dart';
 import 'package:sqlite3/sqlite3.dart';
+import 'support/project_helpers.dart';
 
 /// roles(id AI PK, name UNIQUE NOT NULL, is_admin bool default false)  <-  users(id, role_id FK, note text)
 Project make(Dialect d) => Project(name: 'app', dialect: d, tables: [
@@ -47,7 +47,7 @@ void main() {
     test('บันทึกแล้วเปิดกลับมาได้ครบ รวมค่า NULL และไทย', () {
       final p = withSeed(Dialect.mysql);
       p.tableById('tr')!.seedRows.add({'r1': '3', 'r2': 'x', 'r3': null});
-      final back = ProjectFile.decode(ProjectFile.encode(p));
+      final back = roundTripEr(p);
       final rows = back.tableById('tr')!.seedRows;
       expect(rows.length, 3);
       expect(rows[1]['r2'], "o'neil");

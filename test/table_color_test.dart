@@ -4,12 +4,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nsl_dev/core/export/svg_export.dart';
 import 'package:nsl_dev/core/l10n/l10n.dart';
 import 'package:nsl_dev/core/models/table_model.dart';
-import 'package:nsl_dev/core/storage/project_file.dart';
 import 'package:nsl_dev/main.dart';
 import 'package:nsl_dev/state/app_settings.dart';
 import 'package:nsl_dev/state/project_controller.dart';
 import 'package:nsl_dev/ui/home_page.dart';
 import 'package:provider/provider.dart';
+import 'support/project_helpers.dart';
 
 import 'migration_fixtures.dart';
 
@@ -24,7 +24,7 @@ void main() {
     test('บันทึกแล้วเปิดกลับมาได้สีเดิม', () {
       final p = base();
       tb(p, 'tu').colorIndex = 3;
-      final back = ProjectFile.decode(ProjectFile.encode(p));
+      final back = roundTripEr(p);
       expect(tb(back, 'tu').colorIndex, 3);
       expect(tb(back, 'to').colorIndex, isNull);
     });

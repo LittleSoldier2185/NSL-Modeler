@@ -141,18 +141,12 @@ class Workspace {
     return name;
   }
 
-  /// มุมมองแบบ workspace ของโปรเจกต์รูปแบบเก่า (แท็บ ER + DFD ใน [Project] เดียว) — ใช้ object เดิม ไม่คัดลอก/ไม่แก้ [p]
-  /// เอกสารเรียงตามแท็บ; ER ได้ id `er` ชื่อ = ชื่อแท็บ ER; DFD ใช้ id เดิมของแท็บ (childId ยังชี้ถูก)
-  factory Workspace.fromLegacy(Project p) => Workspace(
-        name: p.name,
-        documents: [
-          for (final t in p.diagrams)
-            if (t.kind == DiagramKind.er)
-              ProjectDocument.er(id: kErDiagramId, name: t.name, content: p)
-            else
-              ProjectDocument.dfd(id: t.id, name: t.name, content: p.dfd[t.id] ?? DfdDiagram()),
-        ],
-      );
+  /// เอกสาร ER แรกตามลำดับ (null = ไม่มี)
+  ProjectDocument? get firstEr => documentsOf(DocType.er).firstOrNull;
+
+  /// จำนวนตาราง/ความสัมพันธ์รวมของทุกเอกสาร ER
+  int get tableCount => documentsOf(DocType.er).fold(0, (s, d) => s + d.er!.tables.length);
+  int get relationCount => documentsOf(DocType.er).fold(0, (s, d) => s + d.er!.relations.length);
 
   /// โปรเจกต์ใหม่ที่มีเอกสาร ER เอกสารเดียว
   factory Workspace.single(Project er, {String docName = 'ER'}) => Workspace(

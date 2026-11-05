@@ -1,10 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nsl_dev/core/models/dfd_model.dart';
 import 'package:nsl_dev/core/models/diagram.dart';
-import 'package:nsl_dev/core/storage/project_file.dart';
+import 'package:nsl_dev/core/models/workspace.dart';
 import 'package:nsl_dev/core/validate/dfd_validator.dart';
 import 'package:nsl_dev/state/dfd_controller.dart';
 import 'package:nsl_dev/state/project_controller.dart';
+import 'support/project_helpers.dart';
 
 import 'migration_fixtures.dart';
 
@@ -20,7 +21,7 @@ void main() {
   setUp(() {
     pc = ProjectController(base());
     d = DfdController(pc);
-    l0 = pc.addDiagram(DiagramKind.dfd, name: 'L0')!.id;
+    l0 = pc.addDiagram(DocType.dfd, name: 'L0')!.id;
     cust = d.addNode(DfdKind.entity, 100, 100)!;
     d.renameNode(cust.id, 'Customer');
     proc = d.addNode(DfdKind.process, 400, 100)!;
@@ -79,7 +80,7 @@ void main() {
 
   test('ลิงก์ไปแท็บที่มีอยู่: ห้ามลิงก์ตัวเอง/วนเป็นวง และเฉพาะ process → DFD', () {
     pc.selectDiagram(l0);
-    final other = pc.addDiagram(DiagramKind.dfd, name: 'X')!;
+    final other = pc.addDiagram(DocType.dfd, name: 'X')!;
     pc.selectDiagram(l0);
     expect(d.childCandidates(l0).map((t) => t.id), [other.id]);
     expect(d.setProcessChild(proc.id, l0), false); // ตัวเอง
@@ -108,8 +109,8 @@ void main() {
   test('บันทึก-โหลดไฟล์คง childId ; คัดลอก-วาง/ทำสำเนาไม่พาลิงก์ตามไป ; childId เฉพาะ process', () {
     final tab = d.createChildFor(proc.id)!;
     pc.selectDiagram(l0);
-    final back = ProjectFile.decode(ProjectFile.encode(pc.project));
-    expect(back.dfdOf(l0).nodeById(proc.id)!.childId, tab.id);
+    final back = roundTrip(pc.workspace);
+    expect(dfdIn(back, l0).nodeById(proc.id)!.childId, tab.id);
 
     d.setNodeSelection({proc.id});
     d.duplicateSelection();

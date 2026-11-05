@@ -4,12 +4,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nsl_dev/core/layout/diagram_geometry.dart';
 import 'package:nsl_dev/core/models/board_presets.dart';
 import 'package:nsl_dev/core/models/project.dart';
-import 'package:nsl_dev/core/storage/project_file.dart';
 import 'package:nsl_dev/main.dart';
 import 'package:nsl_dev/state/project_controller.dart';
 import 'package:nsl_dev/ui/board_size_dialog.dart';
 import 'package:nsl_dev/ui/home_page.dart';
 import 'package:provider/provider.dart';
+import 'support/project_helpers.dart';
 
 void main() {
   group('โมเดล / ไฟล์', () {
@@ -21,7 +21,7 @@ void main() {
 
     test('บันทึกแล้วเปิดกลับมาได้ขนาดเดิม', () {
       final p = Project(boardWidth: 5000, boardHeight: 3200);
-      final back = ProjectFile.decode(ProjectFile.encode(p));
+      final back = roundTripEr(p);
       expect((back.boardWidth, back.boardHeight), (5000.0, 3200.0));
     });
 

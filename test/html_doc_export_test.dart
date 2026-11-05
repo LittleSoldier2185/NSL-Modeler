@@ -2,7 +2,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nsl_dev/core/export/html_doc_export.dart';
 import 'package:nsl_dev/core/models/column_model.dart';
 import 'package:nsl_dev/core/models/dfd_model.dart';
-import 'package:nsl_dev/core/models/diagram.dart';
 import 'package:nsl_dev/core/models/enums.dart';
 import 'package:nsl_dev/core/models/index_model.dart';
 import 'package:nsl_dev/core/models/project.dart';
@@ -27,7 +26,7 @@ Project sample() => Project(name: 'ร้าน <A&B>', dialect: Dialect.mysql, 
 
 void main() {
   test('เอกสาร HTML: โครง สารบัญ ตาราง FK และ SVG ฝัง', () {
-    final h = exportHtmlDocument(Workspace.fromLegacy(sample()));
+    final h = exportHtmlDocument(Workspace.single(sample()));
     expect(h, startsWith('<!DOCTYPE html>'));
     expect(h, contains('<meta charset="utf-8">'));
     expect(h, contains('id="er-diagram"'));
@@ -45,7 +44,7 @@ void main() {
   });
 
   test('ข้อความของผู้ใช้ถูก escape (ชื่อโปรเจกต์ หมายเหตุ)', () {
-    final h = exportHtmlDocument(Workspace.fromLegacy(sample()));
+    final h = exportHtmlDocument(Workspace.single(sample()));
     expect(h, contains('ร้าน &lt;A&amp;B&gt;'));
     expect(h, contains('a&lt;b&gt;'));
     expect(h, isNot(contains('<A&B>')));
@@ -54,25 +53,24 @@ void main() {
 
   test('includeDiagrams=false ไม่ฝังภาพ ; ผลลัพธ์คงที่', () {
     final p = sample();
-    final h = exportHtmlDocument(Workspace.fromLegacy(p), includeDiagrams: false);
+    final h = exportHtmlDocument(Workspace.single(p), includeDiagrams: false);
     expect(h, isNot(contains('<svg')));
     expect(h, isNot(contains('er-diagram')));
-    expect(exportHtmlDocument(Workspace.fromLegacy(p)), exportHtmlDocument(Workspace.fromLegacy(p)));
+    expect(exportHtmlDocument(Workspace.single(p)), exportHtmlDocument(Workspace.single(p)));
   });
 
   test('โปรเจกต์ว่างไม่ล้ม', () {
-    final h = exportHtmlDocument(Workspace.fromLegacy(Project()));
+    final h = exportHtmlDocument(Workspace.single(Project()));
     expect(h, contains('</html>'));
   });
 
   test('มีแท็บ DFD ที่มีวัตถุ → ฝังภาพ DFD ด้วย', () {
     final p = sample();
-    final tab = DiagramTab(id: 'd1', name: 'Level 0', kind: DiagramKind.dfd);
-    p.diagrams.add(tab);
-    p.dfd[tab.id] = DfdDiagram(nodes: [
+    final w = Workspace.single(p);
+    w.documents.add(ProjectDocument.dfd(id: 'd1', name: 'Level 0', content: DfdDiagram(nodes: [
       DfdNode(id: 'n1', kind: DfdKind.process, name: 'ชำระเงิน', x: 100, y: 100),
-    ]);
-    final h = exportHtmlDocument(Workspace.fromLegacy(p));
+    ])));
+    final h = exportHtmlDocument(w);
     expect(h, contains('id="dfd-d1"'));
     expect(h, contains('DFD: Level 0'));
     expect(RegExp('<svg').allMatches(h).length, 2);

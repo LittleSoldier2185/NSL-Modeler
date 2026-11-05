@@ -8,7 +8,6 @@ import '../core/layout/dfd_layout.dart';
 import '../core/layout/dfd_resize.dart';
 import '../core/layout/diagram_geometry.dart' show snapToGrid, kGridSize;
 import '../core/models/dfd_model.dart';
-import '../core/models/diagram.dart';
 import '../core/models/workspace.dart';
 import 'project_controller.dart';
 
@@ -30,7 +29,7 @@ class DfdController extends ChangeNotifier {
 
   // ---------- ข้อมูล ----------
 
-  bool get active => pc.activeDiagram.kind == DiagramKind.dfd;
+  bool get active => pc.activeDiagram.type == DocType.dfd;
 
   DfdDiagram get diagram => pc.dfdOf(pc.activeDiagramId);
 
@@ -205,6 +204,7 @@ class DfdController extends ChangeNotifier {
     final t = tableId == null ? null : pc.project.tableById(tableId);
     updateNode(id, (n) {
       n.tableId = t?.id;
+      n.tableDocId = t == null ? null : pc.erDocumentId;
       if (t != null && n.name.trim().isEmpty) n.name = t.name;
     });
   }
@@ -410,6 +410,7 @@ class DfdController extends ChangeNotifier {
           h: n.h,
           color: n.color,
           tableId: n.tableId,
+          tableDocId: n.tableDocId,
         );
         map[n.id] = copy.id;
         d.nodes.add(copy);
@@ -568,13 +569,13 @@ class DfdController extends ChangeNotifier {
 
   /// สร้างแผนภาพย่อยใหม่ของกระบวนการ [nodeId] : ใส่ผู้ใช้ภายนอก/ที่เก็บข้อมูลที่ต่ออยู่ + กระบวนการย่อย 1 ตัว
   /// และเส้นข้อมูลเดียวกับแม่ (เริ่มต้นสมดุลพอดี ให้ผู้ใช้แตกกระบวนการต่อเอง) แล้วลิงก์และเปิดแท็บนั้น
-  DiagramTab? createChildFor(String nodeId) {
+  ProjectDocument? createChildFor(String nodeId) {
     final parentTab = pc.activeDiagramId;
     final parent = diagram;
     final proc = parent.nodeById(nodeId);
     if (!active || proc == null || proc.kind != DfdKind.process) return null;
     final base = proc.name.trim().isEmpty ? proc.number : proc.name.trim();
-    final tab = pc.addDiagram(DiagramKind.dfd, name: 'L1 – $base');
+    final tab = pc.addDiagram(DocType.dfd, name: 'L1 – $base');
     if (tab == null) return null;
     final dot = proc.number.indexOf('.');
     final prefix = proc.number.trim().isEmpty ? null : (dot > 0 ? proc.number.substring(0, dot) : proc.number.trim());
@@ -602,6 +603,7 @@ class DfdController extends ChangeNotifier {
             number: other.kind == DfdKind.store ? other.number : '',
             color: other.color,
             tableId: other.tableId,
+            tableDocId: other.tableDocId,
           );
           d.nodes.add(c);
           return c.id;
@@ -670,6 +672,7 @@ class DfdController extends ChangeNotifier {
           DfdKind.entity => '',
         };
         final tid = src.tableId;
+        final keep = tid != null && pc.project.tableById(tid) != null;
         d.nodes.add(DfdNode(
           id: newId,
           kind: src.kind,
@@ -680,7 +683,8 @@ class DfdController extends ChangeNotifier {
           w: src.w,
           h: src.h,
           color: src.color,
-          tableId: tid != null && pc.project.tableById(tid) != null ? tid : null,
+          tableId: keep ? tid : null,
+          tableDocId: keep ? pc.erDocumentId : null,
         ));
         created.add(newId);
       }

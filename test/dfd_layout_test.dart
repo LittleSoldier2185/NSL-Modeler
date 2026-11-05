@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nsl_dev/core/layout/dfd_layout.dart';
 import 'package:nsl_dev/core/models/dfd_model.dart';
-import 'package:nsl_dev/core/models/diagram.dart';
+import 'package:nsl_dev/core/models/workspace.dart';
 import 'package:nsl_dev/state/dfd_controller.dart';
 import 'package:nsl_dev/state/project_controller.dart';
 
@@ -61,7 +61,7 @@ void main() {
   test('DfdController.autoLayout: undo ขั้นเดียว ; จัดซ้ำแล้วไม่เปลี่ยน = false', () {
     final pc = ProjectController(base());
     final d = DfdController(pc);
-    final tab = pc.addDiagram(DiagramKind.dfd)!.id;
+    final tab = pc.addDiagram(DocType.dfd)!.id;
     final a = d.addNode(DfdKind.entity, 300, 300)!;
     final b = d.addNode(DfdKind.process, 100, 100)!;
     d.setTool(DfdTool.flow);

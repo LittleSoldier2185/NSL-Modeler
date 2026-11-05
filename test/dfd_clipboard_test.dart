@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nsl_dev/core/clipboard/dfd_clipboard.dart';
 import 'package:nsl_dev/core/models/dfd_model.dart';
 import 'package:nsl_dev/core/models/diagram.dart';
+import 'package:nsl_dev/core/models/workspace.dart';
 import 'package:nsl_dev/state/dfd_controller.dart';
 import 'package:nsl_dev/state/project_controller.dart';
 
@@ -15,7 +16,7 @@ void main() {
   setUp(() {
     pc = ProjectController(base());
     d = DfdController(pc);
-    tabA = pc.addDiagram(DiagramKind.dfd, name: 'A')!.id;
+    tabA = pc.addDiagram(DocType.dfd, name: 'A')!.id;
   });
 
   DfdDiagram dia(String id) => pc.dfdOf(id);
@@ -34,7 +35,7 @@ void main() {
     d.setNodeSelection({e.id, p.id, s.id});
     final text = d.copySelectionText()!;
 
-    final tabB = pc.addDiagram(DiagramKind.dfd, name: 'B')!.id;
+    final tabB = pc.addDiagram(DocType.dfd, name: 'B')!.id;
     expect(d.pasteText(text), 3);
     final b = dia(tabB);
     expect(b.nodes.length, 3);
@@ -73,7 +74,7 @@ void main() {
 
     final other = ProjectController(); // โปรเจกต์ว่าง ไม่มีตาราง tu
     final d2 = DfdController(other);
-    other.addDiagram(DiagramKind.dfd);
+    other.addDiagram(DocType.dfd);
     expect(d2.pasteText(text), 1);
     expect(other.dfdOf(other.activeDiagramId).nodes.single.tableId, isNull);
   });

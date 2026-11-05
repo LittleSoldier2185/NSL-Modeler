@@ -8,7 +8,7 @@ import 'package:provider/provider.dart';
 
 import '../core/export/dfd_svg.dart';
 import '../core/export/seed_data.dart';
-import '../core/models/diagram.dart';
+import '../core/models/workspace.dart';
 import '../core/export/selection_crop.dart';
 import '../core/export/sql_export.dart';
 import '../core/layout/diagram_geometry.dart';
@@ -96,7 +96,7 @@ class FileActions {
     final path = f?.path;
     if (path == null) return;
     try {
-      c.loadProject(await ProjectFile.load(path), path);
+      c.loadWorkspace(await ProjectFile.load(path), path);
     } on ProjectFormatException catch (e) {
       if (context.mounted) _toast(context, e.message);
     } catch (e) {
@@ -186,8 +186,13 @@ class FileActions {
     final path = f?.path;
     if (path == null) return;
     try {
-      final old = await ProjectFile.load(path);
+      // เทียบกับเอกสาร ER แรกของไฟล์นั้น
+      final old = (await ProjectFile.load(path)).firstEr?.er;
       if (!context.mounted) return;
+      if (old == null) {
+        _toast(context, tr('ไฟล์นี้ไม่มีแผนภาพ ER'));
+        return;
+      }
       await showDialog<void>(
         context: context,
         builder: (_) => MigrationDialog(
@@ -247,7 +252,7 @@ class FileActions {
 
   /// Export แผนภาพเป็น PNG หรือ SVG (ทั้งแผนภาพ ไม่ขึ้นกับว่าตอนนี้ซูม/เลื่อนอยู่ตรงไหน)
   static Future<void> exportImage(BuildContext context, ProjectController c, {ImageArea? initialArea}) async {
-    if (c.activeDiagram.kind == DiagramKind.dfd) return _exportDfdImage(context, c);
+    if (c.activeDiagram.type == DocType.dfd) return _exportDfdImage(context, c);
     final p = c.project;
     if (p.tables.isEmpty && p.notes.isEmpty) {
       _toast(context, tr('ยังไม่มีตารางให้ Export เป็นภาพ'));
@@ -375,7 +380,7 @@ class FileActions {
     final uri = await FilePicker.saveFile(
       dialogTitle: tr('บันทึกเป็น'),
       fileName: '$name.$kProjectExt',
-      bytes: utf8.encode(ProjectFile.encode(c.project)),
+      bytes: utf8.encode(ProjectFile.encode(c.workspace)),
     );
     if (uri == null) return false;
     final path = withProjectExt(uri.toFilePath());
@@ -478,7 +483,7 @@ class FileActions {
 
   static Future<bool> _write(BuildContext context, ProjectController c, String path) async {
     try {
-      await ProjectFile.save(c.project, path);
+      await ProjectFile.save(c.workspace, path);
       c.markSaved(path);
       return true;
     } catch (e) {

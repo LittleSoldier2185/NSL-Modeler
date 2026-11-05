@@ -21,13 +21,20 @@ import '../core/validate/issue.dart';
 import '../core/validate/validator.dart';
 import 'snapshot_history.dart';
 
-/// ถือโปรเจกต์ปัจจุบัน + selection + undo/redo (แบบ snapshot)
+/// ถือโปรเจกต์ปัจจุบัน ([Workspace] — เอกสาร ER + DFD) + selection + undo/redo (แบบ snapshot แยกต่อเอกสาร)
+///
+/// [project] คือเนื้อหาของเอกสาร ER ที่โปรแกรมแก้อยู่ (ตอนนี้มี ER เอกสารเดียวและลบไม่ได้)
 class ProjectController extends ChangeNotifier {
-  ProjectController([Project? project]) : _project = project ?? Project();
+  ProjectController([Project? project]) : _workspace = Workspace.single(project ?? Project()) {
+    _erDoc = _ensureEr(_workspace);
+  }
 
   static const _maxHistory = 100;
 
-  Project _project;
+  Workspace _workspace;
+
+  /// เอกสาร ER ที่แก้อยู่ — undo/redo เปลี่ยนเนื้อหา ([ProjectDocument.content]) เป็น object ใหม่ทุกครั้ง
+  late ProjectDocument _erDoc;
   String? _filePath;
   bool _dirty = false;
   String? _selectedTableId;
@@ -36,17 +43,28 @@ class ProjectController extends ChangeNotifier {
   /// ตารางที่เลือกเพิ่มจากตัวหลัก [_selectedTableId] (เลือกหลายตารางด้วย Ctrl/Shift+คลิก หรือ Ctrl+A)
   final Set<String> _extra = {};
 
-  /// ประวัติ undo/redo ของ ER (snapshot ไม่รวมแท็บ/DFD)
-  final SnapshotHistory _history = SnapshotHistory(max: _maxHistory);
+  /// ประวัติ undo/redo แยกต่อเอกสาร (key = id เอกสาร; snapshot = เนื้อหาของเอกสารนั้นเท่านั้น)
+  final Map<String, SnapshotHistory> _histories = {};
   int _idCounter = 0;
 
+  SnapshotHistory _hist(String docId) => _histories.putIfAbsent(docId, () => SnapshotHistory(max: _maxHistory));
+
+  /// ประวัติของเอกสาร ER
+  SnapshotHistory get _history => _hist(_erDoc.id);
+
+  /// เนื้อหาของเอกสาร ER ที่แก้อยู่ (object จริงในเอกสาร — undo/redo เปลี่ยน object นี้)
+  Project get _project => _erDoc.content as Project;
+
   Project get project => _project;
+
+  /// id ของเอกสาร ER ที่แก้อยู่ (ที่เก็บข้อมูลใน DFD ที่ผูกตารางชี้มาที่เอกสารนี้)
+  String get erDocumentId => _erDoc.id;
   String? get filePath => _filePath;
   bool get dirty => _dirty;
   String? get selectedTableId => _selectedTableId;
   String? get selectedColumnId => _selectedColumnId;
-  bool get canUndo => activeDiagram.kind == DiagramKind.er ? _history.canUndo : (_dfdHistory[activeDiagramId]?.canUndo ?? false);
-  bool get canRedo => activeDiagram.kind == DiagramKind.er ? _history.canRedo : (_dfdHistory[activeDiagramId]?.canRedo ?? false);
+  bool get canUndo => _histories[activeDiagramId]?.canUndo ?? false;
+  bool get canRedo => _histories[activeDiagramId]?.canRedo ?? false;
 
   List<Issue>? _issues;
 
@@ -66,15 +84,21 @@ class ProjectController extends ChangeNotifier {
   String newId(String prefix) =>
       '$prefix${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}${_idCounter++}';
 
-  String _snapshot() => jsonEncode(_project.toJson(withDfd: false));
+  String _snapshot() => jsonEncode(_project.toContentJson());
 
   /// แก้ข้อมูลแบบมีประวัติ
   void _edit(void Function() change) {
     _history.push(_snapshot());
     change();
+    _syncWorkspaceName();
     _dirty = true;
     _issues = null;
     notifyListeners();
+  }
+
+  /// ชื่อโปรเจกต์ (ชื่อ workspace ในไฟล์) ตามชื่อของเอกสาร ER — ตอนนี้แก้ชื่อได้ที่ ER อย่างเดียว
+  void _syncWorkspaceName() {
+    if (_workspace.documentsOf(DocType.er).length == 1) _workspace.name = _project.name;
   }
 
   void _fixSelection() {
@@ -97,19 +121,37 @@ class ProjectController extends ChangeNotifier {
   // ---------- ไฟล์ ----------
 
   void newProject({double boardWidth = kDefaultBoardWidth, double boardHeight = kDefaultBoardHeight}) =>
-      _replace(Project(boardWidth: boardWidth, boardHeight: boardHeight), null, dirty: false);
+      _replace(Workspace.single(Project(boardWidth: boardWidth, boardHeight: boardHeight)), null, dirty: false);
 
-  void loadProject(Project p, String? path) => _replace(p, path, dirty: false);
+  /// เปิดโปรเจกต์ (เช่น จากไฟล์) — [w] ถูกใช้เป็นข้อมูลจริงของ controller (ไม่คัดลอก)
+  void loadWorkspace(Workspace w, String? path) => _replace(w, path, dirty: false);
+
+  /// เปิดโปรเจกต์ที่มีแต่ ER (สะดวกสำหรับเทสต์/ข้อมูลที่สร้างในโปรแกรม)
+  void loadProject(Project p, String? path) => _replace(Workspace.single(p), path, dirty: false);
 
   /// กู้คืนงานที่ auto-save ไว้ — ยังไม่ได้บันทึกลงไฟล์จริง จึงถือว่ายังมีการแก้ค้างอยู่
-  void restoreProject(Project p, String? originalPath) => _replace(p, originalPath, dirty: true);
+  void restoreWorkspace(Workspace w, String? originalPath) => _replace(w, originalPath, dirty: true);
 
-  /// โปรเจกต์ที่ได้จากการ import .sql — ยังไม่มีไฟล์ .erd จึงถือว่ายังไม่ได้บันทึก
-  void loadImported(Project p) => _replace(p, null, dirty: true);
+  /// โปรเจกต์ที่ได้จากการ import .sql — ยังไม่มีไฟล์โปรเจกต์ จึงถือว่ายังไม่ได้บันทึก
+  void loadImported(Project p) => _replace(Workspace.single(p), null, dirty: true);
 
-  void _replace(Project p, String? path, {required bool dirty}) {
-    _project = p;
-    _activeDiagramId = kErDiagramId;
+  /// ให้ workspace มีเอกสาร ER เสมอ (ไฟล์ v3 อาจไม่มี) — ไม่มี = เพิ่มเอกสาร ER ว่างไว้หน้าสุด ; คืน ER แรก
+  static ProjectDocument _ensureEr(Workspace w) {
+    final er = w.firstEr;
+    if (er != null) return er;
+    var id = kErDiagramId;
+    for (var n = 2; w.documentById(id) != null; n++) {
+      id = '$kErDiagramId$n';
+    }
+    final doc = ProjectDocument.er(id: id, name: w.uniqueDocumentName('ER'), content: Project(name: w.name));
+    w.documents.insert(0, doc);
+    return doc;
+  }
+
+  void _replace(Workspace w, String? path, {required bool dirty}) {
+    _workspace = w;
+    _erDoc = _ensureEr(w);
+    _activeDiagramId = _erDoc.id;
     _filePath = path;
     _dirty = dirty;
     _issues = null;
@@ -118,8 +160,7 @@ class ProjectController extends ChangeNotifier {
     _attached.clear();
     _extra.clear();
     _selectedColumnId = null;
-    _history.clear();
-    _dfdHistory.clear();
+    _histories.clear();
     _dfdGestureId = null;
     notifyListeners();
   }
@@ -130,21 +171,23 @@ class ProjectController extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ---------- เอกสาร (มุมมองแบบ workspace) ----------
+  // ---------- เอกสาร (workspace) ----------
   //
-  // UI อ่านรายการเอกสาร/เนื้อหา DFD ผ่าน accessor เหล่านี้แทนการอ่าน project.diagrams / project.dfd ตรง ๆ
-  // ตอนนี้ยังสร้างจากโปรเจกต์รูปแบบเดิม (Workspace.fromLegacy — ใช้ object เดิม ไม่คัดลอกเนื้อหา)
+  // UI อ่านรายการเอกสาร/เนื้อหา DFD ผ่าน accessor เหล่านี้ — คืน object จริงของโปรเจกต์ (ไม่ใช่สำเนา)
 
-  /// มุมมอง workspace ของโปรเจกต์ปัจจุบัน (สร้างใหม่ทุกครั้งที่เรียก — อย่าเก็บไว้ข้ามการแก้ไข)
-  Workspace get workspace => Workspace.fromLegacy(_project);
+  /// โปรเจกต์ทั้งหมด (ข้อมูลจริงที่บันทึกลงไฟล์)
+  Workspace get workspace => _workspace;
 
-  /// เอกสารทั้งหมดตามลำดับแท็บ
-  List<ProjectDocument> get documents => workspace.documents;
+  /// เอกสารทั้งหมดตามลำดับในไฟล์ (รวมชนิดที่โปรแกรมรุ่นนี้ไม่รู้จัก)
+  List<ProjectDocument> get documents => _workspace.documents;
 
-  ProjectDocument? documentById(String id) => workspace.documentById(id);
+  /// เอกสารที่แสดงเป็นแท็บ (ชนิดที่รู้จัก) ตามลำดับ
+  List<ProjectDocument> get tabDocuments => [for (final d in _workspace.documents) if (d.type != null) d];
 
-  /// เนื้อหา DFD ของเอกสาร [id] (สร้างให้ถ้ายังไม่มี)
-  DfdDiagram dfdOf(String id) => _project.dfdOf(id);
+  ProjectDocument? documentById(String id) => _workspace.documentById(id);
+
+  /// เนื้อหา DFD ของเอกสาร [id] — ไม่ใช่เอกสาร DFD/ไม่มีอยู่ = แผนภาพว่างชั่วคราว (ไม่ถูกเก็บในโปรเจกต์)
+  DfdDiagram dfdOf(String id) => _workspace.documentById(id)?.dfd ?? DfdDiagram();
 
   // ---------- แท็บแผนภาพ ----------
   //
@@ -153,13 +196,17 @@ class ProjectController extends ChangeNotifier {
 
   String _activeDiagramId = kErDiagramId;
 
-  /// แท็บที่เปิดอยู่ (ถ้าแท็บนั้นหายไปจะกลับเป็น ER)
-  DiagramTab get activeDiagram => _project.diagramById(_activeDiagramId) ?? _project.diagramById(kErDiagramId)!;
+  /// เอกสารที่เปิดอยู่ (ถ้าเอกสารนั้นหายไปจะกลับเป็น ER)
+  ProjectDocument get activeDiagram {
+    final d = _workspace.documentById(_activeDiagramId);
+    return d != null && d.type != null ? d : _erDoc;
+  }
 
   String get activeDiagramId => activeDiagram.id;
 
   void selectDiagram(String id) {
-    if (_project.diagramById(id) == null || id == _activeDiagramId) return;
+    final d = _workspace.documentById(id);
+    if (d == null || d.type == null || id == _activeDiagramId) return;
     _activeDiagramId = id;
     notifyListeners();
   }
@@ -170,27 +217,26 @@ class ProjectController extends ChangeNotifier {
   }
 
   /// เพิ่มแผนภาพใหม่ต่อท้ายและเปิดทันที (ตอนนี้เพิ่มได้เฉพาะ DFD — ER มีอันเดียว) ชื่อซ้ำจะต่อเลขให้
-  DiagramTab? addDiagram(DiagramKind kind, {String? name}) {
-    if (kind == DiagramKind.er) return null;
+  ProjectDocument? addDiagram(DocType type, {String? name}) {
+    if (type != DocType.dfd) return null;
     final base = cleanDiagramName(name ?? '');
-    final tab = DiagramTab(
+    final doc = ProjectDocument.dfd(
       id: newId('d'),
-      name: _project.uniqueDiagramName(base.isEmpty ? 'DFD' : base),
-      kind: kind,
+      name: _workspace.uniqueDocumentName(base.isEmpty ? 'DFD' : base),
+      content: DfdDiagram(),
     );
-    _project.diagrams.add(tab);
-    _project.dfd[tab.id] = DfdDiagram();
-    _activeDiagramId = tab.id;
+    _workspace.documents.add(doc);
+    _activeDiagramId = doc.id;
     _tabsChanged();
-    return tab;
+    return doc;
   }
 
-  /// เปลี่ยนชื่อแท็บ — คืน false ถ้าชื่อว่าง/ซ้ำกับแท็บอื่น (ไม่สนตัวพิมพ์)
+  /// เปลี่ยนชื่อแท็บ — คืน false ถ้าชื่อว่าง/ซ้ำกับเอกสารอื่น (ไม่สนตัวพิมพ์)
   bool renameDiagram(String id, String name) {
-    final t = _project.diagramById(id);
+    final t = _workspace.documentById(id);
     final n = cleanDiagramName(name);
     if (t == null || n.isEmpty) return false;
-    if (_project.diagrams.any((d) => d.id != id && d.name.toLowerCase() == n.toLowerCase())) return false;
+    if (_workspace.documents.any((d) => d.id != id && d.name.toLowerCase() == n.toLowerCase())) return false;
     if (t.name == n) return true;
     t.name = n;
     _tabsChanged();
@@ -199,123 +245,130 @@ class ProjectController extends ChangeNotifier {
 
   /// ลบแท็บ (ลบ ER ไม่ได้) — ถ้าเป็นแท็บที่เปิดอยู่ จะย้ายไปแท็บข้างเคียง
   bool deleteDiagram(String id) {
-    final i = _project.diagrams.indexWhere((d) => d.id == id);
-    if (i < 0 || _project.diagrams[i].kind == DiagramKind.er) return false;
-    _project.diagrams.removeAt(i);
-    _project.dfd.remove(id);
-    _dfdHistory.remove(id);
+    final tabs = tabDocuments;
+    final i = tabs.indexWhere((d) => d.id == id);
+    if (i < 0 || tabs[i].type != DocType.dfd) return false;
+    _workspace.documents.remove(tabs[i]);
+    tabs.removeAt(i);
+    _histories.remove(id);
     if (_activeDiagramId == id) {
-      _activeDiagramId = _project.diagrams[i > 0 ? i - 1 : 0].id;
+      _activeDiagramId = tabs[i > 0 ? i - 1 : 0].id;
     }
     _tabsChanged();
     return true;
   }
 
-  /// ย้ายแท็บไปตำแหน่ง [toIndex] (ตำแหน่งในรายการหลังเอาแท็บนั้นออกแล้ว)
+  /// ย้ายแท็บไปตำแหน่ง [toIndex] (ตำแหน่งในรายการแท็บหลังเอาแท็บนั้นออกแล้ว)
+  /// เอกสารชนิดที่ไม่รู้จัก (ไม่มีแท็บ) คงตำแหน่งสัมพัทธ์เดิมในไฟล์
   void moveDiagram(String id, int toIndex) {
-    final from = _project.diagrams.indexWhere((d) => d.id == id);
+    final tabs = tabDocuments;
+    final from = tabs.indexWhere((d) => d.id == id);
     if (from < 0) return;
-    final to = toIndex.clamp(0, _project.diagrams.length - 1);
+    final to = toIndex.clamp(0, tabs.length - 1);
     if (to == from) return;
-    final t = _project.diagrams.removeAt(from);
-    _project.diagrams.insert(to, t);
+    final doc = tabs.removeAt(from);
+    final docs = _workspace.documents..remove(doc);
+    if (to < tabs.length) {
+      docs.insert(docs.indexOf(tabs[to]), doc);
+    } else {
+      docs.insert(docs.indexOf(tabs.last) + 1, doc);
+    }
     _tabsChanged();
   }
 
   // ---------- undo / redo ----------
 
-  // --- ประวัติของแท็บ DFD: แยกต่อแท็บ (snapshot เฉพาะเนื้อหาของแท็บนั้น) ---
-  final Map<String, SnapshotHistory> _dfdHistory = {};
+  // --- ประวัติของแท็บ DFD: แยกต่อเอกสาร (snapshot เฉพาะเนื้อหาของเอกสารนั้น) ---
 
   /// แท็บ DFD ที่กำลังลากอยู่ (ลากได้ทีละแท็บ)
   String? _dfdGestureId;
 
-  String _dfdSnapshot(String id) => jsonEncode(_project.dfdOf(id).toJson());
+  /// เอกสาร DFD ที่เปิดอยู่ (null = แท็บที่เปิดไม่ใช่ DFD)
+  ProjectDocument? get _activeDfdDoc {
+    final d = activeDiagram;
+    return d.type == DocType.dfd ? d : null;
+  }
 
-  SnapshotHistory _dfdHist(String id) => _dfdHistory.putIfAbsent(id, () => SnapshotHistory(max: _maxHistory));
+  String _dfdSnapshot(ProjectDocument doc) => jsonEncode(doc.dfd!.toJson());
 
   /// แก้เนื้อหา DFD ของแท็บที่เปิดอยู่แบบมีประวัติ (undo ขั้นเดียว)
   void dfdEdit(void Function(DfdDiagram d) change) {
-    if (activeDiagram.kind != DiagramKind.dfd) return;
-    final id = activeDiagramId;
-    _dfdHist(id).push(_dfdSnapshot(id));
-    change(_project.dfdOf(id));
+    final doc = _activeDfdDoc;
+    if (doc == null) return;
+    _hist(doc.id).push(_dfdSnapshot(doc));
+    change(doc.dfd!);
     _dirty = true;
     notifyListeners();
   }
 
   /// แก้ DFD แบบสดระหว่างลาก — ครอบด้วย dfdBeginGesture / dfdEndGesture (undo ขั้นเดียว)
   void dfdLive(void Function(DfdDiagram d) change) {
-    if (activeDiagram.kind != DiagramKind.dfd) return;
-    change(_project.dfdOf(activeDiagramId));
+    final doc = _activeDfdDoc;
+    if (doc == null) return;
+    change(doc.dfd!);
     notifyListeners();
   }
 
   void dfdBeginGesture() {
-    if (_dfdGestureId != null || activeDiagram.kind != DiagramKind.dfd) return;
-    final id = activeDiagramId;
-    _dfdGestureId = id;
-    _dfdHist(id).beginGesture(_dfdSnapshot(id));
+    final doc = _activeDfdDoc;
+    if (_dfdGestureId != null || doc == null) return;
+    _dfdGestureId = doc.id;
+    _hist(doc.id).beginGesture(_dfdSnapshot(doc));
   }
 
   void dfdEndGesture() {
     final id = _dfdGestureId;
     _dfdGestureId = null;
     if (id == null) return;
-    final h = _dfdHistory[id];
-    if (h == null || !h.gestureActive || _project.diagramById(id) == null) {
+    final h = _histories[id];
+    final doc = _workspace.documentById(id);
+    if (h == null || !h.gestureActive || doc?.dfd == null) {
       h?.cancelGesture();
       return;
     }
-    if (h.endGesture(_dfdSnapshot(id))) _dirty = true;
+    if (h.endGesture(_dfdSnapshot(doc!))) _dirty = true;
     notifyListeners();
   }
 
-  void _dfdUndoRedo(bool undo) {
-    final id = activeDiagramId;
-    final h = _dfdHistory[id];
+  void _dfdUndoRedo(ProjectDocument doc, bool undo) {
+    final h = _histories[doc.id];
     if (h == null || !(undo ? h.canUndo : h.canRedo)) return;
-    final cur = _dfdSnapshot(id);
+    final cur = _dfdSnapshot(doc);
     final snap = undo ? h.undo(cur)! : h.redo(cur)!;
-    _project.dfd[id] = DfdDiagram.fromJson(jsonDecode(snap));
+    doc.content = DfdDiagram.fromJson(jsonDecode(snap));
     _dirty = true;
+    notifyListeners();
+  }
+
+  /// ใส่เนื้อหา ER จาก snapshot กลับเข้าเอกสาร ER (object ใหม่ — สิ่งที่บันทึกลงไฟล์คือค่านี้)
+  /// undo ไม่ย้อนรายการแท็บ/เนื้อหา DFD
+  void _restoreEr(String snap) {
+    _erDoc.content = Project.fromContentJson(jsonDecode(snap) as Map<String, dynamic>);
+    _syncWorkspaceName();
+    _dirty = true;
+    _issues = null;
+    _fixSelection();
     notifyListeners();
   }
 
   void undo() {
-    if (activeDiagram.kind == DiagramKind.dfd) {
-      _dfdUndoRedo(true);
+    final dfd = _activeDfdDoc;
+    if (dfd != null) {
+      _dfdUndoRedo(dfd, true);
       return;
     }
     if (!_history.canUndo) return;
-    final snap = _history.undo(_snapshot())!;
-    final tabs = _project.diagrams; // undo ไม่ย้อนรายการแท็บ/เนื้อหา DFD
-    final dfd = _project.dfd;
-    _project = Project.fromJson(jsonDecode(snap) as Map<String, dynamic>)
-      ..diagrams = tabs
-      ..dfd = dfd;
-    _dirty = true;
-    _issues = null;
-    _fixSelection();
-    notifyListeners();
+    _restoreEr(_history.undo(_snapshot())!);
   }
 
   void redo() {
-    if (activeDiagram.kind == DiagramKind.dfd) {
-      _dfdUndoRedo(false);
+    final dfd = _activeDfdDoc;
+    if (dfd != null) {
+      _dfdUndoRedo(dfd, false);
       return;
     }
     if (!_history.canRedo) return;
-    final snap = _history.redo(_snapshot())!;
-    final tabs = _project.diagrams;
-    final dfd = _project.dfd;
-    _project = Project.fromJson(jsonDecode(snap) as Map<String, dynamic>)
-      ..diagrams = tabs
-      ..dfd = dfd;
-    _dirty = true;
-    _issues = null;
-    _fixSelection();
-    notifyListeners();
+    _restoreEr(_history.redo(_snapshot())!);
   }
 
   // ---------- gesture (ลาก) : นับเป็น 1 ขั้น undo ----------

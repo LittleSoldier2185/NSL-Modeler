@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import '../core/models/project.dart';
+import '../core/storage/project_codec.dart';
 import '../core/storage/autosave.dart';
 import 'project_controller.dart';
 
@@ -63,10 +63,10 @@ class AutosaveCoordinator {
   void _writeNow() {
     _cancelTimers();
     if (_disposed || !controller.dirty) return;
-    final project = controller.project;
+    final workspace = controller.workspace;
     final path = controller.filePath;
     // สำเนา ณ ตอนนี้ (โปรเจกต์อาจถูกแก้ต่อระหว่างรอคิว I/O)
-    final snapshot = Project.fromJson(project.toJson());
+    final snapshot = copyWorkspace(workspace);
     _enqueue(() async {
       try {
         await store.write(snapshot, originalPath: path);

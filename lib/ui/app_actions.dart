@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
-import '../core/models/diagram.dart';
+import '../core/models/workspace.dart';
 import '../core/models/enums.dart';
 import '../state/project_controller.dart';
 import '../core/layout/diagram_geometry.dart';
@@ -86,7 +86,7 @@ class AppActions {
 
   /// ทำงานตามคำสั่ง: แท็บ DFD ใช้ชุดคำสั่งของ DFD, แท็บ ER ใช้ชุดเดิม (และเมินคำสั่งของ DFD)
   void run(Cmd cmd) {
-    if (c.activeDiagram.kind == DiagramKind.dfd) {
+    if (c.activeDiagram.type == DocType.dfd) {
       DfdActions(context).run(cmd);
       return;
     }

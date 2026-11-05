@@ -815,4 +815,5 @@ const Map<String, String> kEn = {
   'เส้น FK เลี่ยงขอบกลุ่ม เว้นระยะเลนให้ห่างขึ้น และเส้นที่เลือกเด่นขึ้น': 'FK lines avoid group borders, lanes are spaced further apart and the selected line stands out',
   'Undo/Redo แยกต่อแท็บ และใช้ Ctrl+Shift+Z เป็น Redo แบบ Adobe': 'Undo/Redo is separate for each tab, and Ctrl+Shift+Z redoes, as in Adobe apps',
   'แก้หน้าต่างค้างหลังย่อแล้วคืนขนาด': 'Fixed the window freezing after minimizing and restoring',
+  'ไฟล์นี้ไม่มีแผนภาพ ER': 'This file has no ER diagram',
 };

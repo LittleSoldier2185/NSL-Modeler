@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nsl_dev/core/l10n/l10n.dart';
+import 'package:nsl_dev/core/models/workspace.dart';
 import 'package:nsl_dev/main.dart';
 import 'package:nsl_dev/state/app_settings.dart';
 import 'package:nsl_dev/state/project_controller.dart';
@@ -16,7 +17,7 @@ void main() {
     addTearDown(tester.view.reset);
     await tester.pumpWidget(NslDevApp(
       settings: AppSettings(lang: Lang.th),
-      initialProject: base(),
+      initialProject: Workspace.single(base()),
       initialPath: r'C:\งาน\shop.nsld',
     ));
     final c = tester.element(find.byType(HomePage)).read<ProjectController>();

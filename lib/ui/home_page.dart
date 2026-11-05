@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../core/l10n/l10n.dart';
-import '../core/models/diagram.dart';
+import '../core/models/workspace.dart';
 import '../core/storage/autosave.dart';
 import '../state/app_settings.dart';
 import '../state/autosave_coordinator.dart';
@@ -87,7 +87,7 @@ class _HomePageState extends State<HomePage> {
       builder: (_) => RecoveryDialog(info: info),
     );
     if (restore == true) {
-      c.restoreProject(info.project, info.originalPath);
+      c.restoreWorkspace(info.workspace, info.originalPath);
       cv.fit(c.project);
     } else {
       await auto?.discard();
@@ -141,7 +141,7 @@ class _HomePageState extends State<HomePage> {
           final dockH = layout.effectiveDock(box.maxHeight);
           final collapsed = context.select<CanvasController, bool>((cv) => cv.dockCollapsed);
           // แท็บ DFD: แผงซ้าย/ขวาและพื้นที่วาดของแผนภาพนั้น (ไม่มีแผง SQL)
-          final isEr = context.select<ProjectController, DiagramKind>((c) => c.activeDiagram.kind) == DiagramKind.er;
+          final isEr = context.select<ProjectController, DocType?>((c) => c.activeDiagram.type) == DocType.er;
           return Stack(children: [
             Row(children: [
               SizedBox(width: leftW, child: isEr ? _leftPanel : _dfdLeft),

@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 
 import '../../core/layout/diagram_geometry.dart' show noteHeight;
 import '../../core/models/dfd_model.dart';
-import '../../core/models/diagram.dart';
 import '../../core/models/enums.dart';
 import '../../core/models/workspace.dart';
 import '../../core/validate/dfd_validator.dart';
@@ -105,7 +104,7 @@ List<PaletteEntry> buildPaletteEntries(BuildContext context) {
     }),
     cmd(tr('จัดวาง DFD อัตโนมัติ'), tr('auto layout dfd จัดตำแหน่ง แผนภาพกระแสข้อมูล'), () {
       final d = context.read<DfdController>();
-      if (c.activeDiagram.kind == DiagramKind.dfd && d.autoLayout()) d.fit(d.viewport);
+      if (c.activeDiagram.type == DocType.dfd && d.autoLayout()) d.fit(d.viewport);
     }),
     byCmd(tr('พอดีหน้าจอ'), 'fit zoom', Cmd.fit),
     byCmd(tr('ซูม 100%'), 'zoom reset', Cmd.zoom100),
@@ -128,7 +127,7 @@ List<PaletteEntry> buildPaletteEntries(BuildContext context) {
 
   /// กระโดดไปแท็บ ER ก่อน (ถ้าอยู่แท็บ DFD) แล้วทำต่อ
   void inEr(VoidCallback f) {
-    c.selectDiagram(kErDiagramId);
+    c.selectDiagram(c.erDocumentId);
     f();
   }
 
@@ -188,7 +187,7 @@ List<PaletteEntry> buildPaletteEntries(BuildContext context) {
           run: () => _gotoDfd(context, tab.id, flow: f.id),
         ),
     ],
-    if (c.activeDiagram.kind == DiagramKind.dfd)
+    if (c.activeDiagram.type == DocType.dfd)
       for (final i in validateDfd(c.dfdOf(c.activeDiagramId), workspace: c.workspace, diagramId: c.activeDiagramId))
         PaletteEntry(
           kind: PaletteKind.issue,

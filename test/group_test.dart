@@ -8,7 +8,6 @@ import 'package:nsl_dev/core/layout/diagram_geometry.dart';
 import 'package:nsl_dev/core/models/group_model.dart';
 import 'package:nsl_dev/core/models/note_model.dart';
 import 'package:nsl_dev/core/models/project.dart';
-import 'package:nsl_dev/core/storage/project_file.dart';
 import 'package:nsl_dev/main.dart';
 import 'package:nsl_dev/state/app_settings.dart';
 import 'package:nsl_dev/state/project_controller.dart';
@@ -16,6 +15,7 @@ import 'package:nsl_dev/ui/canvas/canvas_controller.dart';
 import 'package:nsl_dev/ui/home_page.dart';
 import 'package:provider/provider.dart';
 import 'package:xml/xml.dart';
+import 'support/project_helpers.dart';
 
 import 'migration_fixtures.dart';
 
@@ -35,7 +35,7 @@ void main() {
     test('บันทึกแล้วเปิดกลับมาได้ครบ และไฟล์ที่ไม่มีกลุ่มไม่มีฟิลด์ groups', () {
       expect(laid().toJson().containsKey('groups'), false);
       final p = laid()..groups.add(GroupModel(id: 'g1', name: 'Customer', x: 10, y: 20, width: 600, height: 400, colorIndex: 3));
-      final back = ProjectFile.decode(ProjectFile.encode(p));
+      final back = roundTripEr(p);
       final g = back.groups.single;
       expect((g.id, g.name, g.x, g.y, g.width, g.height, g.colorIndex), ('g1', 'Customer', 10.0, 20.0, 600.0, 400.0, 3));
     });

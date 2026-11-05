@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/models/workspace.dart';
 import '../core/storage/autosave.dart';
 import 'theme.dart';
 import '../core/l10n/l10n.dart';
@@ -16,8 +17,9 @@ class RecoveryDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final p = info.project;
-    final cols = p.tables.fold<int>(0, (s, t) => s + t.columns.length);
+    final w = info.workspace;
+    final ers = [for (final d in w.documentsOf(DocType.er)) d.er!];
+    final cols = ers.fold<int>(0, (s, p) => s + p.tables.fold<int>(0, (s, t) => s + t.columns.length));
     return AlertDialog(
       title: Text(tr('พบงานที่ยังไม่ได้บันทึก')),
       content: SizedBox(
@@ -31,8 +33,8 @@ class RecoveryDialog extends StatelessWidget {
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(color: C.field, borderRadius: BorderRadius.circular(8)),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              _row(tr('โปรเจกต์'), p.name),
-              _row(tr('เนื้อหา'), tr('{0} ตาราง · {1} คอลัมน์ · {2} FK', [p.tables.length, cols, p.relations.length])),
+              _row(tr('โปรเจกต์'), w.name),
+              _row(tr('เนื้อหา'), tr('{0} ตาราง · {1} คอลัมน์ · {2} FK', [w.tableCount, cols, w.relationCount])),
               _row(tr('บันทึกอัตโนมัติเมื่อ'), formatDateTime(info.savedAt)),
               _row(tr('ไฟล์เดิม'), info.originalPath ?? tr('(ยังไม่เคยบันทึกเป็นไฟล์)')),
             ]),

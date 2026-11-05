@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nsl_dev/core/l10n/l10n.dart';
 import 'package:nsl_dev/core/models/dfd_model.dart';
 import 'package:nsl_dev/core/models/diagram.dart';
+import 'package:nsl_dev/core/models/workspace.dart';
 import 'package:nsl_dev/core/models/group_model.dart';
 import 'package:nsl_dev/core/models/note_model.dart';
 import 'package:nsl_dev/main.dart';
@@ -12,6 +13,7 @@ import 'package:nsl_dev/state/project_controller.dart';
 import 'package:nsl_dev/ui/home_page.dart';
 import 'package:nsl_dev/ui/palette/command_palette.dart';
 import 'package:provider/provider.dart';
+import 'support/project_helpers.dart';
 
 import 'migration_fixtures.dart';
 
@@ -115,10 +117,10 @@ void main() {
 
     testWidgets('ค้น "@" แล้วเห็นเฉพาะตาราง; พิมพ์ชื่อ DFD ข้ามแท็บ = สลับไปแท็บนั้นและเลือกวัตถุ', (tester) async {
       await boot(tester);
-      final tab = c.addDiagram(DiagramKind.dfd, name: 'Level 1')!;
-      c.project.dfd[tab.id] = DfdDiagram(
+      final tab = c.addDiagram(DocType.dfd, name: 'Level 1')!;
+      setDfd(c, tab.id, DfdDiagram(
         nodes: [DfdNode(id: 'n1', kind: DfdKind.process, name: 'Manage Cart', number: '2.0', x: 3000, y: 2000)],
-      );
+      ));
       c.selectDiagram(kErDiagramId);
       await tester.pump();
 
@@ -144,7 +146,7 @@ void main() {
 
     testWidgets('ค้นตารางขณะอยู่แท็บ DFD = กลับแท็บ ER แล้วเลือกตาราง', (tester) async {
       await boot(tester);
-      c.addDiagram(DiagramKind.dfd);
+      c.addDiagram(DocType.dfd);
       await tester.pump();
       await tester.tap(find.byKey(const ValueKey('top-search')));
       await tester.pumpAndSettle();
@@ -152,7 +154,7 @@ void main() {
       await tester.pump();
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
-      expect(c.activeDiagram.kind, DiagramKind.er);
+      expect(c.activeDiagram.type, DocType.er);
       expect(c.selectedTableId, 'to');
     });
 
@@ -172,7 +174,7 @@ void main() {
 
     testWidgets('คำสั่งของ ER ที่เลือกจากช่องค้นหาขณะเปิดแท็บ DFD ไม่แตะ ER', (tester) async {
       await boot(tester);
-      c.addDiagram(DiagramKind.dfd);
+      c.addDiagram(DocType.dfd);
       await tester.pump();
       final before = c.project.tables.length;
       await tester.tap(find.byKey(const ValueKey('top-search')));
@@ -206,11 +208,11 @@ void main() {
       double gap() => tester.getRect(add).left - tester.getRect(find.byKey(ValueKey('tab-${c.documents.last.id}'))).right;
       expect(gap(), lessThan(8));
       final x0 = tester.getRect(add).left;
-      c.addDiagram(DiagramKind.dfd);
+      c.addDiagram(DocType.dfd);
       await tester.pumpAndSettle();
       expect(tester.getRect(add).left, greaterThan(x0 + 60));
       expect(gap(), lessThan(8));
-      c.addDiagram(DiagramKind.dfd);
+      c.addDiagram(DocType.dfd);
       await tester.pumpAndSettle();
       expect(gap(), lessThan(8));
     });
@@ -222,7 +224,7 @@ void main() {
       await tester.pumpWidget(const NslDevApp());
       final c = tester.element(find.byType(HomePage)).read<ProjectController>();
       for (var i = 0; i < 14; i++) {
-        c.addDiagram(DiagramKind.dfd, name: 'Diagram number $i');
+        c.addDiagram(DocType.dfd, name: 'Diagram number $i');
       }
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);

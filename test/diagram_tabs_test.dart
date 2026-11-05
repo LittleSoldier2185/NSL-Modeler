@@ -1,11 +1,13 @@
+import 'dart:convert';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nsl_dev/core/l10n/l10n.dart';
 import 'package:nsl_dev/core/models/diagram.dart';
-import 'package:nsl_dev/core/models/project.dart';
 import 'package:nsl_dev/core/models/workspace.dart';
+import 'package:nsl_dev/core/storage/project_codec.dart';
 import 'package:nsl_dev/core/storage/project_file.dart';
 import 'package:nsl_dev/main.dart';
 import 'package:nsl_dev/state/app_settings.dart';
@@ -14,11 +16,12 @@ import 'package:nsl_dev/ui/home_page.dart';
 import 'package:provider/provider.dart';
 
 import 'migration_fixtures.dart';
+import 'support/project_helpers.dart';
 
 void main() {
   test('accessor เอกสาร: documents / documentById / dfdOf ตรงกับแท็บและเนื้อหา DFD', () {
     final c = ProjectController(base());
-    final a = c.addDiagram(DiagramKind.dfd, name: 'A')!;
+    final a = c.addDiagram(DocType.dfd, name: 'A')!;
     expect(c.documents.map((d) => (d.id, d.type, d.name)), [(kErDiagramId, DocType.er, 'ER'), (a.id, DocType.dfd, 'A')]);
     expect(identical(c.documentById(kErDiagramId)!.er, c.project), isTrue);
     expect(identical(c.documentById(a.id)!.dfd, c.dfdOf(a.id)), isTrue);
@@ -28,36 +31,38 @@ void main() {
   });
 
   group('โมเดล / ไฟล์', () {
-    test('โปรเจกต์ใหม่มีแท็บ ER อันเดียว; ไฟล์ ER ล้วนไม่มีฟิลด์ diagrams และยังเป็นเวอร์ชัน 1', () {
-      final p = base();
-      expect(p.diagrams.map((d) => (d.id, d.name, d.kind)), [(kErDiagramId, 'ER', DiagramKind.er)]);
-      final j = p.toJson();
+    test('โปรเจกต์ใหม่มีเอกสาร ER อันเดียว; ไฟล์เขียนเป็นเวอร์ชัน 3', () {
+      final c = ProjectController(base());
+      expect(c.documents.map((d) => (d.id, d.name, d.type)), [(kErDiagramId, 'ER', DocType.er)]);
+      final j = jsonDecode(ProjectFile.encode(c.workspace)) as Map<String, dynamic>;
+      expect(j['version'], 3);
       expect(j.containsKey('diagrams'), false);
-      expect(j['version'], 1);
+      expect(base().toJson().containsKey('diagrams'), false);
     });
 
-    test('มี DFD = เขียนเวอร์ชัน 2 และเปิดกลับมาลำดับ/ชื่อ/ชนิดครบ', () {
-      final p = base();
-      p.diagrams
-        ..add(DiagramTab(id: 'd1', name: 'Level 0', kind: DiagramKind.dfd))
-        ..add(DiagramTab(id: 'd2', name: 'Level 1', kind: DiagramKind.dfd));
-      expect(p.toJson()['version'], 2);
-      final back = ProjectFile.decode(ProjectFile.encode(p));
-      expect(back.diagrams.map((d) => (d.id, d.name, d.kind)), [
-        (kErDiagramId, 'ER', DiagramKind.er),
-        ('d1', 'Level 0', DiagramKind.dfd),
-        ('d2', 'Level 1', DiagramKind.dfd),
+    test('มี DFD = เปิดกลับมาลำดับ/ชื่อ/ชนิดครบ', () {
+      final c = ProjectController(base());
+      final a = c.addDiagram(DocType.dfd, name: 'Level 0')!;
+      final b = c.addDiagram(DocType.dfd, name: 'Level 1')!;
+      final back = roundTrip(c.workspace);
+      expect(back.documents.map((d) => (d.id, d.name, d.type)), [
+        (kErDiagramId, 'ER', DocType.er),
+        (a.id, 'Level 0', DocType.dfd),
+        (b.id, 'Level 1', DocType.dfd),
       ]);
     });
 
     test('ไฟล์เก่า (ไม่มี diagrams) เปิดได้ = มี ER อันเดียว', () {
-      final j = base().toJson()..remove('diagrams');
-      expect(Project.fromJson(j).diagrams.single.kind, DiagramKind.er);
+      final j = {'format': 'nsl-erd', 'version': 1, ...base().toJson()};
+      expect(decodeProjectMap(j).documents.single.type, DocType.er);
     });
 
-    test('ไฟล์ผิดปกติถูกซ่อม: ไม่มี ER = เติมไว้หน้าสุด, ER ซ้ำ/id ซ้ำ/ชนิดแปลก/ชื่อว่าง/ชื่อซ้ำ', () {
-      final j = base().toJson()
-        ..['diagrams'] = [
+    test('ไฟล์เก่าผิดปกติถูกซ่อม: ไม่มี ER = เติมไว้หน้าสุด, ER ซ้ำ/id ซ้ำ/ชนิดแปลก/ชื่อว่าง/ชื่อซ้ำ', () {
+      final j = {
+        'format': 'nsl-erd',
+        'version': 2,
+        ...base().toJson(),
+        'diagrams': [
           {'id': 'a', 'name': 'Flow', 'kind': 'dfd'},
           {'id': 'a', 'name': 'dup id', 'kind': 'dfd'},
           {'id': 'b', 'name': 'flow', 'kind': 'dfd'}, // ชื่อซ้ำ (ไม่สนตัวพิมพ์)
@@ -67,9 +72,10 @@ void main() {
           {'id': 'er', 'name': 'Main', 'kind': 'er'},
           {'id': 'er2', 'name': 'Another ER', 'kind': 'er'},
           {'id': 'er', 'name': 'bad', 'kind': 'dfd'}, // ใช้ id ของ ER
-        ];
-      final d = Project.fromJson(j).diagrams;
-      expect(d.where((x) => x.kind == DiagramKind.er).length, 1);
+        ],
+      };
+      final d = decodeProjectMap(j).documents;
+      expect(d.where((x) => x.type == DocType.er).length, 1);
       expect(d.map((x) => x.id).toSet().length, d.length);
       expect(d.map((x) => x.name.toLowerCase()).toSet().length, d.length);
       expect(d.every((x) => x.name.isNotEmpty), true);
@@ -78,25 +84,48 @@ void main() {
     });
 
     test('ชื่อยาวเกินถูกตัด', () {
-      final t = DiagramTab.tryFromJson({'id': 'a', 'name': 'x' * 100, 'kind': 'dfd'})!;
-      expect(t.name.length, kDiagramNameMax);
+      final j = {
+        'format': 'nsl-erd',
+        'version': 2,
+        ...base().toJson(),
+        'diagrams': [
+          {'id': 'a', 'name': 'x' * 100, 'kind': 'dfd'},
+        ],
+      };
+      expect(decodeProjectMap(j).documentById('a')!.name.length, kDiagramNameMax);
+    });
+
+    test('ไฟล์ v3 ไม่มีเอกสาร ER: เปิดแล้วมีแท็บ ER ว่างให้ (DFD เดิมอยู่ครบ)', () {
+      final w = decodeProjectMap({
+        'format': 'nsl-erd',
+        'version': 3,
+        'name': 'Flows',
+        'documents': [
+          {'id': 'er', 'type': 'dfd', 'name': 'ER', 'content': {}},
+        ],
+      });
+      final c = ProjectController()..loadWorkspace(w, null);
+      expect(c.documents.map((d) => (d.id, d.type)), [('er2', DocType.er), ('er', DocType.dfd)]);
+      expect(c.documents.first.name, 'ER 2');
+      expect(c.project.name, 'Flows');
+      expect(c.activeDiagramId, 'er2');
     });
   });
 
   group('ProjectController: แท็บ', () {
     test('เพิ่ม DFD: เปิดทันที ชื่อไม่ซ้ำ; ER เพิ่มไม่ได้', () {
       final c = ProjectController(base());
-      final a = c.addDiagram(DiagramKind.dfd)!;
-      final b = c.addDiagram(DiagramKind.dfd)!;
+      final a = c.addDiagram(DocType.dfd)!;
+      final b = c.addDiagram(DocType.dfd)!;
       expect([a.name, b.name], ['DFD', 'DFD 2']);
       expect(c.activeDiagramId, b.id);
-      expect(c.addDiagram(DiagramKind.er), isNull);
+      expect(c.addDiagram(DocType.er), isNull);
       expect(c.dirty, true);
     });
 
     test('เปลี่ยนชื่อ: ว่าง/ซ้ำ = ปฏิเสธ; ชื่อเดิมของตัวเองผ่าน', () {
       final c = ProjectController(base());
-      final a = c.addDiagram(DiagramKind.dfd, name: 'Orders')!;
+      final a = c.addDiagram(DocType.dfd, name: 'Orders')!;
       expect(c.renameDiagram(a.id, '  '), false);
       expect(c.renameDiagram(a.id, 'er'), false); // ซ้ำกับแท็บ ER (ไม่สนตัวพิมพ์)
       expect(c.renameDiagram(a.id, 'ORDERS'), true);
@@ -107,8 +136,8 @@ void main() {
 
     test('ลบ: ER ลบไม่ได้; ลบแท็บที่เปิดอยู่ = ไปแท็บก่อนหน้า', () {
       final c = ProjectController(base());
-      final a = c.addDiagram(DiagramKind.dfd)!;
-      final b = c.addDiagram(DiagramKind.dfd)!;
+      final a = c.addDiagram(DocType.dfd)!;
+      final b = c.addDiagram(DocType.dfd)!;
       expect(c.deleteDiagram(kErDiagramId), false);
       expect(c.deleteDiagram(b.id), true);
       expect(c.activeDiagramId, a.id);
@@ -119,8 +148,8 @@ void main() {
 
     test('ย้ายลำดับ', () {
       final c = ProjectController(base());
-      final a = c.addDiagram(DiagramKind.dfd, name: 'A')!;
-      final b = c.addDiagram(DiagramKind.dfd, name: 'B')!;
+      final a = c.addDiagram(DocType.dfd, name: 'A')!;
+      final b = c.addDiagram(DocType.dfd, name: 'B')!;
       c.moveDiagram(b.id, 0);
       expect(c.documents.map((d) => d.name), ['B', 'ER', 'A']);
       c.moveDiagram(a.id, 99);
@@ -132,7 +161,7 @@ void main() {
     test('แท็บไม่เข้า undo และ undo ของเนื้อหา ER ไม่ทำให้แท็บหาย', () {
       final c = ProjectController(base());
       c.addTable(name: 'x'); // มีประวัติ 1 ขั้น
-      final d = c.addDiagram(DiagramKind.dfd, name: 'Flow')!;
+      final d = c.addDiagram(DocType.dfd, name: 'Flow')!;
       c.renameDiagram(d.id, 'Flow 2');
       c.selectDiagram(kErDiagramId); // undo ทำงานกับแท็บที่เปิดอยู่
       c.undo(); // ย้อนการเพิ่มตาราง
@@ -145,9 +174,9 @@ void main() {
 
     test('เปิด/สร้างโปรเจกต์ใหม่ = กลับมาที่แท็บ ER', () {
       final c = ProjectController(base());
-      c.addDiagram(DiagramKind.dfd);
+      c.addDiagram(DocType.dfd);
       c.newProject();
-      expect(c.activeDiagram.kind, DiagramKind.er);
+      expect(c.activeDiagram.type, DocType.er);
     });
   });
 
@@ -240,7 +269,7 @@ void main() {
       await tester.tap(find.text('ลบ'));
       await tester.pumpAndSettle();
       expect(c.documentById(id), isNull);
-      expect(c.activeDiagram.kind, DiagramKind.er);
+      expect(c.activeDiagram.type, DocType.er);
     });
 
     testWidgets('ลากแท็บเพื่อเรียงลำดับใหม่', (tester) async {

@@ -9,6 +9,7 @@ import 'package:nsl_dev/core/export/dfd_svg.dart';
 import 'package:nsl_dev/core/l10n/l10n.dart';
 import 'package:nsl_dev/core/models/dfd_model.dart';
 import 'package:nsl_dev/core/models/diagram.dart';
+import 'package:nsl_dev/core/models/workspace.dart';
 import 'package:nsl_dev/core/storage/project_file.dart';
 import 'package:nsl_dev/core/validate/dfd_validator.dart';
 import 'package:nsl_dev/core/validate/issue.dart';
@@ -19,6 +20,8 @@ import 'package:nsl_dev/state/project_controller.dart';
 import 'package:nsl_dev/ui/export/dfd_png.dart';
 import 'package:nsl_dev/ui/home_page.dart';
 import 'package:provider/provider.dart';
+
+import 'support/project_helpers.dart';
 
 import 'migration_fixtures.dart';
 
@@ -46,27 +49,28 @@ bool axisAligned(List<DfdPoint> pts) {
 
 void main() {
   group('โมเดล / ไฟล์', () {
-    test('บันทึกแล้วเปิดกลับมาครบ (เนื้อหาแยกต่อแท็บ) และเป็นไฟล์เวอร์ชัน 2', () {
+    test('บันทึกแล้วเปิดกลับมาครบ (เนื้อหาแยกต่อแท็บ) และเป็นไฟล์เวอร์ชัน 3', () {
       final c = ProjectController(base());
-      final a = c.addDiagram(DiagramKind.dfd, name: 'L0')!;
-      final b = c.addDiagram(DiagramKind.dfd, name: 'L1')!;
-      c.project.dfd[a.id] = sample();
-      c.project.dfd[b.id] = DfdDiagram(nodes: [ent('x', 5, 5, name: 'Solo')]);
-      c.project.dfd[a.id]!.nodes.first.color = 0xFF336699;
-      c.project.dfd[a.id]!.flows.first
+      final a = c.addDiagram(DocType.dfd, name: 'L0')!;
+      final b = c.addDiagram(DocType.dfd, name: 'L1')!;
+      setDfd(c, a.id, sample());
+      setDfd(c, b.id, DfdDiagram(nodes: [ent('x', 5, 5, name: 'Solo')]));
+      c.dfdOf(a.id).nodes.first.color = 0xFF336699;
+      c.dfdOf(a.id).flows.first
         ..bidirectional = true
         ..color = 0xFFAA0000;
-      final text = ProjectFile.encode(c.project);
-      expect(jsonDecode(text)['version'], 2);
+      final text = ProjectFile.encode(c.workspace);
+      expect(jsonDecode(text)['version'], 3);
       final back = ProjectFile.decode(text);
-      expect(back.dfd[a.id]!.nodes.map((n) => (n.id, n.kind, n.name, n.number)), [('e', DfdKind.entity, 'Customer', ''), ('p', DfdKind.process, 'Order', '1.0'), ('s', DfdKind.store, 'Orders', 'D1')]);
-      expect(back.dfd[a.id]!.nodes.first.color, 0xFF336699);
-      expect(back.dfd[a.id]!.flows.first.bidirectional, true);
-      expect(back.dfd[a.id]!.flows.first.color, 0xFFAA0000);
-      expect(back.dfd[b.id]!.nodes.single.name, 'Solo');
+      expect(dfdIn(back, a.id).nodes.map((n) => (n.id, n.kind, n.name, n.number)), [('e', DfdKind.entity, 'Customer', ''), ('p', DfdKind.process, 'Order', '1.0'), ('s', DfdKind.store, 'Orders', 'D1')]);
+      expect(dfdIn(back, a.id).nodes.first.color, 0xFF336699);
+      expect(dfdIn(back, a.id).flows.first.bidirectional, true);
+      expect(dfdIn(back, a.id).flows.first.color, 0xFFAA0000);
+      expect(dfdIn(back, b.id).nodes.single.name, 'Solo');
+      expect(back.documents.map((d) => d.name), ['ER', 'L0', 'L1']);
     });
 
-    test('ไฟล์ ER ล้วนไม่มีฟิลด์ dfd', () {
+    test('เนื้อหา ER ไม่มีฟิลด์ dfd', () {
       expect(base().toJson().containsKey('dfd'), false);
     });
 
@@ -99,10 +103,11 @@ void main() {
 
     test('ลบแท็บ = เนื้อหาหาย; แท็บ ER ไม่มีเนื้อหา DFD; เลขลำดับถัดไปไม่ซ้ำ', () {
       final c = ProjectController(base());
-      final a = c.addDiagram(DiagramKind.dfd)!;
-      expect(c.project.dfd.containsKey(a.id), true);
+      final a = c.addDiagram(DocType.dfd)!;
+      expect(c.documentById(a.id)?.dfd, isNotNull);
       c.deleteDiagram(a.id);
-      expect(c.project.dfd.containsKey(a.id), false);
+      expect(c.documentById(a.id), isNull);
+      expect(c.documentById(c.erDocumentId)!.dfd, isNull);
       final d = DfdDiagram(nodes: [proc('1', 0, 0, number: '1.0'), proc('2', 0, 0, number: '3.0'), store('3', 0, 0, number: 'D2')]);
       expect(d.nextProcessNumber(), '2.0');
       expect(d.nextStoreNumber(), 'D1');
@@ -235,7 +240,7 @@ void main() {
     setUp(() {
       pc = ProjectController(base());
       d = DfdController(pc);
-      tab = pc.addDiagram(DiagramKind.dfd)!.id;
+      tab = pc.addDiagram(DocType.dfd)!.id;
     });
 
     test('วางวัตถุ: เลขลำดับ/รหัสอัตโนมัติ ถูกเลือก กลับโหมดเลือก; ER วางไม่ได้', () {
@@ -315,7 +320,7 @@ void main() {
     });
 
     test('undo/redo แยกต่อแท็บ และไม่ปนกับ ER', () {
-      final other = pc.addDiagram(DiagramKind.dfd)!.id;
+      final other = pc.addDiagram(DocType.dfd)!.id;
       d.addNode(DfdKind.entity, 0, 0); // อยู่ในแท็บ "other" (เปิดอยู่)
       pc.selectDiagram(tab);
       d.addNode(DfdKind.entity, 0, 0);
@@ -378,7 +383,7 @@ void main() {
         d.zoomAt(const Offset(400, 300), 1.5);
       }
       expect(d.scale, DfdController.maxScale);
-      final other = pc.addDiagram(DiagramKind.dfd)!.id;
+      final other = pc.addDiagram(DocType.dfd)!.id;
       expect(other, isNot(tab));
       expect(d.scale, 1); // แท็บใหม่ใช้มุมมองของตัวเอง
       pc.selectDiagram(tab);
@@ -448,8 +453,8 @@ void main() {
       final ctx = tester.element(find.byType(HomePage));
       c = ctx.read<ProjectController>();
       d = ctx.read<DfdController>();
-      final tab = c.addDiagram(DiagramKind.dfd, name: 'L1')!;
-      if (withSample) c.project.dfd[tab.id] = sample();
+      final tab = c.addDiagram(DocType.dfd, name: 'L1')!;
+      if (withSample) setDfd(c, tab.id, sample());
       await tester.pump();
       d.setTool(DfdTool.select);
       d.panBy(Offset.zero);
@@ -518,7 +523,7 @@ void main() {
 
     testWidgets('ต่อเส้นข้อมูลด้วย Flow tool: คลิกสองวัตถุแล้วตั้งชื่อเส้น', (tester) async {
       await boot(tester);
-      c.project.dfd[c.activeDiagramId] = DfdDiagram(nodes: [ent('e', 0, 0, name: 'Cust'), proc('p', 400, 0, name: 'Pay')]);
+      setDfd(c, c.activeDiagramId, DfdDiagram(nodes: [ent('e', 0, 0, name: 'Cust'), proc('p', 400, 0, name: 'Pay')]));
       d.panBy(Offset.zero); // แจ้งหน้าจอว่าเนื้อหาเปลี่ยน
       await tester.pump();
       await tester.tap(find.byKey(const ValueKey('dfd-tool-flow')));
@@ -626,7 +631,7 @@ void main() {
 
     testWidgets('แผงขวา: ตั้งสีและเลขลำดับ; กล่องปัญหาแสดงเมื่อไม่ได้เลือกอะไร และคลิกปัญหาไปเลือกวัตถุ', (tester) async {
       await boot(tester);
-      c.project.dfd[c.activeDiagramId] = DfdDiagram(nodes: [proc('p', 0, 0, name: 'Lonely')]);
+      setDfd(c, c.activeDiagramId, DfdDiagram(nodes: [proc('p', 0, 0, name: 'Lonely')]));
       d.panBy(Offset.zero); // แจ้งหน้าจอว่าเนื้อหาเปลี่ยน
       await tester.pump();
       expect(find.byKey(const ValueKey('dfd-issue-dfd_process_isolated-p')), findsOneWidget);
@@ -686,7 +691,7 @@ void main() {
       expect(find.text('ยังไม่มีวัตถุให้ Export เป็นภาพ'), findsOneWidget);
       await tester.pump(const Duration(seconds: 3));
 
-      c.project.dfd[c.activeDiagramId] = sample();
+      setDfd(c, c.activeDiagramId, sample());
       d.panBy(Offset.zero); // แจ้งหน้าจอว่าเนื้อหาเปลี่ยน
       await tester.pump();
       await tester.tap(find.text('ไฟล์'));
@@ -703,7 +708,7 @@ void main() {
       expect(find.text('Process'), findsWidgets);
       expect(find.text('Data store'), findsWidgets);
       expect(find.text('The DFD diagram is empty'), findsOneWidget);
-      c.project.dfd[c.activeDiagramId] = DfdDiagram(nodes: [proc('p', 0, 0, name: 'X')]);
+      setDfd(c, c.activeDiagramId, DfdDiagram(nodes: [proc('p', 0, 0, name: 'X')]));
       d.panBy(Offset.zero); // แจ้งหน้าจอว่าเนื้อหาเปลี่ยน
       await tester.pump();
       expect(find.text('Process is not connected'), findsOneWidget);

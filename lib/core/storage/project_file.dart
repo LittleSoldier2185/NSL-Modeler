@@ -1,15 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
 
-import '../models/project.dart';
+import '../models/workspace.dart';
 import '../l10n/l10n.dart';
+import 'project_codec.dart';
 
-class ProjectFormatException implements Exception {
-  ProjectFormatException(this.message);
-  final String message;
-  @override
-  String toString() => 'ProjectFormatException: $message';
-}
+export 'project_format_exception.dart';
 
 /// สกุลไฟล์โปรเจกต์ของ NSL Dev (ไม่มีจุด)
 const kProjectExt = 'nsld';
@@ -36,39 +32,32 @@ String withProjectExt(String path) {
   return '$path.$kProjectExt';
 }
 
-/// อ่าน/เขียนไฟล์โปรเจกต์ `.nsld` (JSON ; เนื้อในเหมือน `.nslm`/`.erd` เดิมทุกประการ จึงอ่านไฟล์เก่าได้)
+/// อ่าน/เขียนไฟล์โปรเจกต์ `.nsld` (JSON) ผ่าน project_codec : เขียนเป็น v3 เสมอ ; อ่านได้ v1–v3
+/// (`.nslm`/`.erd` เดิมเป็น v1/v2 จึงเปิดได้) ; v4 ขึ้นไปถูกปฏิเสธ
 class ProjectFile {
-  static String encode(Project p) =>
-      const JsonEncoder.withIndent('  ').convert(p.toJson());
+  static String encode(Workspace w) =>
+      const JsonEncoder.withIndent('  ').convert(encodeProjectMap(w));
 
-  static Project decode(String text) {
+  static Workspace decode(String text) {
     final Object? data;
     try {
       data = jsonDecode(text);
     } on FormatException catch (e) {
       throw ProjectFormatException(tr('ไฟล์ไม่ใช่ JSON ที่ถูกต้อง: {0}', [e.message]));
     }
-    if (data is! Map<String, dynamic> || data['format'] != 'nsl-erd') {
+    if (data is! Map<String, dynamic>) {
       throw ProjectFormatException(tr('ไม่ใช่ไฟล์โปรเจกต์ NSL Dev'));
     }
-    final v = data['version'];
-    if (v is! int || v > Project.formatVersion) {
-      throw ProjectFormatException(tr('ไฟล์เวอร์ชันใหม่กว่าที่โปรแกรมรองรับ'));
-    }
-    try {
-      return Project.fromJson(data);
-    } catch (e) {
-      throw ProjectFormatException(tr('โครงสร้างไฟล์ไม่ถูกต้อง: {0}', [e]));
-    }
+    return decodeProjectMap(data);
   }
 
   /// เขียนผ่านไฟล์ชั่วคราวแล้วค่อย rename กันไฟล์พังถ้าโปรแกรมค้างกลางคัน
-  static Future<void> save(Project p, String path) async {
+  static Future<void> save(Workspace w, String path) async {
     final tmp = File('$path.tmp');
-    await tmp.writeAsString(encode(p), flush: true);
+    await tmp.writeAsString(encode(w), flush: true);
     await tmp.rename(path);
   }
 
-  static Future<Project> load(String path) async =>
+  static Future<Workspace> load(String path) async =>
       decode(await File(path).readAsString());
 }

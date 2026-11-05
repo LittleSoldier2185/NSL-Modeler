@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nsl_dev/core/app_info.dart';
 import 'package:nsl_dev/core/changelog.dart';
 import 'package:nsl_dev/core/l10n/l10n.dart';
-import 'package:nsl_dev/core/models/diagram.dart';
+import 'package:nsl_dev/core/models/workspace.dart';
 import 'package:nsl_dev/main.dart';
 import 'package:nsl_dev/state/app_settings.dart';
 import 'package:nsl_dev/state/project_controller.dart';
@@ -179,7 +179,7 @@ void main() {
       await tester.pump();
       expect(tester.widget<Text>(find.byKey(const ValueKey('status-zoom'))).data, '${(cv.scale * 100).round()}%');
 
-      c.addDiagram(DiagramKind.dfd, name: 'L1');
+      c.addDiagram(DocType.dfd, name: 'L1');
       await tester.pump();
       expect(tester.widget<Text>(find.byKey(const ValueKey('status-summary'))).data, contains('0 วัตถุ · 0 เส้นข้อมูล'));
       expect(find.textContaining('L1'), findsWidgets);
@@ -202,7 +202,7 @@ void main() {
 
     testWidgets('หน้าต่างแคบ: แถบสถานะไม่ overflow', (tester) async {
       await boot(tester, size: const Size(1000, 700));
-      c.addDiagram(DiagramKind.dfd, name: 'A very long diagram name for the status bar test');
+      c.addDiagram(DocType.dfd, name: 'A very long diagram name for the status bar test');
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
     });

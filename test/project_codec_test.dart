@@ -79,14 +79,10 @@ void main() {
       }
     });
 
-    test('Workspace.fromLegacy ไม่แก้โปรเจกต์เดิมและใช้ object เดิม', () {
-      final p = ProjectFile.decode(fixture('v2_er_dfd.nsld'));
-      final before = jsonEncode(p.toJson());
-      final w = Workspace.fromLegacy(p);
-      expect(identical(w.documentById('er')!.er, p), isTrue);
-      expect(identical(w.documentById('d0')!.dfd, p.dfd['d0']), isTrue);
-      expect(p.dfd['d0']!.nodeById('s1')!.tableDocId, isNull);
-      expect(jsonEncode(p.toJson()), before);
+    test('ProjectFile.decode ใช้ทางเดียวกับ decodeProjectMap (ไฟล์เก่าได้ workspace เท่ากัน)', () {
+      for (final f in ['v1_er_only.nslm', 'v2_er_dfd.nsld', 'v2_broken.nsld']) {
+        expect(encodeText(ProjectFile.decode(fixture(f))), encodeText(decodeProjectMap(fixtureMap(f))), reason: f);
+      }
     });
   });
 
@@ -235,22 +231,24 @@ void main() {
   });
 
   test('Project.toContentJson / fromContentJson ไม่มีแท็บหรือ DFD และอ่านกลับได้เท่าเดิม', () {
-    final p = ProjectFile.decode(fixture('v2_er_dfd.nsld'));
+    final p = ProjectFile.decode(fixture('v2_er_dfd.nsld')).documentById('er')!.er!;
     final c = p.toContentJson();
     expect(c.containsKey('diagrams'), isFalse);
     expect(c.containsKey('dfd'), isFalse);
     expect(c.containsKey('format'), isFalse);
     final q = Project.fromContentJson(norm(c) as Map<String, dynamic>);
     expect(jsonEncode(q.toContentJson()), jsonEncode(c));
-    expect(q.diagrams, hasLength(1));
-    // คีย์ diagrams/dfd ที่หลงมาในเนื้อหา ER ไม่ทำให้เกิดแท็บ DFD
+    // คีย์ diagrams/dfd ที่หลงมาในเนื้อหา ER ถูกข้าม
     final r = Project.fromContentJson({
       ...norm(c) as Map<String, dynamic>,
       'diagrams': [
         {'id': 'z', 'name': 'Z', 'kind': 'dfd'},
       ],
+      'dfd': {'z': {}},
     });
-    expect(r.diagrams, hasLength(1));
+    expect(jsonEncode(r.toContentJson()), jsonEncode(c));
+    // อ่านไฟล์ทั้งไฟล์รูปแบบเก่าได้ (ใช้ตอนย้ายไฟล์เก่า)
+    expect(norm(Project.fromJson(fixtureMap('v2_er_dfd.nsld')).toContentJson()), jsonDecode(fixture('v2_er_dfd.er.json')));
   });
 
   test('DfdNode.tableDocId: อ่าน/เขียนเป็น tableDoc เฉพาะ store ที่ผูกตาราง', () {

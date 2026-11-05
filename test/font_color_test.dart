@@ -11,7 +11,6 @@ import 'package:nsl_dev/core/models/color_utils.dart';
 import 'package:nsl_dev/core/models/project.dart';
 import 'package:nsl_dev/core/models/relation_model.dart';
 import 'package:nsl_dev/core/models/table_model.dart';
-import 'package:nsl_dev/core/storage/project_file.dart';
 import 'package:nsl_dev/main.dart';
 import 'package:nsl_dev/state/app_settings.dart';
 import 'package:nsl_dev/state/project_controller.dart';
@@ -20,6 +19,7 @@ import 'package:nsl_dev/ui/canvas/canvas_view.dart';
 import 'package:nsl_dev/ui/export/diagram_png.dart';
 import 'package:nsl_dev/ui/home_page.dart';
 import 'package:provider/provider.dart';
+import 'support/project_helpers.dart';
 
 import 'migration_fixtures.dart';
 
@@ -61,7 +61,7 @@ void main() {
         ..fontFamily = 'Tahoma';
       p.lineColor = 0xFFAA0000;
       p.relations.first.color = 0xFF00AA00;
-      final back = ProjectFile.decode(ProjectFile.encode(p));
+      final back = roundTripEr(p);
       expect(tb(back, 'tu').customColor, 0xFF336699);
       expect(tb(back, 'tu').fontFamily, 'Tahoma');
       expect(tb(back, 'tu').colorValue, 0xFF336699);

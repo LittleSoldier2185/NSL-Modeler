@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -8,7 +9,11 @@ import 'package:nsl_dev/core/models/note_model.dart';
 import 'package:nsl_dev/core/models/project.dart';
 import 'package:nsl_dev/core/models/relation_model.dart';
 import 'package:nsl_dev/core/models/table_model.dart';
+import 'package:nsl_dev/core/models/workspace.dart';
+import 'package:nsl_dev/core/storage/project_codec.dart';
 import 'package:nsl_dev/core/storage/project_file.dart';
+
+import 'support/project_helpers.dart';
 
 Project sample() => Project(
       name: 'ร้านค้าออนไลน์',
@@ -36,13 +41,13 @@ Project sample() => Project(
 void main() {
   extensionTests();
   test('encode -> decode ได้ข้อมูลเท่าเดิม', () {
-    final a = ProjectFile.encode(sample());
+    final a = ProjectFile.encode(Workspace.single(sample()));
     final b = ProjectFile.encode(ProjectFile.decode(a));
     expect(b, a);
   });
 
   test('คงภาษาไทยและค่า optional', () {
-    final p = ProjectFile.decode(ProjectFile.encode(sample()));
+    final p = roundTripEr(sample());
     expect(p.name, 'ร้านค้าออนไลน์');
     expect(p.tables[0].comment, 'ผู้ใช้');
     expect(p.tables[1].columns[1].scale, 2);
@@ -56,17 +61,18 @@ void main() {
   });
 
   test('ปฏิเสธเวอร์ชันใหม่กว่า', () {
-    final j = ProjectFile.encode(sample()).replaceFirst('"version": 1', '"version": 99');
+    final j = ProjectFile.encode(Workspace.single(sample())).replaceFirst('"version": 3', '"version": 99');
+    expect(j, contains('"version": 99'));
     expect(() => ProjectFile.decode(j), throwsA(isA<ProjectFormatException>()));
   });
 
   test('save/load ผ่านไฟล์จริง', () async {
     final dir = await Directory.systemTemp.createTemp('nsl');
     final path = '${dir.path}/x.nsld';
-    await ProjectFile.save(sample(), path);
+    await ProjectFile.save(Workspace.single(sample()), path);
     expect(File('$path.tmp').existsSync(), false);
     final p = await ProjectFile.load(path);
-    expect(p.tables.length, 2);
+    expect(erOf(p).tables.length, 2);
     await dir.delete(recursive: true);
   });
 }
@@ -90,17 +96,25 @@ void extensionTests() {
       expect(kOpenableExts, ['nsld', 'nslm', 'erd']);
     });
 
-    test('ไฟล์ .erd เก่ายังเปิดได้ และเนื้อในเหมือน .nsld', () async {
+    test('ไฟล์ .nslm/.erd เก่า (v1/v2) เปิดได้ แล้ว "บันทึกเป็น" ได้ .nsld v3 (ไฟล์เดิมไม่ถูกแตะ)', () async {
       final dir = await Directory.systemTemp.createTemp('nsl');
       addTearDown(() => dir.delete(recursive: true));
-      final old = '${dir.path}/old.erd';
-      await File(old).writeAsString(ProjectFile.encode(sample()));
-      final p = await ProjectFile.load(old);
-      final out = withProjectExt(old);
-      await ProjectFile.save(p, out);
-      expect(out.endsWith('old.nsld'), true);
-      expect(File(old).existsSync(), true); // ไฟล์เดิมไม่ถูกแตะ
-      expect((await ProjectFile.load(out)).tables.length, 2);
+      for (final (src, ext) in [('v1_er_only.nslm', 'nslm'), ('v2_er_dfd.nsld', 'erd')]) {
+        final old = '${dir.path}/old_$ext.$ext';
+        final original = File('test/fixtures/$src').readAsStringSync();
+        await File(old).writeAsString(original);
+        expect(isLegacyProjectPath(old), true);
+        final w = await ProjectFile.load(old);
+        final out = withProjectExt(old);
+        await ProjectFile.save(w, out);
+        expect(out.endsWith('old_$ext.nsld'), true);
+        expect(File(old).readAsStringSync(), original); // ไฟล์เดิมไม่ถูกแตะ
+        final text = File(out).readAsStringSync();
+        expect((jsonDecode(text) as Map)['version'], 3);
+        final back = await ProjectFile.load(out);
+        expect(encodeProjectMap(back), encodeProjectMap(w));
+        expect(erOf(back).tables.length, 2);
+      }
     });
   });
 }

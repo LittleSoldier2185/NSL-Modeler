@@ -1,10 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nsl_dev/core/export/dfd_svg.dart';
 import 'package:nsl_dev/core/models/dfd_model.dart';
-import 'package:nsl_dev/core/models/diagram.dart';
-import 'package:nsl_dev/core/storage/project_file.dart';
+import 'package:nsl_dev/core/models/workspace.dart';
 import 'package:nsl_dev/state/dfd_controller.dart';
 import 'package:nsl_dev/state/project_controller.dart';
+import 'support/project_helpers.dart';
 
 import 'migration_fixtures.dart';
 
@@ -17,7 +17,7 @@ void main() {
   setUp(() {
     pc = ProjectController(base());
     d = DfdController(pc);
-    tab = pc.addDiagram(DiagramKind.dfd)!.id;
+    tab = pc.addDiagram(DocType.dfd)!.id;
     a = d.addNode(DfdKind.process, 200, 200)!;
     b = d.addNode(DfdKind.store, 500, 200)!;
   });
@@ -101,8 +101,8 @@ void main() {
   test('บันทึก-โหลดไฟล์: ขอบเขตอยู่ครบ ; ข้อมูลผิดปกติถูกข้าม', () {
     d.setNodeSelection({a.id});
     final k = d.addBoundaryAround(name: 'B')!;
-    final back = ProjectFile.decode(ProjectFile.encode(pc.project));
-    final bk = back.dfdOf(tab).boundaries.single;
+    final back = roundTrip(pc.workspace);
+    final bk = dfdIn(back, tab).boundaries.single;
     expect((bk.id, bk.name, bk.w), (k.id, 'B', k.w));
     final bad = DfdDiagram.fromJson({
       'boundaries': [
