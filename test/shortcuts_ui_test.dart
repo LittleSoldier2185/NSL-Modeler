@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nsl_modeler/core/models/enums.dart';
-import 'package:nsl_modeler/main.dart';
-import 'package:nsl_modeler/state/project_controller.dart';
-import 'package:nsl_modeler/ui/app_actions.dart';
-import 'package:nsl_modeler/ui/canvas/canvas_controller.dart';
-import 'package:nsl_modeler/ui/home_page.dart';
-import 'package:nsl_modeler/ui/palette/command_palette.dart';
-import 'package:nsl_modeler/ui/shortcuts.dart';
-import 'package:nsl_modeler/ui/shortcuts_help.dart';
+import 'package:nsl_dev/core/models/enums.dart';
+import 'package:nsl_dev/main.dart';
+import 'package:nsl_dev/state/project_controller.dart';
+import 'package:nsl_dev/ui/app_actions.dart';
+import 'package:nsl_dev/ui/canvas/canvas_controller.dart';
+import 'package:nsl_dev/ui/home_page.dart';
+import 'package:nsl_dev/ui/palette/command_palette.dart';
+import 'package:nsl_dev/ui/shortcuts.dart';
+import 'package:nsl_dev/ui/shortcuts_help.dart';
 import 'package:provider/provider.dart';
 
 import 'migration_fixtures.dart';
@@ -33,7 +33,7 @@ Future<void> boot(WidgetTester tester) async {
   });
   addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
 
-  await tester.pumpWidget(const NslModelerApp());
+  await tester.pumpWidget(const NslDevApp());
   final ctx = tester.element(find.byType(HomePage));
   c = ctx.read<ProjectController>();
   cv = ctx.read<CanvasController>();
@@ -255,7 +255,7 @@ void main() {
       await press(tester, LogicalKeyboardKey.keyV, ctrl: true);
       await tester.pump();
       expect(c.project.tables.length, 2);
-      expect(find.textContaining('ไม่มีตารางของ NSL Modeler ในคลิปบอร์ด'), findsOneWidget);
+      expect(find.textContaining('ไม่มีตารางของ NSL Dev ในคลิปบอร์ด'), findsOneWidget);
     });
 
     testWidgets('Ctrl+D ทำสำเนากลุ่มพร้อม FK ระหว่างกัน', (tester) async {

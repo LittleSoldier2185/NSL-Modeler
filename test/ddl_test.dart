@@ -1,11 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nsl_modeler/core/ddl/ddl_generator.dart';
-import 'package:nsl_modeler/core/models/column_model.dart';
-import 'package:nsl_modeler/core/models/enums.dart';
-import 'package:nsl_modeler/core/models/index_model.dart';
-import 'package:nsl_modeler/core/models/project.dart';
-import 'package:nsl_modeler/core/models/relation_model.dart';
-import 'package:nsl_modeler/core/models/table_model.dart';
+import 'package:nsl_dev/core/ddl/ddl_generator.dart';
+import 'package:nsl_dev/core/models/column_model.dart';
+import 'package:nsl_dev/core/models/enums.dart';
+import 'package:nsl_dev/core/models/index_model.dart';
+import 'package:nsl_dev/core/models/project.dart';
+import 'package:nsl_dev/core/models/relation_model.dart';
+import 'package:nsl_dev/core/models/table_model.dart';
 
 Project shop(Dialect d) => Project(
       name: 'shop',
@@ -52,7 +52,7 @@ String gen(Project p) => DdlGenerator.forDialect(p.dialect).generate(p);
 void main() {
   test('MySQL', () {
     expect(gen(shop(Dialect.mysql)), '''
--- shop (MySQL / MariaDB) — สร้างโดย NSL Modeler
+-- shop (MySQL / MariaDB) — สร้างโดย NSL Dev
 
 CREATE TABLE `users` (
   `id` INT NOT NULL AUTO_INCREMENT,
@@ -77,7 +77,7 @@ ALTER TABLE `orders` ADD CONSTRAINT `fk_orders_user_id` FOREIGN KEY (`user_id`) 
 
   test('PostgreSQL', () {
     expect(gen(shop(Dialect.postgres)), '''
--- shop (PostgreSQL) — สร้างโดย NSL Modeler
+-- shop (PostgreSQL) — สร้างโดย NSL Dev
 
 CREATE TABLE "users" (
   "id" SERIAL NOT NULL,
@@ -102,7 +102,7 @@ ALTER TABLE "orders" ADD CONSTRAINT "fk_orders_user_id" FOREIGN KEY ("user_id") 
 
   test('SQLite: FK อยู่ใน CREATE TABLE และ AUTOINCREMENT', () {
     expect(gen(shop(Dialect.sqlite)), '''
--- shop (SQLite) — สร้างโดย NSL Modeler
+-- shop (SQLite) — สร้างโดย NSL Dev
 
 PRAGMA foreign_keys = ON;
 
@@ -128,7 +128,7 @@ CREATE INDEX "idx_orders_user_id" ON "orders" ("user_id");
 
   test('SQL Server: IDENTITY, PK constraint, GO', () {
     expect(gen(shop(Dialect.mssql)), '''
--- shop (SQL Server) — สร้างโดย NSL Modeler
+-- shop (SQL Server) — สร้างโดย NSL Dev
 
 CREATE TABLE [users] (
   [id] INT IDENTITY(1,1) NOT NULL,
@@ -373,7 +373,7 @@ ALTER TABLE [orders] ADD CONSTRAINT [fk_orders_user_id] FOREIGN KEY ([user_id]) 
 
   group('ขอบเขต', () {
     test('โปรเจกต์ว่างยังได้ header', () {
-      expect(gen(Project(name: 'x')), '-- x (MySQL / MariaDB) — สร้างโดย NSL Modeler\n');
+      expect(gen(Project(name: 'x')), '-- x (MySQL / MariaDB) — สร้างโดย NSL Dev\n');
     });
 
     test('ตารางไม่มีคอลัมน์ถูกข้าม', () {

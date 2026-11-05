@@ -107,7 +107,7 @@ bool _nullable(ColumnModel c) => !(c.notNull || c.isPrimaryKey);
 
 String _lineComment(String s) => s.replaceAll(RegExp(r'\s*\r?\n\s*'), ' ').trim();
 
-String _header(Project p, String c) => '$c สร้างโดย NSL Modeler จากโปรเจกต์ "${_lineComment(p.name)}" — ไม่มีวันที่เพื่อให้ diff ใน git อ่านง่าย';
+String _header(Project p, String c) => '$c สร้างโดย NSL Dev จากโปรเจกต์ "${_lineComment(p.name)}" — ไม่มีวันที่เพื่อให้ diff ใน git อ่านง่าย';
 
 // ---------- Dart ----------
 

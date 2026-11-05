@@ -2,15 +2,15 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nsl_modeler/core/export/svg_export.dart';
-import 'package:nsl_modeler/core/l10n/l10n.dart';
-import 'package:nsl_modeler/core/layout/diagram_geometry.dart';
-import 'package:nsl_modeler/core/models/project.dart';
-import 'package:nsl_modeler/main.dart';
-import 'package:nsl_modeler/state/app_settings.dart';
-import 'package:nsl_modeler/state/project_controller.dart';
-import 'package:nsl_modeler/ui/export/diagram_png.dart';
-import 'package:nsl_modeler/ui/home_page.dart';
+import 'package:nsl_dev/core/export/svg_export.dart';
+import 'package:nsl_dev/core/l10n/l10n.dart';
+import 'package:nsl_dev/core/layout/diagram_geometry.dart';
+import 'package:nsl_dev/core/models/project.dart';
+import 'package:nsl_dev/main.dart';
+import 'package:nsl_dev/state/app_settings.dart';
+import 'package:nsl_dev/state/project_controller.dart';
+import 'package:nsl_dev/ui/export/diagram_png.dart';
+import 'package:nsl_dev/ui/home_page.dart';
 import 'package:provider/provider.dart';
 
 import 'migration_fixtures.dart';
@@ -117,7 +117,7 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       settings = AppSettings(lang: Lang.th, flowAnimation: animate);
-      await tester.pumpWidget(NslModelerApp(settings: settings));
+      await tester.pumpWidget(NslDevApp(settings: settings));
       c = tester.element(find.byType(HomePage)).read<ProjectController>();
       c.loadProject(placed(), null);
       await tester.pump();
@@ -202,7 +202,7 @@ void main() {
       tester.view.physicalSize = const Size(1440, 900);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
-      await tester.pumpWidget(NslModelerApp(settings: AppSettings(lang: Lang.en)));
+      await tester.pumpWidget(NslDevApp(settings: AppSettings(lang: Lang.en)));
       await tester.tap(find.text('View'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Relationship lines (FK)…'));

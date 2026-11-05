@@ -1,12 +1,12 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nsl_modeler/core/ddl/sql_highlight.dart';
-import 'package:nsl_modeler/core/models/enums.dart';
-import 'package:nsl_modeler/main.dart';
-import 'package:nsl_modeler/state/project_controller.dart';
-import 'package:nsl_modeler/ui/file_actions.dart';
-import 'package:nsl_modeler/ui/home_page.dart';
-import 'package:nsl_modeler/ui/sql_dock.dart';
+import 'package:nsl_dev/core/ddl/sql_highlight.dart';
+import 'package:nsl_dev/core/models/enums.dart';
+import 'package:nsl_dev/main.dart';
+import 'package:nsl_dev/state/project_controller.dart';
+import 'package:nsl_dev/ui/file_actions.dart';
+import 'package:nsl_dev/ui/home_page.dart';
+import 'package:nsl_dev/ui/sql_dock.dart';
 import 'package:provider/provider.dart';
 
 List<String> kinds(String line) =>
@@ -77,7 +77,7 @@ void main() {
       tester.view.physicalSize = const Size(1440, 900);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
-      await tester.pumpWidget(const NslModelerApp());
+      await tester.pumpWidget(const NslDevApp());
       return tester.element(find.byType(HomePage)).read<ProjectController>();
     }
 

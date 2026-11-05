@@ -1,11 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nsl_modeler/core/export/codegen.dart';
-import 'package:nsl_modeler/core/models/column_model.dart';
-import 'package:nsl_modeler/core/models/enums.dart';
-import 'package:nsl_modeler/core/models/index_model.dart';
-import 'package:nsl_modeler/core/models/project.dart';
-import 'package:nsl_modeler/core/models/relation_model.dart';
-import 'package:nsl_modeler/core/models/table_model.dart';
+import 'package:nsl_dev/core/export/codegen.dart';
+import 'package:nsl_dev/core/models/column_model.dart';
+import 'package:nsl_dev/core/models/enums.dart';
+import 'package:nsl_dev/core/models/index_model.dart';
+import 'package:nsl_dev/core/models/project.dart';
+import 'package:nsl_dev/core/models/relation_model.dart';
+import 'package:nsl_dev/core/models/table_model.dart';
 
 Project sample() => Project(name: 'shop', dialect: Dialect.postgres, tables: [
       TableModel(id: 't1', name: 'users', comment: 'ผู้ใช้', columns: [

@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nsl_modeler/core/models/enums.dart';
-import 'package:nsl_modeler/state/project_controller.dart';
+import 'package:nsl_dev/core/models/enums.dart';
+import 'package:nsl_dev/state/project_controller.dart';
 
 void main() {
   late ProjectController c;

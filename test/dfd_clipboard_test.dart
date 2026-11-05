@@ -1,9 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nsl_modeler/core/clipboard/dfd_clipboard.dart';
-import 'package:nsl_modeler/core/models/dfd_model.dart';
-import 'package:nsl_modeler/core/models/diagram.dart';
-import 'package:nsl_modeler/state/dfd_controller.dart';
-import 'package:nsl_modeler/state/project_controller.dart';
+import 'package:nsl_dev/core/clipboard/dfd_clipboard.dart';
+import 'package:nsl_dev/core/models/dfd_model.dart';
+import 'package:nsl_dev/core/models/diagram.dart';
+import 'package:nsl_dev/state/dfd_controller.dart';
+import 'package:nsl_dev/state/project_controller.dart';
 
 import 'migration_fixtures.dart';
 

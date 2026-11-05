@@ -2,19 +2,19 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nsl_modeler/core/db/db_session.dart';
-import 'package:nsl_modeler/core/db/mysql_reader.dart';
-import 'package:nsl_modeler/core/l10n/l10n.dart';
-import 'package:nsl_modeler/core/models/enums.dart';
-import 'package:nsl_modeler/main.dart';
-import 'package:nsl_modeler/state/app_settings.dart';
-import 'package:nsl_modeler/state/project_controller.dart';
-import 'package:nsl_modeler/ui/db_connect_dialog.dart';
-import 'package:nsl_modeler/ui/data_browser_dialog.dart';
-import 'package:nsl_modeler/ui/import_dialog.dart';
+import 'package:nsl_dev/core/db/db_session.dart';
+import 'package:nsl_dev/core/db/mysql_reader.dart';
+import 'package:nsl_dev/core/l10n/l10n.dart';
+import 'package:nsl_dev/core/models/enums.dart';
+import 'package:nsl_dev/main.dart';
+import 'package:nsl_dev/state/app_settings.dart';
+import 'package:nsl_dev/state/project_controller.dart';
+import 'package:nsl_dev/ui/db_connect_dialog.dart';
+import 'package:nsl_dev/ui/data_browser_dialog.dart';
+import 'package:nsl_dev/ui/import_dialog.dart';
 import 'package:sqlite3/sqlite3.dart';
-import 'package:nsl_modeler/ui/home_page.dart';
-import 'package:nsl_modeler/ui/shortcuts.dart';
+import 'package:nsl_dev/ui/home_page.dart';
+import 'package:nsl_dev/ui/shortcuts.dart';
 import 'package:provider/provider.dart';
 
 import 'migration_fixtures.dart';
@@ -184,7 +184,7 @@ void main() {
       fake = connector ?? _FakeConnector();
       DbConnectDialog.connector = fake;
       DbConnectDialog.last = const DbConfig();
-      await tester.pumpWidget(NslModelerApp(settings: AppSettings(lang: lang)));
+      await tester.pumpWidget(NslDevApp(settings: AppSettings(lang: lang)));
       c = tester.element(find.byType(HomePage)).read<ProjectController>();
       await tester.pump();
     }

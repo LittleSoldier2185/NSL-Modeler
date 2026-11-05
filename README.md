@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="assets/icon/app_icon.png" alt="NSL Modeler" width="128">
+  <img src="assets/icon/app_icon.png" alt="NSL Dev" width="128">
 </p>
 
-<h1 align="center">NSL Modeler</h1>
+<h1 align="center">NSL Dev</h1>
 
 <p align="center">
   เครื่องมือออกแบบฐานข้อมูลและแผนภาพแบบลากวาง สำหรับ Windows<br>
@@ -48,13 +48,13 @@
 - **แถบสถานะล่าง:** รุ่นของโปรแกรม จำนวนตาราง ปัญหาที่ตรวจพบ ซูม สถานะบันทึก และปุ่ม **มีอะไรใหม่**
 - Export ภาพ PNG/SVG (ธีมสว่าง/มืด, ทั้งกระดาน/เฉพาะส่วนที่มีตาราง/เฉพาะที่เลือก), Data dictionary (Markdown), Mermaid, DBML
 - ธีมสว่าง/มืด, ภาษาไทย/อังกฤษ, ฟอนต์ Noto Sans Thai ฝังในโปรแกรม
-- Auto-save และกู้คืนงานที่ค้างอยู่ ไฟล์โปรเจกต์ `.nslm` (JSON) — ไฟล์ `.erd` รุ่นเก่ายังเปิดได้ และเมื่อบันทึกจะได้ไฟล์ `.nslm` ใหม่ (ไฟล์เดิมไม่ถูกแก้) ; เปิดไฟล์ด้วย `nsl_modeler.exe <ไฟล์>` ได้ ; ผูกสกุล `.nslm` กับแอปใน Windows (ดับเบิลคลิกเปิดได้) ด้วย `powershell -ExecutionPolicy Bypass -File tool\register_file_association.ps1` (เฉพาะผู้ใช้ปัจจุบัน ไม่ต้องใช้สิทธิ์ผู้ดูแล ; `-ExePath` ระบุตำแหน่งแอป, `-IncludeLegacyErd` ผูก `.erd` ด้วย, `-Unregister` ถอนออก)
+- Auto-save และกู้คืนงานที่ค้างอยู่ ไฟล์โปรเจกต์ `.nsld` (JSON) — ไฟล์ `.nslm` และ `.erd` รุ่นเก่ายังเปิดได้ และเมื่อบันทึกจะได้ไฟล์ `.nslm` ใหม่ (ไฟล์เดิมไม่ถูกแก้) ; เปิดไฟล์ด้วย `nsl_dev.exe <ไฟล์>` ได้ ; ผูกสกุล `.nslm` กับแอปใน Windows (ดับเบิลคลิกเปิดได้) ด้วย `powershell -ExecutionPolicy Bypass -File tool\register_file_association.ps1` (เฉพาะผู้ใช้ปัจจุบัน ไม่ต้องใช้สิทธิ์ผู้ดูแล ; `-ExePath` ระบุตำแหน่งแอป, `-IncludeLegacyErd` ผูก `.erd` ด้วย, `-Unregister` ถอนออก)
 - กด `F1` เพื่อดูคีย์ลัดทั้งหมด (Redo = `Ctrl+Shift+Z`, `Ctrl+Y` หรือ `Alt+Z`)
 
 ## ติดตั้ง (ผู้ใช้ทั่วไป)
 
-1. ดาวน์โหลดไฟล์ `NSL_Modeler_<รุ่น>_windows_x64.zip` จากหน้า **[Releases](../../releases)**
-2. แตกไฟล์ทั้งโฟลเดอร์ แล้วเปิด `nsl_modeler.exe` (เก็บ `flutter_windows.dll` และโฟลเดอร์ `data` ไว้ข้างกัน)
+1. ดาวน์โหลดไฟล์ `NSL_Dev_<รุ่น>_windows_x64.zip` จากหน้า **[Releases](../../releases)**
+2. แตกไฟล์ทั้งโฟลเดอร์ แล้วเปิด `nsl_dev.exe` (เก็บ `flutter_windows.dll` และโฟลเดอร์ `data` ไว้ข้างกัน)
 
 **ข้อกำหนด:** Windows 10/11 (64 บิต) และ [Microsoft Visual C++ Redistributable (x64)](https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist)
 โปรแกรมยังไม่ได้เซ็นดิจิทัล Windows SmartScreen อาจเตือน ให้เลือก "ข้อมูลเพิ่มเติม" → "เรียกใช้อยู่ดี"
@@ -108,7 +108,7 @@ test/          เทสต์ (unit + widget)
 
 ## English summary
 
-**NSL Modeler** is a Windows desktop app for designing databases by drag and drop. It generates SQL for MySQL/MariaDB, PostgreSQL, SQLite and SQL Server, and also draws DFD (Data Flow Diagram) diagrams in browser-style tabs.
+**NSL Dev** is a Windows desktop app for designing databases by drag and drop. It generates SQL for MySQL/MariaDB, PostgreSQL, SQLite and SQL Server, and also draws DFD (Data Flow Diagram) diagrams in browser-style tabs.
 
 - **ER diagrams:** tables, columns, FK relationships (orthogonal crow's-foot lines), groups, notes, auto-layout, schema validation, seed data
 - **DFD diagrams:** external entities, processes, data stores and labeled data flows with automatic rule checking
@@ -116,6 +116,6 @@ test/          เทสต์ (unit + widget)
 - **Search:** a box in the title bar (`Ctrl+K`) that finds commands, tables, columns, DFD objects, notes, groups and issues across tabs (prefixes `@ # : ! > ~`)
 - Export PNG/SVG (light/dark), Markdown data dictionary, Mermaid, DBML; Thai/English UI; light/dark theme
 
-**Install:** download the zip from [Releases](../../releases), extract the whole folder and run `nsl_modeler.exe` (needs the Microsoft Visual C++ Redistributable x64).
+**Install:** download the zip from [Releases](../../releases), extract the whole folder and run `nsl_dev.exe` (needs the Microsoft Visual C++ Redistributable x64).
 **Build:** `flutter pub get` → `flutter run -d windows` (Windows Developer Mode required). Tests: `flutter test`.
 The Noto Sans Thai font is used under the SIL Open Font License 1.1.

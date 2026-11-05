@@ -11,27 +11,32 @@ class ProjectFormatException implements Exception {
   String toString() => 'ProjectFormatException: $message';
 }
 
-/// สกุลไฟล์โปรเจกต์ของ NSL Modeler (ไม่มีจุด)
-const kProjectExt = 'nslm';
+/// สกุลไฟล์โปรเจกต์ของ NSL Dev (ไม่มีจุด)
+const kProjectExt = 'nsld';
 
-/// สกุลเก่า (ก่อนรุ่นที่เริ่มใช้ `.nslm`) — ยังเปิดอ่านได้ แต่บันทึกเป็น `.nslm` เสมอ
-const kLegacyProjectExt = 'erd';
+/// สกุลเก่า — `.nslm` (NSL Modeler) และ `.erd` : ยังเปิดอ่านได้ แต่บันทึกเป็น `.nsld` เสมอ
+const kLegacyProjectExts = ['nslm', 'erd'];
 
 /// สกุลที่เปิดได้ทั้งหมด (ใช้กับ dialog เลือกไฟล์)
-const kOpenableExts = [kProjectExt, kLegacyProjectExt];
+const kOpenableExts = [kProjectExt, ...kLegacyProjectExts];
 
-/// path เป็นไฟล์สกุลเก่า `.erd` หรือไม่
-bool isLegacyProjectPath(String path) => path.toLowerCase().endsWith('.$kLegacyProjectExt');
+/// path เป็นไฟล์สกุลเก่า (`.nslm` / `.erd`) หรือไม่
+bool isLegacyProjectPath(String path) {
+  final lower = path.toLowerCase();
+  return kLegacyProjectExts.any((e) => lower.endsWith('.$e'));
+}
 
-/// ทำให้ path ลงท้าย `.nslm` : `.erd` เก่าถูกเปลี่ยนเป็น `.nslm` , สกุลอื่น/ไม่มีสกุลต่อท้าย `.nslm`
+/// ทำให้ path ลงท้าย `.nsld` : สกุลเก่าถูกเปลี่ยนเป็น `.nsld` , สกุลอื่น/ไม่มีสกุลต่อท้าย `.nsld`
 String withProjectExt(String path) {
   final lower = path.toLowerCase();
   if (lower.endsWith('.$kProjectExt')) return path;
-  if (isLegacyProjectPath(path)) return '${path.substring(0, path.length - kLegacyProjectExt.length)}$kProjectExt';
+  for (final e in kLegacyProjectExts) {
+    if (lower.endsWith('.$e')) return '${path.substring(0, path.length - e.length)}$kProjectExt';
+  }
   return '$path.$kProjectExt';
 }
 
-/// อ่าน/เขียนไฟล์โปรเจกต์ `.nslm` (JSON ; เนื้อในเหมือน `.erd` เดิมทุกประการ จึงอ่านไฟล์เก่าได้)
+/// อ่าน/เขียนไฟล์โปรเจกต์ `.nsld` (JSON ; เนื้อในเหมือน `.nslm`/`.erd` เดิมทุกประการ จึงอ่านไฟล์เก่าได้)
 class ProjectFile {
   static String encode(Project p) =>
       const JsonEncoder.withIndent('  ').convert(p.toJson());
@@ -44,7 +49,7 @@ class ProjectFile {
       throw ProjectFormatException(tr('ไฟล์ไม่ใช่ JSON ที่ถูกต้อง: {0}', [e.message]));
     }
     if (data is! Map<String, dynamic> || data['format'] != 'nsl-erd') {
-      throw ProjectFormatException(tr('ไม่ใช่ไฟล์โปรเจกต์ NSL Modeler'));
+      throw ProjectFormatException(tr('ไม่ใช่ไฟล์โปรเจกต์ NSL Dev'));
     }
     final v = data['version'];
     if (v is! int || v > Project.formatVersion) {

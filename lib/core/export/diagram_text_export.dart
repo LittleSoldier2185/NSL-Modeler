@@ -86,7 +86,7 @@ String _mermaidType(ColumnModel c) => switch (c.type) {
 /// ---------- DBML (dbdiagram.io) ----------
 String exportDbml(Project p) {
   final b = StringBuffer();
-  b.writeln(tr('// {0} — สร้างโดย NSL Modeler', [p.name.replaceAll(RegExp(r'\s+'), ' ')]));
+  b.writeln(tr('// {0} — สร้างโดย NSL Dev', [p.name.replaceAll(RegExp(r'\s+'), ' ')]));
   for (final t in p.tables) {
     b.writeln();
     b.writeln('Table ${_dbmlId(t.name)} {');

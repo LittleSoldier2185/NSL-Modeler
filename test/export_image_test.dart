@@ -3,17 +3,17 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nsl_modeler/core/export/svg_export.dart';
-import 'package:nsl_modeler/core/layout/diagram_geometry.dart';
-import 'package:nsl_modeler/core/models/column_model.dart';
-import 'package:nsl_modeler/core/models/enums.dart';
-import 'package:nsl_modeler/core/models/note_model.dart';
-import 'package:nsl_modeler/core/models/project.dart';
-import 'package:nsl_modeler/core/models/relation_model.dart';
-import 'package:nsl_modeler/core/models/table_model.dart';
-import 'package:nsl_modeler/ui/export/diagram_png.dart';
-import 'package:nsl_modeler/ui/file_actions.dart';
-import 'package:nsl_modeler/ui/export/export_image_dialog.dart';
+import 'package:nsl_dev/core/export/svg_export.dart';
+import 'package:nsl_dev/core/layout/diagram_geometry.dart';
+import 'package:nsl_dev/core/models/column_model.dart';
+import 'package:nsl_dev/core/models/enums.dart';
+import 'package:nsl_dev/core/models/note_model.dart';
+import 'package:nsl_dev/core/models/project.dart';
+import 'package:nsl_dev/core/models/relation_model.dart';
+import 'package:nsl_dev/core/models/table_model.dart';
+import 'package:nsl_dev/ui/export/diagram_png.dart';
+import 'package:nsl_dev/ui/file_actions.dart';
+import 'package:nsl_dev/ui/export/export_image_dialog.dart';
 import 'package:xml/xml.dart';
 
 import 'migration_fixtures.dart';

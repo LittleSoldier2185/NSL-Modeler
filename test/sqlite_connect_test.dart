@@ -1,8 +1,8 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nsl_modeler/core/db/db_session.dart';
-import 'package:nsl_modeler/core/db/sqlite_connector.dart';
+import 'package:nsl_dev/core/db/db_session.dart';
+import 'package:nsl_dev/core/db/sqlite_connector.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 /// ฐานข้อมูล SQLite จริงในไฟล์ชั่วคราว (ไม่ใช่ของปลอม) : ทดสอบตัวอ่านโครงสร้างและความเป็น "อ่านอย่างเดียว"

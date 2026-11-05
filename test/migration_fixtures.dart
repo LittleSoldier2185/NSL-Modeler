@@ -1,9 +1,9 @@
-import 'package:nsl_modeler/core/models/column_model.dart';
-import 'package:nsl_modeler/core/models/enums.dart';
-import 'package:nsl_modeler/core/models/index_model.dart';
-import 'package:nsl_modeler/core/models/project.dart';
-import 'package:nsl_modeler/core/models/relation_model.dart';
-import 'package:nsl_modeler/core/models/table_model.dart';
+import 'package:nsl_dev/core/models/column_model.dart';
+import 'package:nsl_dev/core/models/enums.dart';
+import 'package:nsl_dev/core/models/index_model.dart';
+import 'package:nsl_dev/core/models/project.dart';
+import 'package:nsl_dev/core/models/relation_model.dart';
+import 'package:nsl_dev/core/models/table_model.dart';
 
 /// ข้อมูลทดสอบกลางของชุดทดสอบ diff/migration
 ColumnModel col(String id, String name,

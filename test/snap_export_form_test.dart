@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nsl_modeler/core/export/svg_export.dart';
-import 'package:nsl_modeler/core/layout/diagram_geometry.dart';
-import 'package:nsl_modeler/core/models/enums.dart';
-import 'package:nsl_modeler/main.dart';
-import 'package:nsl_modeler/state/app_settings.dart';
-import 'package:nsl_modeler/state/project_controller.dart';
-import 'package:nsl_modeler/ui/canvas/canvas_controller.dart';
-import 'package:nsl_modeler/ui/create_table_dialog.dart';
-import 'package:nsl_modeler/ui/export/export_image_dialog.dart';
-import 'package:nsl_modeler/ui/home_page.dart';
-import 'package:nsl_modeler/core/l10n/l10n.dart';
+import 'package:nsl_dev/core/export/svg_export.dart';
+import 'package:nsl_dev/core/layout/diagram_geometry.dart';
+import 'package:nsl_dev/core/models/enums.dart';
+import 'package:nsl_dev/main.dart';
+import 'package:nsl_dev/state/app_settings.dart';
+import 'package:nsl_dev/state/project_controller.dart';
+import 'package:nsl_dev/ui/canvas/canvas_controller.dart';
+import 'package:nsl_dev/ui/create_table_dialog.dart';
+import 'package:nsl_dev/ui/export/export_image_dialog.dart';
+import 'package:nsl_dev/ui/home_page.dart';
+import 'package:nsl_dev/core/l10n/l10n.dart';
 import 'package:provider/provider.dart';
 
 import 'migration_fixtures.dart';
@@ -26,7 +26,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     settings = AppSettings(lang: Lang.th, snapToGrid: snap);
-    await tester.pumpWidget(NslModelerApp(settings: settings));
+    await tester.pumpWidget(NslDevApp(settings: settings));
     final ctx = tester.element(find.byType(HomePage));
     c = ctx.read<ProjectController>();
     cv = ctx.read<CanvasController>();

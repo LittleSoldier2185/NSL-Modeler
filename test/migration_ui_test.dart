@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nsl_modeler/core/models/enums.dart';
-import 'package:nsl_modeler/ui/file_actions.dart';
-import 'package:nsl_modeler/ui/migration_dialog.dart';
+import 'package:nsl_dev/core/models/enums.dart';
+import 'package:nsl_dev/ui/file_actions.dart';
+import 'package:nsl_dev/ui/migration_dialog.dart';
 
 import 'migration_fixtures.dart';
 

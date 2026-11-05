@@ -1,10 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nsl_modeler/core/models/enums.dart';
-import 'package:nsl_modeler/core/models/project.dart';
-import 'package:nsl_modeler/core/models/table_model.dart';
-import 'package:nsl_modeler/core/validate/issue.dart';
-import 'package:nsl_modeler/core/validate/naming.dart';
-import 'package:nsl_modeler/core/validate/validator.dart';
+import 'package:nsl_dev/core/models/enums.dart';
+import 'package:nsl_dev/core/models/project.dart';
+import 'package:nsl_dev/core/models/table_model.dart';
+import 'package:nsl_dev/core/validate/issue.dart';
+import 'package:nsl_dev/core/validate/naming.dart';
+import 'package:nsl_dev/core/validate/validator.dart';
 
 import 'migration_fixtures.dart';
 

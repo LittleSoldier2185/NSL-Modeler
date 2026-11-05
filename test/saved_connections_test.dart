@@ -2,13 +2,13 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nsl_modeler/core/db/db_session.dart';
-import 'package:nsl_modeler/core/db/saved_connections.dart';
-import 'package:nsl_modeler/core/db/secret_codec.dart';
-import 'package:nsl_modeler/core/l10n/l10n.dart';
-import 'package:nsl_modeler/main.dart';
-import 'package:nsl_modeler/state/app_settings.dart';
-import 'package:nsl_modeler/ui/db_connect_dialog.dart';
+import 'package:nsl_dev/core/db/db_session.dart';
+import 'package:nsl_dev/core/db/saved_connections.dart';
+import 'package:nsl_dev/core/db/secret_codec.dart';
+import 'package:nsl_dev/core/l10n/l10n.dart';
+import 'package:nsl_dev/main.dart';
+import 'package:nsl_dev/state/app_settings.dart';
+import 'package:nsl_dev/ui/db_connect_dialog.dart';
 
 /// ตัวเข้ารหัสปลอมที่ทำงานได้ทุกแพลตฟอร์ม (กลับตัวอักษร) — ของจริง (DPAPI) ทดสอบใน secret_codec_test
 class _FakeCodec implements SecretCodec {
@@ -120,7 +120,7 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       currentLang = Lang.th;
-      await tester.pumpWidget(NslModelerApp(settings: AppSettings(lang: Lang.th)));
+      await tester.pumpWidget(NslDevApp(settings: AppSettings(lang: Lang.th)));
       await tester.pump();
       await tester.tap(find.text('ไฟล์'));
       await tester.pumpAndSettle();

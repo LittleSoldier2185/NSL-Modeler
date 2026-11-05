@@ -2,17 +2,17 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nsl_modeler/core/app_info.dart';
-import 'package:nsl_modeler/core/changelog.dart';
-import 'package:nsl_modeler/core/l10n/l10n.dart';
-import 'package:nsl_modeler/core/models/diagram.dart';
-import 'package:nsl_modeler/main.dart';
-import 'package:nsl_modeler/state/app_settings.dart';
-import 'package:nsl_modeler/state/project_controller.dart';
-import 'package:nsl_modeler/ui/canvas/canvas_controller.dart';
-import 'package:nsl_modeler/ui/home_page.dart';
-import 'package:nsl_modeler/ui/palette/command_palette.dart';
-import 'package:nsl_modeler/ui/whats_new_dialog.dart';
+import 'package:nsl_dev/core/app_info.dart';
+import 'package:nsl_dev/core/changelog.dart';
+import 'package:nsl_dev/core/l10n/l10n.dart';
+import 'package:nsl_dev/core/models/diagram.dart';
+import 'package:nsl_dev/main.dart';
+import 'package:nsl_dev/state/app_settings.dart';
+import 'package:nsl_dev/state/project_controller.dart';
+import 'package:nsl_dev/ui/canvas/canvas_controller.dart';
+import 'package:nsl_dev/ui/home_page.dart';
+import 'package:nsl_dev/ui/palette/command_palette.dart';
+import 'package:nsl_dev/ui/whats_new_dialog.dart';
 import 'package:provider/provider.dart';
 
 import 'migration_fixtures.dart';
@@ -88,7 +88,7 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       settings = AppSettings(lang: lang, lastSeenVersion: lastSeen);
-      await tester.pumpWidget(NslModelerApp(settings: settings));
+      await tester.pumpWidget(NslDevApp(settings: settings));
       c = tester.element(find.byType(HomePage)).read<ProjectController>();
       c.loadProject(base(), null);
       await tester.pump();
@@ -142,7 +142,7 @@ void main() {
       await boot(tester);
       await tester.tap(find.text('ช่วยเหลือ'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('เกี่ยวกับ NSL Modeler…'));
+      await tester.tap(find.text('เกี่ยวกับ NSL Dev…'));
       await tester.pumpAndSettle();
       expect(find.byType(AboutAppDialog), findsOneWidget);
       expect(tester.widget<Text>(find.byKey(const ValueKey('about-version'))).data, appVersionLabel);
@@ -195,9 +195,9 @@ void main() {
       expect(cv.dockTab, DockTab.issues);
     });
 
-    testWidgets('ชื่อไฟล์ย้ายมาอยู่ที่แถบสถานะ (ยังไม่บันทึก = ชื่อโปรเจกต์.nslm)', (tester) async {
+    testWidgets('ชื่อไฟล์ย้ายมาอยู่ที่แถบสถานะ (ยังไม่บันทึก = ชื่อโปรเจกต์.nsld)', (tester) async {
       await boot(tester);
-      expect(tester.widget<Text>(find.byKey(const ValueKey('status-summary'))).data, startsWith('${c.project.name}.nslm · '));
+      expect(tester.widget<Text>(find.byKey(const ValueKey('status-summary'))).data, startsWith('${c.project.name}.nsld · '));
     });
 
     testWidgets('หน้าต่างแคบ: แถบสถานะไม่ overflow', (tester) async {

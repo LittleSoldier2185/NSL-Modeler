@@ -1,10 +1,10 @@
 ﻿<#
 .SYNOPSIS
-  สร้างตัวติดตั้ง NSL Modeler (build\installer\NSL-Modeler-Setup-<รุ่น>.exe)
+  สร้างตัวติดตั้ง NSL Dev (build\installer\NSL-Dev-Setup-<รุ่น>.exe)
 
 .DESCRIPTION
   1) flutter build windows --release (ข้ามได้ด้วย -SkipBuild ถ้า build ไว้แล้ว)
-  2) คอมไพล์ installer\nsl_modeler.iss ด้วย Inno Setup (ISCC.exe) — ต้องติดตั้ง Inno Setup 6 ก่อน
+  2) คอมไพล์ installer\nsl_dev.iss ด้วย Inno Setup (ISCC.exe) — ต้องติดตั้ง Inno Setup 6 ก่อน
      (https://jrsoftware.org/isdl.php หรือ winget install JRSoftware.InnoSetup)
   เลขรุ่นอ่านจาก pubspec.yaml
 
@@ -29,8 +29,8 @@ if (-not $SkipBuild) {
   if ($LASTEXITCODE -ne 0) { throw 'flutter build windows ล้มเหลว' }
 }
 $release = Join-Path $root 'build\windows\x64\runner\Release'
-if (-not (Test-Path (Join-Path $release 'nsl_modeler.exe'))) {
-  throw "ไม่พบ $release\nsl_modeler.exe — build ก่อน (ไม่ใส่ -SkipBuild)"
+if (-not (Test-Path (Join-Path $release 'nsl_dev.exe'))) {
+  throw "ไม่พบ $release\nsl_dev.exe — build ก่อน (ไม่ใส่ -SkipBuild)"
 }
 
 if (-not $Iscc) {
@@ -46,6 +46,6 @@ if (-not $Iscc) {
   throw 'ไม่พบ Inno Setup (ISCC.exe) — ติดตั้งด้วย: winget install JRSoftware.InnoSetup แล้วรันใหม่ หรือระบุ -Iscc <path>'
 }
 
-& $Iscc "/DAppVersion=$version" 'installer\nsl_modeler.iss'
+& $Iscc "/DAppVersion=$version" 'installer\nsl_dev.iss'
 if ($LASTEXITCODE -ne 0) { throw 'คอมไพล์ตัวติดตั้งล้มเหลว' }
-Write-Host "สร้างแล้ว: build\installer\NSL-Modeler-Setup-$version.exe"
+Write-Host "สร้างแล้ว: build\installer\NSL-Dev-Setup-$version.exe"

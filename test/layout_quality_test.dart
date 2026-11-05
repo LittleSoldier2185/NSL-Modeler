@@ -1,16 +1,16 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nsl_modeler/core/layout/auto_layout.dart';
-import 'package:nsl_modeler/core/layout/diagram_geometry.dart';
-import 'package:nsl_modeler/core/models/column_model.dart';
-import 'package:nsl_modeler/core/models/group_model.dart';
-import 'package:nsl_modeler/core/models/note_model.dart';
-import 'package:nsl_modeler/core/models/project.dart';
-import 'package:nsl_modeler/core/models/relation_model.dart';
-import 'package:nsl_modeler/core/models/table_model.dart';
-import 'package:nsl_modeler/core/parser/sql_importer.dart';
-import 'package:nsl_modeler/state/project_controller.dart';
+import 'package:nsl_dev/core/layout/auto_layout.dart';
+import 'package:nsl_dev/core/layout/diagram_geometry.dart';
+import 'package:nsl_dev/core/models/column_model.dart';
+import 'package:nsl_dev/core/models/group_model.dart';
+import 'package:nsl_dev/core/models/note_model.dart';
+import 'package:nsl_dev/core/models/project.dart';
+import 'package:nsl_dev/core/models/relation_model.dart';
+import 'package:nsl_dev/core/models/table_model.dart';
+import 'package:nsl_dev/core/parser/sql_importer.dart';
+import 'package:nsl_dev/state/project_controller.dart';
 
 TableModel t(String id, {int cols = 3}) => TableModel(
       id: id,

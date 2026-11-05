@@ -1,10 +1,10 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nsl_modeler/core/db/data_access.dart';
-import 'package:nsl_modeler/core/db/db_session.dart';
-import 'package:nsl_modeler/core/db/sqlite_data.dart';
-import 'package:nsl_modeler/core/models/enums.dart';
+import 'package:nsl_dev/core/db/data_access.dart';
+import 'package:nsl_dev/core/db/db_session.dart';
+import 'package:nsl_dev/core/db/sqlite_data.dart';
+import 'package:nsl_dev/core/models/enums.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 /// เปิดดู/แก้ข้อมูลกับไฟล์ SQLite จริงบนดิสก์

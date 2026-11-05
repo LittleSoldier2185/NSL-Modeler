@@ -39,7 +39,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
       static_cast<int>(work_area.left / scale) + (area_w - width) / 2,
       static_cast<int>(work_area.top / scale) + (area_h - height) / 2);
   Win32Window::Size size(width, height);
-  if (!window.Create(L"NSL Modeler", origin, size)) {
+  if (!window.Create(L"NSL Dev", origin, size)) {
     return EXIT_FAILURE;
   }
   window.SetQuitOnClose(true);

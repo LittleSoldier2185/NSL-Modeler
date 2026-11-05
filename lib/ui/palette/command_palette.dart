@@ -72,7 +72,7 @@ List<PaletteEntry> buildPaletteEntries(BuildContext context) {
 
   final commands = <PaletteEntry>[
     byCmd(tr('โปรเจกต์ใหม่'), 'new project', Cmd.newProject),
-    byCmd(tr('เปิดไฟล์โปรเจกต์…'), 'open nslm erd', Cmd.open),
+    byCmd(tr('เปิดไฟล์โปรเจกต์…'), 'open nsld nslm erd', Cmd.open),
     byCmd(tr('บันทึก'), 'save', Cmd.save),
     byCmd(tr('บันทึกเป็น…'), 'save as', Cmd.saveAs),
     byCmd('Export .sql', tr('export sql ddl สคริปต์'), Cmd.exportSql),
@@ -121,7 +121,7 @@ List<PaletteEntry> buildPaletteEntries(BuildContext context) {
     byCmd(tr('ค้นหาตาราง / คอลัมน์'), 'search find', Cmd.find),
     byCmd(tr('ดูคีย์ลัดทั้งหมด'), 'shortcuts help keyboard', Cmd.help),
     cmd(tr('มีอะไรใหม่ (Patch note)'), 'whats new patch note changelog release version อัปเดต รุ่น', () => showWhatsNew(context)),
-    cmd(tr('เกี่ยวกับ NSL Modeler'), 'about version เวอร์ชัน รุ่น', () => showAbout(context)),
+    cmd(tr('เกี่ยวกับ NSL Dev'), 'about version เวอร์ชัน รุ่น', () => showAbout(context)),
   ];
 
 

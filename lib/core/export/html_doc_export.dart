@@ -71,7 +71,7 @@ String exportHtmlDocument(Project p, {bool includeDiagrams = true}) {
   for (final t in p.tables) {
     _table(b, p, t);
   }
-  b.writeln('<footer>${_esc(tr('สร้างโดย NSL Modeler'))}</footer>');
+  b.writeln('<footer>${_esc(tr('สร้างโดย NSL Dev'))}</footer>');
   b.writeln('</main>');
   b.writeln('</body>');
   b.writeln('</html>');

@@ -1,13 +1,13 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nsl_modeler/core/export/html_doc_export.dart';
-import 'package:nsl_modeler/core/models/column_model.dart';
-import 'package:nsl_modeler/core/models/dfd_model.dart';
-import 'package:nsl_modeler/core/models/diagram.dart';
-import 'package:nsl_modeler/core/models/enums.dart';
-import 'package:nsl_modeler/core/models/index_model.dart';
-import 'package:nsl_modeler/core/models/project.dart';
-import 'package:nsl_modeler/core/models/relation_model.dart';
-import 'package:nsl_modeler/core/models/table_model.dart';
+import 'package:nsl_dev/core/export/html_doc_export.dart';
+import 'package:nsl_dev/core/models/column_model.dart';
+import 'package:nsl_dev/core/models/dfd_model.dart';
+import 'package:nsl_dev/core/models/diagram.dart';
+import 'package:nsl_dev/core/models/enums.dart';
+import 'package:nsl_dev/core/models/index_model.dart';
+import 'package:nsl_dev/core/models/project.dart';
+import 'package:nsl_dev/core/models/relation_model.dart';
+import 'package:nsl_dev/core/models/table_model.dart';
 
 Project sample() => Project(name: 'ร้าน <A&B>', dialect: Dialect.mysql, tables: [
       TableModel(id: 't1', name: 'users', comment: 'ผู้ใช้\nระบบ', x: 20, y: 20, columns: [

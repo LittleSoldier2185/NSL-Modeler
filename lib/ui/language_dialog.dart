@@ -27,7 +27,7 @@ class LanguageDialog extends StatelessWidget {
                 ),
                 const SizedBox(width: 12),
                 const Expanded(
-                  child: Text('Welcome to NSL Modeler',
+                  child: Text('Welcome to NSL Dev',
                       style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
                 ),
               ]),

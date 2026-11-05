@@ -2,10 +2,10 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nsl_modeler/core/db/data_access.dart';
-import 'package:nsl_modeler/core/db/sqlite_data.dart';
-import 'package:nsl_modeler/core/l10n/l10n.dart';
-import 'package:nsl_modeler/ui/data_browser_dialog.dart';
+import 'package:nsl_dev/core/db/data_access.dart';
+import 'package:nsl_dev/core/db/sqlite_data.dart';
+import 'package:nsl_dev/core/l10n/l10n.dart';
+import 'package:nsl_dev/ui/data_browser_dialog.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 /// หน้าเปิดดู/แก้ข้อมูล ทดสอบกับไฟล์ SQLite จริง

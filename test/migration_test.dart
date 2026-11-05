@@ -1,11 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nsl_modeler/core/diff/migration.dart';
-import 'package:nsl_modeler/core/diff/schema_diff.dart';
-import 'package:nsl_modeler/core/models/enums.dart';
-import 'package:nsl_modeler/core/models/index_model.dart';
-import 'package:nsl_modeler/core/models/project.dart';
-import 'package:nsl_modeler/core/models/relation_model.dart';
-import 'package:nsl_modeler/core/models/table_model.dart';
+import 'package:nsl_dev/core/diff/migration.dart';
+import 'package:nsl_dev/core/diff/schema_diff.dart';
+import 'package:nsl_dev/core/models/enums.dart';
+import 'package:nsl_dev/core/models/index_model.dart';
+import 'package:nsl_dev/core/models/project.dart';
+import 'package:nsl_dev/core/models/relation_model.dart';
+import 'package:nsl_dev/core/models/table_model.dart';
 import 'migration_fixtures.dart';
 
 String mig(Project a, Project b) => generateMigration(a, b);

@@ -3,10 +3,10 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nsl_modeler/core/parser/sql_decode.dart';
-import 'package:nsl_modeler/core/parser/sql_importer.dart';
-import 'package:nsl_modeler/state/project_controller.dart';
-import 'package:nsl_modeler/ui/import_dialog.dart';
+import 'package:nsl_dev/core/parser/sql_decode.dart';
+import 'package:nsl_dev/core/parser/sql_importer.dart';
+import 'package:nsl_dev/state/project_controller.dart';
+import 'package:nsl_dev/ui/import_dialog.dart';
 
 Uint8List utf16(String s, {required bool le, bool bom = true}) {
   final out = <int>[];

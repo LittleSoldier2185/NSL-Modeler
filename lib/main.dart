@@ -40,7 +40,7 @@ Future<void> main(List<String> args) async {
   } catch (_) {
     store = null;
   }
-  // ดับเบิลคลิกไฟล์ .nslm / .erd (หรือ nsl_modeler.exe <ไฟล์>) = เปิดไฟล์นั้นทันที ไม่ถามกู้คืนงานค้าง
+  // ดับเบิลคลิกไฟล์ .nsld / .nslm / .erd (หรือ nsl_dev.exe <ไฟล์>) = เปิดไฟล์นั้นทันที ไม่ถามกู้คืนงานค้าง
   Project? initial;
   String? initialPath;
   for (final a in args) {
@@ -54,11 +54,11 @@ Future<void> main(List<String> args) async {
     break;
   }
   // หาที่เก็บไม่ได้ = ใช้ค่าเริ่มต้น (ไทย/สว่าง) โดยไม่ถามภาษา เพราะบันทึกคำตอบไม่ได้อยู่ดี
-  runApp(NslModelerApp(autosave: store, recovery: recovery, settings: settings ?? AppSettings(lang: Lang.th), initialProject: initial, initialPath: initialPath));
+  runApp(NslDevApp(autosave: store, recovery: recovery, settings: settings ?? AppSettings(lang: Lang.th), initialProject: initial, initialPath: initialPath));
 }
 
-class NslModelerApp extends StatefulWidget {
-  const NslModelerApp({super.key, this.autosave, this.recovery, this.settings, this.initialProject, this.initialPath});
+class NslDevApp extends StatefulWidget {
+  const NslDevApp({super.key, this.autosave, this.recovery, this.settings, this.initialProject, this.initialPath});
 
   /// โปรเจกต์ที่เปิดตั้งแต่เริ่ม (จากไฟล์ที่ส่งมาทางบรรทัดคำสั่ง) — null = เริ่มว่าง
   final Project? initialProject;
@@ -74,10 +74,10 @@ class NslModelerApp extends StatefulWidget {
   final AutosaveInfo? recovery;
 
   @override
-  State<NslModelerApp> createState() => _NslModelerAppState();
+  State<NslDevApp> createState() => _NslDevAppState();
 }
 
-class _NslModelerAppState extends State<NslModelerApp> with WidgetsBindingObserver {
+class _NslDevAppState extends State<NslDevApp> with WidgetsBindingObserver {
   late final AppSettings _settings = widget.settings ?? AppSettings(lang: Lang.th);
   bool _recoveryPending = true;
   late final ProjectController _project = ProjectController();
@@ -129,7 +129,7 @@ class _NslModelerAppState extends State<NslModelerApp> with WidgetsBindingObserv
       ],
       child: MaterialApp(
         key: ValueKey('${_settings.lang.code}-${_settings.dark}'),
-        title: 'NSL Modeler',
+        title: 'NSL Dev',
         debugShowCheckedModeBanner: false,
         theme: buildTheme(palette),
         home: HomePage(

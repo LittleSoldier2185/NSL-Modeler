@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nsl_modeler/core/models/enums.dart';
-import 'package:nsl_modeler/core/search/fuzzy.dart';
-import 'package:nsl_modeler/main.dart';
-import 'package:nsl_modeler/state/project_controller.dart';
-import 'package:nsl_modeler/ui/canvas/canvas_controller.dart';
-import 'package:nsl_modeler/ui/home_page.dart';
-import 'package:nsl_modeler/ui/palette/command_palette.dart';
+import 'package:nsl_dev/core/models/enums.dart';
+import 'package:nsl_dev/core/search/fuzzy.dart';
+import 'package:nsl_dev/main.dart';
+import 'package:nsl_dev/state/project_controller.dart';
+import 'package:nsl_dev/ui/canvas/canvas_controller.dart';
+import 'package:nsl_dev/ui/home_page.dart';
+import 'package:nsl_dev/ui/palette/command_palette.dart';
 import 'package:provider/provider.dart';
 
 import 'migration_fixtures.dart';
@@ -130,7 +130,7 @@ void main() {
       tester.view.physicalSize = const Size(1440, 900);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
-      await tester.pumpWidget(const NslModelerApp());
+      await tester.pumpWidget(const NslDevApp());
       final ctx = tester.element(find.byType(HomePage));
       final c = ctx.read<ProjectController>();
       c.loadProject(base(), null);
@@ -259,7 +259,7 @@ void main() {
       tester.view.physicalSize = const Size(1440, 900);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
-      await tester.pumpWidget(const NslModelerApp());
+      await tester.pumpWidget(const NslDevApp());
       final ctx = tester.element(find.byType(HomePage));
       final c = ctx.read<ProjectController>();
       final cv = ctx.read<CanvasController>();
@@ -287,7 +287,7 @@ void main() {
       tester.view.physicalSize = const Size(1440, 900);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
-      await tester.pumpWidget(const NslModelerApp());
+      await tester.pumpWidget(const NslDevApp());
       final cv = tester.element(find.byType(HomePage)).read<CanvasController>();
       expect(cv.searchFocus.hasFocus, false);
       await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);

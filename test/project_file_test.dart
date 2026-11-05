@@ -1,14 +1,14 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nsl_modeler/core/models/column_model.dart';
-import 'package:nsl_modeler/core/models/enums.dart';
-import 'package:nsl_modeler/core/models/index_model.dart';
-import 'package:nsl_modeler/core/models/note_model.dart';
-import 'package:nsl_modeler/core/models/project.dart';
-import 'package:nsl_modeler/core/models/relation_model.dart';
-import 'package:nsl_modeler/core/models/table_model.dart';
-import 'package:nsl_modeler/core/storage/project_file.dart';
+import 'package:nsl_dev/core/models/column_model.dart';
+import 'package:nsl_dev/core/models/enums.dart';
+import 'package:nsl_dev/core/models/index_model.dart';
+import 'package:nsl_dev/core/models/note_model.dart';
+import 'package:nsl_dev/core/models/project.dart';
+import 'package:nsl_dev/core/models/relation_model.dart';
+import 'package:nsl_dev/core/models/table_model.dart';
+import 'package:nsl_dev/core/storage/project_file.dart';
 
 Project sample() => Project(
       name: 'ร้านค้าออนไลน์',
@@ -62,7 +62,7 @@ void main() {
 
   test('save/load ผ่านไฟล์จริง', () async {
     final dir = await Directory.systemTemp.createTemp('nsl');
-    final path = '${dir.path}/x.nslm';
+    final path = '${dir.path}/x.nsld';
     await ProjectFile.save(sample(), path);
     expect(File('$path.tmp').existsSync(), false);
     final p = await ProjectFile.load(path);
@@ -72,23 +72,25 @@ void main() {
 }
 
 void extensionTests() {
-  group('สกุลไฟล์ .nslm', () {
-    test('withProjectExt: ต่อ .nslm , เปลี่ยน .erd เป็น .nslm , ของเดิมคงไว้ , ไม่สนตัวพิมพ์', () {
-      expect(withProjectExt(r'C:\งาน\shop'), r'C:\งาน\shop.nslm');
-      expect(withProjectExt(r'C:\งาน\shop.nslm'), r'C:\งาน\shop.nslm');
-      expect(withProjectExt(r'C:\งาน\shop.NSLM'), r'C:\งาน\shop.NSLM');
-      expect(withProjectExt(r'C:\งาน\shop.erd'), r'C:\งาน\shop.nslm');
-      expect(withProjectExt(r'C:\งาน\shop.ERD'), r'C:\งาน\shop.nslm');
-      expect(withProjectExt(r'C:\งาน\shop.sql'), r'C:\งาน\shop.sql.nslm');
+  group('สกุลไฟล์ .nsld', () {
+    test('withProjectExt: ต่อ .nsld , เปลี่ยน .erd เป็น .nsld , ของเดิมคงไว้ , ไม่สนตัวพิมพ์', () {
+      expect(withProjectExt(r'C:\งาน\shop'), r'C:\งาน\shop.nsld');
+      expect(withProjectExt(r'C:\งาน\shop.nsld'), r'C:\งาน\shop.nsld');
+      expect(withProjectExt(r'C:\งาน\shop.NSLD'), r'C:\งาน\shop.NSLD');
+      expect(withProjectExt(r'C:\งาน\shop.erd'), r'C:\งาน\shop.nsld');
+      expect(withProjectExt(r'C:\งาน\shop.nslm'), r'C:\งาน\shop.nsld');
+      expect(withProjectExt(r'C:\งาน\shop.ERD'), r'C:\งาน\shop.nsld');
+      expect(withProjectExt(r'C:\งาน\shop.sql'), r'C:\งาน\shop.sql.nsld');
     });
 
     test('isLegacyProjectPath และสกุลที่เปิดได้', () {
       expect(isLegacyProjectPath('a.erd'), true);
-      expect(isLegacyProjectPath('a.nslm'), false);
-      expect(kOpenableExts, ['nslm', 'erd']);
+      expect(isLegacyProjectPath('a.nslm'), true);
+      expect(isLegacyProjectPath('a.nsld'), false);
+      expect(kOpenableExts, ['nsld', 'nslm', 'erd']);
     });
 
-    test('ไฟล์ .erd เก่ายังเปิดได้ และเนื้อในเหมือน .nslm', () async {
+    test('ไฟล์ .erd เก่ายังเปิดได้ และเนื้อในเหมือน .nsld', () async {
       final dir = await Directory.systemTemp.createTemp('nsl');
       addTearDown(() => dir.delete(recursive: true));
       final old = '${dir.path}/old.erd';
@@ -96,7 +98,7 @@ void extensionTests() {
       final p = await ProjectFile.load(old);
       final out = withProjectExt(old);
       await ProjectFile.save(p, out);
-      expect(out.endsWith('old.nslm'), true);
+      expect(out.endsWith('old.nsld'), true);
       expect(File(old).existsSync(), true); // ไฟล์เดิมไม่ถูกแตะ
       expect((await ProjectFile.load(out)).tables.length, 2);
     });

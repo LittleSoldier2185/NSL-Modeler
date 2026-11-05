@@ -1,13 +1,13 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nsl_modeler/core/ddl/ddl_generator.dart';
-import 'package:nsl_modeler/core/export/seed_data.dart';
-import 'package:nsl_modeler/core/models/column_model.dart';
-import 'package:nsl_modeler/core/models/enums.dart';
-import 'package:nsl_modeler/core/models/project.dart';
-import 'package:nsl_modeler/core/models/relation_model.dart';
-import 'package:nsl_modeler/core/models/table_model.dart';
-import 'package:nsl_modeler/core/storage/project_file.dart';
-import 'package:nsl_modeler/state/project_controller.dart';
+import 'package:nsl_dev/core/ddl/ddl_generator.dart';
+import 'package:nsl_dev/core/export/seed_data.dart';
+import 'package:nsl_dev/core/models/column_model.dart';
+import 'package:nsl_dev/core/models/enums.dart';
+import 'package:nsl_dev/core/models/project.dart';
+import 'package:nsl_dev/core/models/relation_model.dart';
+import 'package:nsl_dev/core/models/table_model.dart';
+import 'package:nsl_dev/core/storage/project_file.dart';
+import 'package:nsl_dev/state/project_controller.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 /// roles(id AI PK, name UNIQUE NOT NULL, is_admin bool default false)  <-  users(id, role_id FK, note text)

@@ -52,7 +52,7 @@ class TopBar extends StatelessWidget {
             ),
             const SizedBox(width: 10),
             const Text(
-              'NSL Modeler',
+              'NSL Dev',
               style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
             ),
             const SizedBox(width: 14),
@@ -305,7 +305,7 @@ class TopBar extends StatelessWidget {
         items: [
           cmd(tr('ดูคีย์ลัดทั้งหมด'), Cmd.help),
           _item(tr('มีอะไรใหม่ (Patch note)…'), '', () => showWhatsNew(context)),
-          _item(tr('เกี่ยวกับ NSL Modeler…'), '', () => showAbout(context)),
+          _item(tr('เกี่ยวกับ NSL Dev…'), '', () => showAbout(context)),
           div,
           for (final l in Lang.values)
             _item(

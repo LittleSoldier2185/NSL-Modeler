@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nsl_modeler/main.dart';
+import 'package:nsl_dev/main.dart';
 
 void main() {
   testWidgets('เพิ่มตาราง -> เห็นในรายการ + แผงขวา แล้วเพิ่ม/ลบคอลัมน์', (tester) async {
@@ -8,7 +8,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
 
-    await tester.pumpWidget(const NslModelerApp());
+    await tester.pumpWidget(const NslDevApp());
     expect(find.text('เลือกตารางทางซ้ายเพื่อแก้ไข'), findsOneWidget);
 
     await tester.tap(find.byTooltip('เพิ่มตาราง'));
@@ -35,7 +35,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
 
-    await tester.pumpWidget(const NslModelerApp());
+    await tester.pumpWidget(const NslDevApp());
     await tester.tap(find.text('+ users (id, email, password)'));
     await tester.pump();
     expect(find.text('email'), findsWidgets);

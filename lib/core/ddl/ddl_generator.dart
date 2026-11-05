@@ -74,7 +74,7 @@ abstract class DdlGenerator {
   String generate(Project p) {
     final names = constraintNames(p);
     final blocks = <String>[
-      tr('-- {0} ({1}) — สร้างโดย NSL Modeler', [flat(p.name), dialect.label]),
+      tr('-- {0} ({1}) — สร้างโดย NSL Dev', [flat(p.name), dialect.label]),
     ];
     if (preamble != null) blocks.add(preamble!);
 

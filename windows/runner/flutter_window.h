@@ -15,7 +15,7 @@
 // The native title bar is removed (the Flutter UI draws its own title bar);
 // the window keeps its resize borders, snapping and shadow. The Dart side
 // drives minimize / maximize / drag / close through the
-// "nsl_modeler/window" method channel.
+// "nsl_dev/window" method channel.
 class FlutterWindow : public Win32Window {
  public:
   // Creates a new FlutterWindow hosting a Flutter view running |project|.
