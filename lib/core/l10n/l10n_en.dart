@@ -822,4 +822,10 @@ const Map<String, String> kEn = {
   'Undo/Redo แยกต่อแท็บ และใช้ Ctrl+Shift+Z เป็น Redo แบบ Adobe': 'Undo/Redo is separate for each tab, and Ctrl+Shift+Z redoes, as in Adobe apps',
   'แก้หน้าต่างค้างหลังย่อแล้วคืนขนาด': 'Fixed the window freezing after minimizing and restoring',
   'ไฟล์นี้ไม่มีแผนภาพ ER': 'This file has no ER diagram',
+  'ER Diagram (ตารางฐานข้อมูล)': 'ER Diagram (database tables)',
+  'ทำสำเนาแผนภาพ': 'Duplicate diagram',
+  'ลิงก์จากแผนภาพอื่น {0} รายการจะใช้ไม่ได้:': '{0} link(s) from other diagrams will stop working:',
+  'และอีก {0} รายการ': 'and {0} more',
+  '{0} → ตาราง {1}': '{0} → table {1}',
+  '{0} → แผนภาพย่อย': '{0} → sub-diagram',
 };

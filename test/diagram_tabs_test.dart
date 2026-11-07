@@ -113,14 +113,15 @@ void main() {
   });
 
   group('ProjectController: แท็บ', () {
-    test('เพิ่ม DFD: เปิดทันที ชื่อไม่ซ้ำ; ER เพิ่มไม่ได้', () {
+    test('เพิ่ม DFD / ER: เปิดทันที ชื่อไม่ซ้ำ', () {
       final c = ProjectController(base());
       final a = c.addDiagram(DocType.dfd)!;
       final b = c.addDiagram(DocType.dfd)!;
       expect([a.name, b.name], ['DFD', 'DFD 2']);
       expect(c.activeDiagramId, b.id);
-      expect(c.addDiagram(DocType.er), isNull);
       expect(c.dirty, true);
+      final e = c.addDiagram(DocType.er)!;
+      expect((e.type, e.name, c.activeDiagramId), (DocType.er, 'ER 2', e.id));
     });
 
     test('เปลี่ยนชื่อ: ว่าง/ซ้ำ = ปฏิเสธ; ชื่อเดิมของตัวเองผ่าน', () {

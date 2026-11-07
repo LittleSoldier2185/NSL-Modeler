@@ -29,9 +29,12 @@ class WorkspaceController extends ChangeNotifier {
   bool _structureDirty = false;
   int _idCounter = 0;
 
-  /// controller ของเอกสาร ER หลัก — เป็น object เดิมตลอดอายุของ workspace controller
-  /// (เปิดไฟล์ใหม่ = ผูกกับเอกสาร ER แรกของไฟล์ใหม่ ไม่สร้างใหม่)
-  late final ProjectController _mainEr;
+  /// controller ของเอกสาร ER หลัก — เปิดไฟล์ใหม่ = ผูกตัวเดิมกับเอกสาร ER แรกของไฟล์ใหม่ (ไม่สร้างใหม่)
+  /// ลบเอกสาร ER ที่ตัวนี้ผูกอยู่ = controller ของ ER อันถัดไปขึ้นมาเป็นตัวหลักแทน (ตัวเดิมถูกทิ้ง)
+  late ProjectController _mainEr;
+
+  /// เอกสาร ER ที่เปิดใช้งานล่าสุด (แท็บที่เปิดไม่ใช่ ER = [currentEr] ยังเป็น ER อันนี้)
+  String? _lastErId;
 
   /// docId -> controller (สร้างเมื่อเรียก [controllerOf] ครั้งแรก)
   final Map<String, DocController> _controllers = {};
@@ -54,7 +57,7 @@ class WorkspaceController extends ChangeNotifier {
 
   // ---------- controller ของเอกสาร ----------
 
-  /// controller ของเอกสาร ER หลัก (เอกสาร ER แรกของโปรเจกต์ — ลบไม่ได้)
+  /// controller ของเอกสาร ER หลัก (ตอนเปิดไฟล์คือเอกสาร ER แรก — ถ้าถูกลบ ER อันถัดไปเป็นตัวหลักแทน)
   ProjectController get mainEr => _mainEr;
 
   /// controller ของเอกสาร [id] (สร้างเมื่อใช้ครั้งแรก) ; null = ไม่มีเอกสารนี้หรือเป็นชนิดที่ไม่รู้จัก
@@ -157,7 +160,14 @@ class WorkspaceController extends ChangeNotifier {
     _open
       ..clear()
       ..addAll([for (final d in _workspace.documents) if (d.type != null) d.id]);
-    _activeId = activeId;
+    _lastErId = null;
+    _setActive(activeId);
+  }
+
+  /// ตั้งแท็บที่ใช้งาน (จำ ER ล่าสุดไว้ให้ [currentEr])
+  void _setActive(String id) {
+    _activeId = id;
+    if (_workspace.documentById(id)?.type == DocType.er) _lastErId = id;
   }
 
   void _structureChanged() {
@@ -176,19 +186,39 @@ class WorkspaceController extends ChangeNotifier {
   /// เนื้อหา DFD ของเอกสาร [id] — ไม่ใช่เอกสาร DFD/ไม่มีอยู่ = แผนภาพว่างชั่วคราว (ไม่ถูกเก็บในโปรเจกต์)
   DfdDiagram dfdOf(String id) => _workspace.documentById(id)?.dfd ?? DfdDiagram();
 
-  /// เพิ่มเอกสารใหม่ต่อท้าย (ตอนนี้เพิ่มได้เฉพาะ DFD) แล้วเปิดเป็นแท็บที่ใช้งาน — ชื่อซ้ำจะต่อเลขให้
-  ProjectDocument? addDocument(DocType type, {String? name, String? folderId}) {
-    if (type != DocType.dfd) return null;
+  /// เพิ่มเอกสารใหม่ต่อท้าย (ER หรือ DFD) แล้วเปิดเป็นแท็บที่ใช้งาน — ชื่อซ้ำจะต่อเลขให้
+  ///
+  /// ER ใหม่: [er] = เนื้อหาตั้งต้น (null = ว่าง ใช้ dialect และขนาดกระดานเดียวกับ ER ที่ใช้งานอยู่)
+  ProjectDocument? addDocument(DocType type, {String? name, String? folderId, Project? er}) {
     final base = cleanDiagramName(name ?? '');
-    final doc = ProjectDocument.dfd(
-      id: newId('d'),
-      name: _workspace.uniqueDocumentName(base.isEmpty ? 'DFD' : base),
-      content: DfdDiagram(),
-      folderId: folderId != null && _workspace.folderById(folderId) != null ? folderId : null,
-    );
+    final folder = folderId != null && _workspace.folderById(folderId) != null ? folderId : null;
+    final ProjectDocument doc;
+    switch (type) {
+      case DocType.er:
+        final cur = currentEr.project;
+        doc = ProjectDocument.er(
+          id: newId('e'),
+          name: _workspace.uniqueDocumentName(base.isEmpty ? 'ER' : base),
+          content: er ??
+              Project(
+                name: _workspace.name,
+                dialect: cur.dialect,
+                boardWidth: cur.boardWidth,
+                boardHeight: cur.boardHeight,
+              ),
+          folderId: folder,
+        );
+      case DocType.dfd:
+        doc = ProjectDocument.dfd(
+          id: newId('d'),
+          name: _workspace.uniqueDocumentName(base.isEmpty ? 'DFD' : base),
+          content: DfdDiagram(),
+          folderId: folder,
+        );
+    }
     _workspace.documents.add(doc);
     _open.add(doc.id);
-    _activeId = doc.id;
+    _setActive(doc.id);
     _structureChanged();
     return doc;
   }
@@ -205,21 +235,34 @@ class WorkspaceController extends ChangeNotifier {
     return true;
   }
 
-  /// ทำสำเนาเอกสาร [id] (เนื้อหาเดียวกัน ชื่อใหม่ไม่ซ้ำ) วางต่อจากต้นฉบับแล้วเปิด — เอกสาร ER ทำสำเนาไม่ได้ (มีได้อันเดียว)
+  /// ทำสำเนาเอกสาร [id] (ER หรือ DFD: เนื้อหาเดียวกัน ชื่อใหม่ไม่ซ้ำ ประวัติ undo เริ่มใหม่) วางต่อจากต้นฉบับแล้วเปิด
+  /// สำเนา ER ใช้ id ตาราง/คอลัมน์เดิม (id มีความหมายภายในเอกสารเท่านั้น) — ที่เก็บข้อมูลใน DFD ยังผูกกับต้นฉบับ
   ProjectDocument? duplicateDocument(String id) {
     final src = _workspace.documentById(id);
-    if (src == null || src.type != DocType.dfd) return null;
+    if (src == null) return null;
     // เนื้อหาที่ยังไม่ได้ commit (ลากค้าง) ก็ติดไปด้วย — สำเนาผ่าน JSON ให้แยกขาดจากต้นฉบับ
-    final content = DfdDiagram.fromJson(jsonDecode(jsonEncode(src.dfd!.toJson())) as Map<String, dynamic>);
-    final copy = ProjectDocument.dfd(
-      id: newId('d'),
-      name: _workspace.uniqueDocumentName(src.name),
-      content: content,
-      folderId: src.folderId,
-    );
+    final ProjectDocument copy;
+    switch (src.type) {
+      case DocType.er:
+        copy = ProjectDocument.er(
+          id: newId('e'),
+          name: _workspace.uniqueDocumentName(src.name),
+          content: Project.fromContentJson(jsonDecode(jsonEncode(src.er!.toContentJson())) as Map<String, dynamic>),
+          folderId: src.folderId,
+        );
+      case DocType.dfd:
+        copy = ProjectDocument.dfd(
+          id: newId('d'),
+          name: _workspace.uniqueDocumentName(src.name),
+          content: DfdDiagram.fromJson(jsonDecode(jsonEncode(src.dfd!.toJson())) as Map<String, dynamic>),
+          folderId: src.folderId,
+        );
+      case null:
+        return null;
+    }
     _workspace.documents.insert(_workspace.documents.indexOf(src) + 1, copy);
     _open.add(copy.id);
-    _activeId = copy.id;
+    _setActive(copy.id);
     _structureChanged();
     return copy;
   }
@@ -227,20 +270,34 @@ class WorkspaceController extends ChangeNotifier {
   /// การอ้างอิงจากเอกสารอื่นที่ชี้มาที่ [id] (จะใช้ไม่ได้ถ้าลบเอกสารนี้)
   List<(String fromDoc, String fromElement, DocRef ref)> backlinksOf(String id) => WorkspaceIndex(_workspace).backlinks(id);
 
-  /// ลบเอกสาร (ลบเอกสาร ER หลักไม่ได้) — คืนรายการอ้างอิงจากเอกสารอื่นที่ใช้ไม่ได้แล้ว ; null = ลบไม่ได้
-  /// ถ้าเป็นแท็บที่เปิดอยู่ จะย้ายไปแท็บข้างเคียง ; controller ของเอกสารถูกทิ้ง
-  List<(String fromDoc, String fromElement, DocRef ref)>? deleteDocument(String id) {
+  /// ลบเอกสาร [id] ได้หรือไม่ — โปรเจกต์ต้องเหลือเอกสาร ER อย่างน้อยหนึ่งอันเสมอ (ER อันสุดท้ายลบไม่ได้)
+  bool canDeleteDocument(String id) {
     final doc = _workspace.documentById(id);
-    if (doc == null || identical(doc, _mainEr.doc) || doc.type == DocType.er) return null;
+    if (doc == null) return false;
+    return doc.type != DocType.er || _workspace.documentsOf(DocType.er).length > 1;
+  }
+
+  /// ลบเอกสาร (ไม่มีถังขยะ ย้อนด้วย undo ไม่ได้) — คืนรายการอ้างอิงจากเอกสารอื่นที่ใช้ไม่ได้แล้ว ; null = ลบไม่ได้
+  /// (ดู [canDeleteDocument]) ; ถ้าเป็นแท็บที่เปิดอยู่ จะย้ายไปแท็บข้างเคียง ; controller ของเอกสารถูกทิ้ง
+  /// ลิงก์ที่ขาด (เช่น ที่เก็บข้อมูลใน DFD ที่ผูกตารางของ ER นี้) ไม่ถูกลบ — ตัวตรวจจะแจ้งเป็นปัญหาให้แก้เอง
+  List<(String fromDoc, String fromElement, DocRef ref)>? deleteDocument(String id) {
+    if (!canDeleteDocument(id)) return null;
+    final doc = _workspace.documentById(id)!;
     final broken = backlinksOf(id);
     final tabs = openTabIds;
     final i = tabs.indexOf(id);
+    if (identical(doc, _mainEr.doc)) {
+      // ER หลักถูกลบ: ER อันแรกที่เหลือขึ้นมาเป็นตัวหลัก (controller เดิมถูกทิ้งตอน _unregister)
+      final next = _workspace.documentsOf(DocType.er).firstWhere((d) => d.id != id);
+      _mainEr = erController(next.id)!;
+    }
     _workspace.documents.remove(doc);
     _open.remove(id);
     _unregister(id);
+    if (_lastErId == id) _lastErId = null;
     if (_activeId == id) {
       final rest = openTabIds;
-      _activeId = rest.isEmpty ? _mainEr.docId : rest[(i > 0 ? i - 1 : 0).clamp(0, rest.length - 1)];
+      _setActive(rest.isEmpty ? _mainEr.docId : rest[(i > 0 ? i - 1 : 0).clamp(0, rest.length - 1)]);
     }
     _structureChanged();
     return broken;
@@ -331,7 +388,7 @@ class WorkspaceController extends ChangeNotifier {
     if (d == null || d.type == null) return false;
     if (_open.contains(id) && activeId == id) return true;
     _open.add(id);
-    _activeId = id;
+    _setActive(id);
     notifyListeners();
     return true;
   }
@@ -341,10 +398,11 @@ class WorkspaceController extends ChangeNotifier {
     final tabs = openTabIds;
     final i = tabs.indexOf(id);
     if (i < 0) return;
+    final wasActive = activeId == id;
     _open.remove(id);
-    if (activeId == id) {
+    if (wasActive) {
       final rest = openTabIds;
-      _activeId = rest.isEmpty ? _mainEr.docId : rest[(i > 0 ? i - 1 : 0).clamp(0, rest.length - 1)];
+      _setActive(rest.isEmpty ? _mainEr.docId : rest[(i > 0 ? i - 1 : 0).clamp(0, rest.length - 1)]);
     }
     notifyListeners();
   }
@@ -369,10 +427,23 @@ class WorkspaceController extends ChangeNotifier {
 
   // ---------- เอกสารที่ใช้งานอยู่ ----------
 
-  /// controller ของ ER ที่ใช้งานอยู่ (แท็บที่เปิดไม่ใช่ ER = ER หลัก)
+  /// controller ของ ER ที่ใช้งานอยู่ (แท็บที่เปิดไม่ใช่ ER = ER ที่เปิดล่าสุด ; ไม่เคยเปิด = ER หลัก)
   ProjectController get currentEr {
     final d = activeDocument;
-    return (d.type == DocType.er ? erController(d.id) : null) ?? _mainEr;
+    final id = d.type == DocType.er ? d.id : _lastErId;
+    return (id == null ? null : erController(id)) ?? _mainEr;
+  }
+
+  /// เอกสาร ER ที่มีตาราง [tableId] — ระบุ [docId] = ดูเฉพาะเอกสารนั้น ;
+  /// ไม่ระบุ (ข้อมูลเก่าที่ไม่รู้เอกสาร) = ดู ER ที่ใช้งานอยู่ก่อน แล้วไล่ ER ทุกอันตามลำดับ
+  ProjectDocument? erDocumentWithTable(String? docId, String tableId) {
+    if (docId != null) {
+      final d = _workspace.documentById(docId);
+      return d?.er?.tableById(tableId) != null ? d : null;
+    }
+    final cur = currentEr.doc;
+    if (cur.er?.tableById(tableId) != null) return cur;
+    return _workspace.documentsOf(DocType.er).where((d) => d.er!.tableById(tableId) != null).firstOrNull;
   }
 
   /// ตัวแทนตอนเอกสารที่ใช้งานไม่ใช่ DFD (แผนภาพว่าง แก้ไขไม่ได้)

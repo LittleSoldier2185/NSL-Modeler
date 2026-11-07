@@ -186,8 +186,9 @@ class FileActions {
     final path = f?.path;
     if (path == null) return;
     try {
-      // เทียบกับเอกสาร ER แรกของไฟล์นั้น
-      final old = (await ProjectFile.load(path)).firstEr?.er;
+      // เทียบกับเอกสาร ER ที่ id เดียวกับ ER ที่เปิดอยู่ (ไม่มี = ER แรกของไฟล์นั้น)
+      final ow = await ProjectFile.load(path);
+      final old = ow.documentById(c.docId)?.er ?? ow.firstEr?.er;
       if (!context.mounted) return;
       if (old == null) {
         _toast(context, tr('ไฟล์นี้ไม่มีแผนภาพ ER'));

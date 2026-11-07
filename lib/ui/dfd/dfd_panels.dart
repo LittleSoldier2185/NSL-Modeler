@@ -482,7 +482,7 @@ class _BoundaryProps extends StatelessWidget {
   }
 }
 
-/// ผูกที่เก็บข้อมูลกับตารางใน ER (ตัวเลือก = ตารางทุกใบของโปรเจกต์)
+/// ผูกที่เก็บข้อมูลกับตารางใน ER (ตัวเลือก = ตารางทุกใบของเอกสาร ER ทุกอันในโปรเจกต์)
 class _StoreTable extends StatelessWidget {
   const _StoreTable({required this.node});
   final DfdNode node;
@@ -490,12 +490,21 @@ class _StoreTable extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final d = context.read<DfdController>();
-    final pc = context.watch<ProjectController>();
-    final tables = pc.project.tables;
-    final linked = node.tableId == null ? null : pc.project.tableById(node.tableId!);
+    final w = context.watch<WorkspaceController>();
+    final ers = [for (final e in w.documents) if (e.er != null) e];
+    final multi = ers.length > 1;
+    // ค่าของตัวเลือก = "docId<NUL>tableId" (ตารางคนละ ER อาจมี id เดียวกัน เช่น ER ที่ทำสำเนามา)
+    String key(String doc, String table) => '$doc\u0000$table';
+    final labels = <String, String>{
+      for (final e in ers)
+        for (final t in e.er!.tables) key(e.id, t.id): multi ? '${e.name} › ${t.name}' : t.name,
+    };
+    final tid = node.tableId;
+    final linkedDoc = tid == null ? null : w.erDocumentWithTable(node.tableDocId, tid);
+    final linked = linkedDoc?.er?.tableById(tid!);
     const none = '';
-    final ids = [none, ...tables.map((t) => t.id)];
-    final value = linked == null ? none : linked.id;
+    final ids = [none, ...labels.keys];
+    final value = linkedDoc == null ? none : key(linkedDoc.id, tid!);
     return LabeledField(
       label: tr('ตารางใน ER'),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -504,9 +513,15 @@ class _StoreTable extends StatelessWidget {
           child: Dropdown<String>(
             value: value,
             items: ids,
-            labelOf: (id) => id == none ? tr('— ไม่ผูก —') : pc.project.tableById(id)!.name,
-            onChanged: (id) => d.setStoreTable(
-                node.id, id == none ? null : DocRef(docId: pc.erDocumentId, elementId: id, kind: DocRefKind.storeTable)),
+            labelOf: (id) => id == none ? tr('— ไม่ผูก —') : labels[id]!,
+            onChanged: (id) {
+              if (id == none) {
+                d.setStoreTable(node.id, null);
+                return;
+              }
+              final parts = id.split('\u0000');
+              d.setStoreTable(node.id, DocRef(docId: parts[0], elementId: parts[1], kind: DocRefKind.storeTable));
+            },
           ),
         ),
         if (node.tableId != null && linked == null)

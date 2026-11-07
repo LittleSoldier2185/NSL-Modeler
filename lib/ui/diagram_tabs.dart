@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/l10n/l10n.dart';
+import '../core/models/doc_ref.dart';
 import '../core/models/workspace.dart';
 import '../state/workspace_controller.dart';
 import 'canvas/context_menu.dart';
@@ -10,7 +11,7 @@ import 'prompt_dialog.dart';
 import 'theme.dart';
 
 /// แท็บแผนภาพเหนือแคนวาส (แบบแท็บเอกสารของโปรแกรมกราฟิก): คลิกสลับ ลากเรียงลำดับ
-/// คลิกขวา = เปลี่ยนชื่อ/ลบ, ปุ่ม + = สร้างแผนภาพใหม่ — แท็บ ER มีอันเดียวและลบไม่ได้
+/// คลิกขวา = เปลี่ยนชื่อ/ทำสำเนา/ลบ, ปุ่ม + = สร้างแผนภาพใหม่ (ER หรือ DFD) — ER อันสุดท้ายลบไม่ได้
 class DiagramTabBar extends StatefulWidget {
   const DiagramTabBar({super.key});
 
@@ -51,6 +52,14 @@ class _DiagramTabBarState extends State<DiagramTabBar> {
         icon: Icon(Icons.add_rounded, size: 18, color: C.muted),
         onSelected: (k) => c.addDocument(k),
         itemBuilder: (_) => [
+          PopupMenuItem(
+            value: DocType.er,
+            height: 36,
+            child: Text(
+              tr('ER Diagram (ตารางฐานข้อมูล)'),
+              style: const TextStyle(fontSize: 13),
+            ),
+          ),
           PopupMenuItem(
             value: DocType.dfd,
             height: 36,
@@ -157,14 +166,49 @@ class _TabState extends State<_Tab> {
     }
   }
 
+  void _duplicate(BuildContext context) =>
+      context.read<WorkspaceController>().duplicateDocument(widget.tab.id);
+
   Future<void> _delete(BuildContext context) async {
     final c = context.read<WorkspaceController>();
+    if (!c.canDeleteDocument(widget.tab.id)) return;
+    final broken = brokenLinkLines(c, widget.tab.id);
+    const maxLines = 8;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(tr('ลบแผนภาพ "{0}"', [widget.tab.name])),
-        content: Text(
-          tr('เนื้อหาในแผนภาพนี้จะหายไปและย้อนกลับด้วย Ctrl+Z ไม่ได้'),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(tr('เนื้อหาในแผนภาพนี้จะหายไปและย้อนกลับด้วย Ctrl+Z ไม่ได้')),
+              if (broken.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(
+                  tr('ลิงก์จากแผนภาพอื่น {0} รายการจะใช้ไม่ได้:', [broken.length]),
+                  key: const ValueKey('delete-broken-links'),
+                  style: TextStyle(color: C.danger, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 6),
+                for (final line in broken.take(maxLines))
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8, bottom: 2),
+                    child: Text('• $line', style: const TextStyle(fontSize: 12.5)),
+                  ),
+                if (broken.length > maxLines)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8),
+                    child: Text(
+                      tr('และอีก {0} รายการ', [broken.length - maxLines]),
+                      style: TextStyle(fontSize: 12.5, color: C.muted),
+                    ),
+                  ),
+              ],
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -186,7 +230,7 @@ class _TabState extends State<_Tab> {
   Widget build(BuildContext context) {
     final c = context.read<WorkspaceController>();
     final t = widget.tab;
-    final closable = t.type == DocType.dfd;
+    final closable = c.canDeleteDocument(t.id);
     return MouseRegion(
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),
@@ -200,6 +244,11 @@ class _TabState extends State<_Tab> {
               tr('เปลี่ยนชื่อ…'),
               Icons.drive_file_rename_outline,
               () => _rename(context),
+            ),
+            MenuSpec(
+              tr('ทำสำเนาแผนภาพ'),
+              Icons.copy_rounded,
+              () => _duplicate(context),
             ),
             if (closable)
               MenuSpec(
@@ -286,4 +335,23 @@ class _TabState extends State<_Tab> {
       ),
     );
   }
+}
+
+/// รายการลิงก์จากเอกสารอื่นที่จะใช้ไม่ได้ถ้าลบเอกสาร [docId] (ข้อความหนึ่งบรรทัดต่อหนึ่งลิงก์ ใช้ในกล่องยืนยันการลบ)
+List<String> brokenLinkLines(WorkspaceController c, String docId) {
+  final target = c.documentById(docId);
+  final out = <String>[];
+  for (final (fromDoc, fromElement, ref) in c.backlinksOf(docId)) {
+    final src = c.documentById(fromDoc);
+    final node = src?.dfd?.nodeById(fromElement);
+    final from = '${src?.name ?? fromDoc} · ${node == null || node.title.isEmpty ? tr('(ไม่มีชื่อ)') : node.title}';
+    out.add(switch (ref.kind) {
+      DocRefKind.storeTable => tr('{0} → ตาราง {1}', [
+          from,
+          target?.er?.tableById(ref.elementId ?? '')?.name ?? ref.elementId ?? '?',
+        ]),
+      DocRefKind.dfdChild => tr('{0} → แผนภาพย่อย', [from]),
+    });
+  }
+  return out;
 }

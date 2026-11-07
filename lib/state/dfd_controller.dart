@@ -249,8 +249,9 @@ class DfdController extends DocController {
     final n = diagram.nodeById(id);
     final tid = n?.tableId;
     if (n == null || tid == null) return;
-    final er = workspace.erController(n.tableDocId ?? workspace.mainEr.docId);
-    if (er == null || er.project.tableById(tid) == null) return;
+    final doc = workspace.erDocumentWithTable(n.tableDocId, tid);
+    final er = doc == null ? null : workspace.erController(doc.id);
+    if (er == null) return;
     workspace.openDocument(er.docId);
     er.selectTable(tid);
   }
@@ -689,7 +690,6 @@ class DfdController extends DocController {
   int pasteText(String? text, {double offset = 30}) {
     final payload = decodeDfdClipboard(text);
     if (!active || payload == null) return 0;
-    final er = workspace.currentEr;
     final map = <String, String>{};
     final created = <String>[];
     String? createdBoundary;
@@ -706,8 +706,14 @@ class DfdController extends DocController {
               : src.number,
           DfdKind.entity => '',
         };
+        // ตารางที่ผูก: เอกสาร ER เดิมถ้ามีอยู่ในโปรเจกต์นี้ ; ไม่รู้เอกสาร/เอกสารไม่มีที่นี่ = หาตาราง id เดียวกันใน ER ที่ใช้งานอยู่ก่อน
         final tid = src.tableId;
-        final keep = tid != null && er.project.tableById(tid) != null;
+        final srcDoc = src.tableDocId;
+        final linkDoc = tid == null
+            ? null
+            : workspace.erDocumentWithTable(
+                srcDoc != null && workspace.documentById(srcDoc)?.type == DocType.er ? srcDoc : null, tid);
+        final keep = linkDoc != null;
         d.nodes.add(DfdNode(
           id: newId,
           kind: src.kind,
@@ -719,7 +725,7 @@ class DfdController extends DocController {
           h: src.h,
           color: src.color,
           tableId: keep ? tid : null,
-          tableDocId: keep ? er.docId : null,
+          tableDocId: linkDoc?.id,
         ));
         created.add(newId);
       }

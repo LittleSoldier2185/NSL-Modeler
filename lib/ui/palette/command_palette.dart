@@ -128,40 +128,48 @@ List<PaletteEntry> buildPaletteEntries(BuildContext context) {
   ];
 
 
-  /// กระโดดไปแท็บ ER ก่อน (ถ้าอยู่แท็บ DFD) แล้วทำต่อ
-  void inEr(VoidCallback f) {
-    w.openDocument(c.erDocumentId);
-    f();
+  /// กระโดดไปแท็บ ER [docId] ก่อน (ถ้าอยู่แท็บอื่น) แล้วทำต่อด้วย controller ของเอกสารนั้น
+  void inEr(String docId, void Function(ProjectController er) f) {
+    final er = w.erController(docId);
+    if (er == null || !w.openDocument(docId)) return;
+    f(er);
   }
 
+  // เอกสาร ER ทุกอัน (อันที่ใช้งานอยู่ก่อน) — มีหลายอัน = ต่อท้ายชื่อเอกสารในคำอธิบายและคำค้น
+  final ers = [c.doc, for (final d in w.documents) if (d.type == DocType.er && d.id != c.docId) d];
+  final multi = ers.length > 1;
+  String inDoc(ProjectDocument d) => multi ? ' · ${d.name}' : '';
+
   final objects = <PaletteEntry>[
-    for (final g in c.project.groups)
-      PaletteEntry(
-        kind: PaletteKind.group,
-        title: g.name.isEmpty ? tr('(กลุ่มไม่มีชื่อ)') : g.name,
-        subtitle: tr('กลุ่ม'),
-        search: g.name,
-        run: () => inEr(() {
-          c.selectGroup(g.id);
-          cv.centerOn(Offset(g.x + g.width / 2, g.y + g.height / 2), atLeastScale: 0.5);
-        }),
-      ),
-    for (final n in c.project.notes)
-      if (n.text.trim().isNotEmpty)
+    for (final doc in ers)
+      for (final g in doc.er!.groups)
         PaletteEntry(
-          kind: PaletteKind.note,
-          title: n.text.trim().split('\n').first,
-          subtitle: tr('โน้ต'),
-          search: n.text,
-          run: () => inEr(() => cv.centerOn(Offset(n.x + n.width / 2, n.y + noteHeight(n) / 2), atLeastScale: 0.6)),
+          kind: PaletteKind.group,
+          title: g.name.isEmpty ? tr('(กลุ่มไม่มีชื่อ)') : g.name,
+          subtitle: '${tr('กลุ่ม')}${inDoc(doc)}',
+          search: '${g.name}${inDoc(doc)}',
+          run: () => inEr(doc.id, (er) {
+            er.selectGroup(g.id);
+            cv.centerOn(Offset(g.x + g.width / 2, g.y + g.height / 2), atLeastScale: 0.5);
+          }),
         ),
+    for (final doc in ers)
+      for (final n in doc.er!.notes)
+        if (n.text.trim().isNotEmpty)
+          PaletteEntry(
+            kind: PaletteKind.note,
+            title: n.text.trim().split('\n').first,
+            subtitle: '${tr('โน้ต')}${inDoc(doc)}',
+            search: '${n.text}${inDoc(doc)}',
+            run: () => inEr(doc.id, (_) => cv.centerOn(Offset(n.x + n.width / 2, n.y + noteHeight(n) / 2), atLeastScale: 0.6)),
+          ),
     for (final i in c.issues)
       PaletteEntry(
         kind: PaletteKind.issue,
         title: i.title,
         subtitle: i.message,
         search: '${i.title} ${i.message} ${i.code}',
-        run: () => inEr(() {
+        run: () => inEr(c.docId, (_) {
           final t = i.tableId == null ? null : c.project.tableById(i.tableId!);
           if (t == null) {
             cv.showDock(DockTab.issues);
@@ -199,29 +207,30 @@ List<PaletteEntry> buildPaletteEntries(BuildContext context) {
           search: '${i.title} ${i.message} ${i.code}',
           run: () => gotoDfd(context, w.activeId, node: i.tableId, flow: i.relationId),
         ),
-    for (final t in c.project.tables) ...[
-      PaletteEntry(
-        kind: PaletteKind.table,
-        title: t.name,
-        subtitle: tr('ตาราง · {0} คอลัมน์{1}', [t.columns.length, t.comment.isEmpty ? '' : ' · ${t.comment}']),
-        search: '${t.name} ${t.comment}',
-        run: () => inEr(() {
-          c.selectTable(t.id);
-          cv.focusTable(t);
-        }),
-      ),
-      for (final col in t.columns)
+    for (final doc in ers)
+      for (final t in doc.er!.tables) ...[
         PaletteEntry(
-          kind: PaletteKind.column,
-          title: '${t.name}.${col.name}',
-          subtitle: tr('คอลัมน์ · {0}{1}', [typeLabel(col), col.comment.isEmpty ? '' : ' · ${col.comment}']),
-          search: '${t.name}.${col.name} ${col.comment}',
-          run: () => inEr(() {
-            c.selectTable(t.id, columnId: col.id);
+          kind: PaletteKind.table,
+          title: t.name,
+          subtitle: '${tr('ตาราง · {0} คอลัมน์{1}', [t.columns.length, t.comment.isEmpty ? '' : ' · ${t.comment}'])}${inDoc(doc)}',
+          search: '${t.name} ${t.comment}${inDoc(doc)}',
+          run: () => inEr(doc.id, (er) {
+            er.selectTable(t.id);
             cv.focusTable(t);
           }),
         ),
-    ],
+        for (final col in t.columns)
+          PaletteEntry(
+            kind: PaletteKind.column,
+            title: '${t.name}.${col.name}',
+            subtitle: '${tr('คอลัมน์ · {0}{1}', [typeLabel(col), col.comment.isEmpty ? '' : ' · ${col.comment}'])}${inDoc(doc)}',
+            search: '${t.name}.${col.name} ${col.comment}${inDoc(doc)}',
+            run: () => inEr(doc.id, (er) {
+              er.selectTable(t.id, columnId: col.id);
+              cv.focusTable(t);
+            }),
+          ),
+      ],
   ];
   return [...commands, ...objects];
 }
