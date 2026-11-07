@@ -43,7 +43,19 @@ class WorkspaceController extends ChangeNotifier {
   final Set<String> _open = {};
   String _activeId = kErDiagramId;
 
+  /// กำลังแสดงหน้า Project Home แทนแคนวาส (สถานะมุมมองล้วน ไม่ถูกบันทึกในไฟล์ ; เปิดเอกสารใด ๆ = ออกจากหน้านี้)
+  bool _homeView = false;
+
   Workspace get workspace => _workspace;
+
+  bool get homeView => _homeView;
+
+  /// แสดง/ซ่อนหน้า Project Home (ไม่แตะเอกสารหรือสถานะ dirty)
+  void showHome([bool show = true]) {
+    if (_homeView == show) return;
+    _homeView = show;
+    notifyListeners();
+  }
   String? get filePath => _filePath;
 
   /// มีการเปลี่ยนโครงสร้าง (เพิ่ม/ลบ/เปลี่ยนชื่อ/ย้ายเอกสาร) ที่ยังไม่บันทึก
@@ -167,6 +179,7 @@ class WorkspaceController extends ChangeNotifier {
   /// ตั้งแท็บที่ใช้งาน (จำ ER ล่าสุดไว้ให้ [currentEr])
   void _setActive(String id) {
     _activeId = id;
+    _homeView = false;
     if (_workspace.documentById(id)?.type == DocType.er) _lastErId = id;
   }
 
@@ -386,7 +399,10 @@ class WorkspaceController extends ChangeNotifier {
   bool openDocument(String id) {
     final d = _workspace.documentById(id);
     if (d == null || d.type == null) return false;
-    if (_open.contains(id) && activeId == id) return true;
+    if (_open.contains(id) && activeId == id) {
+      showHome(false); // คลิกเอกสารที่ใช้งานอยู่แล้ว = กลับจากหน้า Project Home
+      return true;
+    }
     _open.add(id);
     _setActive(id);
     notifyListeners();

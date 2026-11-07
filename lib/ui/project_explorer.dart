@@ -62,6 +62,17 @@ class _ProjectExplorerState extends State<ProjectExplorer> {
                 style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
               ),
             ),
+            IconButton(
+              key: const ValueKey('explorer-home'),
+              tooltip: tr('หน้า Project Home'),
+              style: IconButton.styleFrom(
+                minimumSize: const Size(28, 28),
+                padding: EdgeInsets.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              icon: Icon(Icons.home_outlined, size: 18, color: w.homeView ? C.primary : C.muted),
+              onPressed: () => w.showHome(),
+            ),
             PopupMenuButton<DocType>(
               key: const ValueKey('explorer-add'),
               tooltip: tr('สร้างแผนภาพใหม่'),

@@ -16,6 +16,7 @@ import 'dfd/dfd_panels.dart';
 import 'dfd/dfd_view.dart';
 import 'diagram_tabs.dart';
 import 'project_explorer.dart';
+import 'project_home.dart';
 import 'status_bar.dart';
 import 'language_dialog.dart';
 import 'panel_splitter.dart';
@@ -113,6 +114,8 @@ class _HomePageState extends State<HomePage> {
     final s = matchShortcut(e, HardwareKeyboard.instance);
     if (s == null || s.cmd == null) return KeyEventResult.ignored;
     if (_typing && !s.global) return KeyEventResult.ignored;
+    // หน้า Project Home ไม่มีแคนวาส: คำสั่งแก้ไขเอกสาร (ลบ/วาง/เครื่องมือ) ต้องไม่ไปแตะเอกสารที่ซ่อนอยู่
+    if (!s.global && context.read<WorkspaceController>().homeView) return KeyEventResult.ignored;
     // คำสั่งถูกส่งต่อให้ AppActions: แท็บ DFD ใช้ชุดคำสั่งของ DFD (คำสั่งแก้ตารางไม่แตะ ER ที่ซ่อนอยู่)
     AppActions(context).run(s.cmd!);
     return KeyEventResult.handled;
@@ -146,6 +149,7 @@ class _HomePageState extends State<HomePage> {
           // แท็บ DFD: แผงซ้าย/ขวาและพื้นที่วาดของแผนภาพนั้น (ไม่มีแผง SQL)
           final isEr = context.select<WorkspaceController, DocType?>((w) => w.activeDocument.type) == DocType.er;
           // แคนวาสผูกกับเอกสาร: สลับเอกสาร = สร้าง State ใหม่ (ตัวฟัง/ตัวแปรที่จับ controller ของเอกสารเดิมไว้ไม่ค้าง)
+          final home = context.select<WorkspaceController, bool>((w) => w.homeView);
           final docId = context.select<WorkspaceController, String>((w) => isEr ? w.currentEr.docId : w.activeId);
           return Stack(children: [
             Row(children: [
@@ -159,7 +163,9 @@ class _HomePageState extends State<HomePage> {
               Expanded(
                 child: CustomPaint(
                   foregroundPainter: const _EdgeShadow(),
-                  child: isEr
+                  child: home
+                      ? const ProjectHomeView()
+                      : isEr
                       ? Column(children: [
                           Expanded(child: KeyedSubtree(key: ValueKey('er-canvas-$docId'), child: _canvas)),
                           SizedBox(height: collapsed ? 44 : dockH, child: _sqlDock),
@@ -167,7 +173,7 @@ class _HomePageState extends State<HomePage> {
                       : KeyedSubtree(key: ValueKey('dfd-canvas-$docId'), child: _dfdCanvas),
                 ),
               ),
-              SizedBox(width: rightW, child: isEr ? _rightPanel : _dfdRight),
+              if (!home) SizedBox(width: rightW, child: isEr ? _rightPanel : _dfdRight),
             ]),
             Positioned(
               left: leftW - 4,
@@ -186,6 +192,7 @@ class _HomePageState extends State<HomePage> {
                 },
               ),
             ),
+            if (!home)
             Positioned(
               right: rightW - 4,
               top: 0,
@@ -203,7 +210,7 @@ class _HomePageState extends State<HomePage> {
                 },
               ),
             ),
-            if (!collapsed && isEr)
+            if (!collapsed && isEr && !home)
               Positioned(
                 left: leftW,
                 right: rightW,

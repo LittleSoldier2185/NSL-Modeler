@@ -833,4 +833,12 @@ const Map<String, String> kEn = {
   'และอีก {0} รายการ': 'and {0} more',
   '{0} → ตาราง {1}': '{0} → table {1}',
   '{0} → แผนภาพย่อย': '{0} → sub-diagram',
+  'หน้า Project Home': 'Project Home',
+  'ยังไม่ได้บันทึกเป็นไฟล์': 'Not saved to a file yet',
+  'เพิ่ม ER': 'Add ER',
+  'เพิ่ม DFD': 'Add DFD',
+  'เอกสาร': 'Documents',
+  'วัตถุ DFD': 'DFD objects',
+  'ข้อผิดพลาด': 'Errors',
+  'คำเตือน': 'Warnings',
 };

@@ -120,6 +120,7 @@ List<PaletteEntry> buildPaletteEntries(BuildContext context) {
     byCmd(tr('ใช้ {0}', [Dialect.mssql.label]), tr('dialect mssql สลับ'), Cmd.dialectMssql),
     cmd(tr('แสดง SQL Preview'), 'sql preview', () => cv.showDock(DockTab.sql)),
     cmd(tr('แสดงปัญหาที่ตรวจพบ'), tr('issues problems validate ตรวจสอบ'), () => cv.showDock(DockTab.issues)),
+    cmd(tr('หน้า Project Home'), 'project home overview dashboard ภาพรวม โปรเจกต์ หน้าแรก', () => w.showHome()),
     cmd(tr('ปัญหาทั้งโปรเจกต์…'), 'workspace project issues problems all documents ทุกเอกสาร ตรวจสอบ', () => showWorkspaceIssues(context)),
     byCmd(tr('ค้นหาตาราง / คอลัมน์'), 'search find', Cmd.find),
     byCmd(tr('ดูคีย์ลัดทั้งหมด'), 'shortcuts help keyboard', Cmd.help),
