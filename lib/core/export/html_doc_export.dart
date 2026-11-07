@@ -6,7 +6,9 @@ import '../models/table_model.dart';
 import '../types/type_label.dart';
 import '../validate/issue.dart';
 import '../validate/workspace_validator.dart';
+import '../validate/flowchart_validator.dart' show fcShapeLabel;
 import 'dfd_svg.dart';
+import 'flowchart_svg.dart';
 import 'workspace_summary.dart';
 import 'svg_export.dart';
 
@@ -22,6 +24,7 @@ String exportHtmlDocument(Workspace w, {bool includeDiagrams = true}) {
   final legacy = docs.isEmpty || isSingleErWorkspace(w);
   final erDocs = [for (final d in docs) if (d.type == DocType.er) d];
   final dfdDocs = [for (final d in docs) if (d.type == DocType.dfd) d];
+  final fcDocs = [for (final d in docs) if (d.type == DocType.flowchart) d];
   final p0 = erDocs.firstOrNull?.er ?? Project(name: w.name);
   final b = StringBuffer();
   final title = _esc(legacy
@@ -43,7 +46,7 @@ String exportHtmlDocument(Workspace w, {bool includeDiagrams = true}) {
     b.writeln('<p class="meta">${_esc(p0.dialect.label)} · ${_esc(tr('{0} ตาราง · {1} ความสัมพันธ์', [p0.tables.length, p0.relations.length]))}</p>');
   } else {
     final c = workspaceCounts(w);
-    b.writeln('<p class="meta">${_esc(tr('{0} เอกสาร ({1} ER · {2} DFD)', [c.docs, c.ers, c.dfds]))}</p>');
+    b.writeln('<p class="meta">${_esc(docCountLine(c))}</p>');
   }
   b.writeln('</header>');
 
@@ -54,7 +57,7 @@ String exportHtmlDocument(Workspace w, {bool includeDiagrams = true}) {
   String erDiagramId(ProjectDocument d) => legacy ? 'er-diagram' : 'er-${_safeId(d.id)}';
 
   // สารบัญ
-  final hasAny = erDocs.any((d) => d.er!.tables.isNotEmpty) || dfdDocs.isNotEmpty;
+  final hasAny = erDocs.any((d) => d.er!.tables.isNotEmpty) || dfdDocs.isNotEmpty || fcDocs.isNotEmpty;
   if (hasAny || !legacy) {
     b.writeln('<nav aria-label="${_esc(tr('สารบัญ'))}">');
     b.writeln('<h2>${_esc(tr('สารบัญ'))}</h2>');
@@ -71,11 +74,14 @@ String exportHtmlDocument(Workspace w, {bool includeDiagrams = true}) {
     for (final d in dfdDocs) {
       b.writeln('<li><a href="#dfd-${_esc(d.id)}">DFD: ${_esc(d.name)}</a></li>');
     }
+    for (final d in fcDocs) {
+      b.writeln('<li><a href="#fc-${_safeId(d.id)}">Flowchart: ${_esc(d.name)}</a></li>');
+    }
     b.writeln('</ul>');
     b.writeln('</nav>');
   }
 
-  if (!legacy) _overview(b, w, [...erDocs, ...dfdDocs]);
+  if (!legacy) _overview(b, w, [...erDocs, ...dfdDocs, ...fcDocs]);
 
   for (final d in erDocs) {
     final p = d.er!;
@@ -106,6 +112,9 @@ String exportHtmlDocument(Workspace w, {bool includeDiagrams = true}) {
   for (final d in dfdDocs) {
     _dfd(b, w, d, [for (final i in issues) if (i.docId == d.id) i], includeDiagrams);
   }
+  for (final d in fcDocs) {
+    _flowchart(b, d, [for (final i in issues) if (i.docId == d.id) i], includeDiagrams);
+  }
   b.writeln('<footer>${_esc(tr('สร้างโดย NSL Dev'))}</footer>');
   b.writeln('</main>');
   b.writeln('</body>');
@@ -120,9 +129,10 @@ void _overview(StringBuffer b, Workspace w, List<ProjectDocument> docs) {
   b.writeln('<section id="overview">');
   b.writeln('<h2>${_esc(tr('ภาพรวมโปรเจกต์'))}</h2>');
   b.writeln('<ul>');
-  b.writeln('<li>${_esc(tr('{0} เอกสาร ({1} ER · {2} DFD)', [c.docs, c.ers, c.dfds]))}</li>');
+  b.writeln('<li>${_esc(docCountLine(c))}</li>');
   b.writeln('<li>${_esc(tr('{0} ตาราง · {1} ความสัมพันธ์', [c.tables, c.relations]))}</li>');
   b.writeln('<li>${_esc(tr('{0} วัตถุ DFD · {1} เส้นข้อมูล', [c.objects, c.flows]))}</li>');
+  if (c.fcs > 0) b.writeln('<li>${_esc(tr('{0} สัญลักษณ์ Flowchart · {1} เส้นเชื่อม', [c.symbols, c.fcEdges]))}</li>');
   b.writeln('<li>${_esc(tr('{0} ข้อผิดพลาด · {1} คำเตือน', [ec, issues.length - ec]))}</li>');
   b.writeln('</ul>');
   b.writeln('<h3>${_esc(tr('เอกสารในโปรเจกต์'))}</h3><ul>');
@@ -131,6 +141,10 @@ void _overview(StringBuffer b, Workspace w, List<ProjectDocument> docs) {
       final p = d.er!;
       b.writeln('<li><a href="#erdoc-${_safeId(d.id)}">ER: ${_esc(d.name)}</a> <span class="muted">— ${_esc(p.dialect.label)} · '
           '${_esc(tr('{0} ตาราง · {1} ความสัมพันธ์', [p.tables.length, p.relations.length]))}</span></li>');
+    } else if (d.type == DocType.flowchart) {
+      final g = d.flowchart!;
+      b.writeln('<li><a href="#fc-${_safeId(d.id)}">Flowchart: ${_esc(d.name)}</a> <span class="muted">— '
+          '${_esc(tr('{0} สัญลักษณ์ · {1} เส้นเชื่อม', [g.nodes.length, g.edges.length]))}</span></li>');
     } else {
       final g = d.dfd!;
       b.writeln('<li><a href="#dfd-${_esc(d.id)}">DFD: ${_esc(d.name)}</a> <span class="muted">— '
@@ -182,6 +196,41 @@ void _dfd(StringBuffer b, Workspace w, ProjectDocument d, List<WorkspaceIssue> i
       for (final f in g.flows) {
         b.writeln('<tr><td>${_esc(g.nodeById(f.fromId)?.title ?? '?')}</td><td class="c">${f.bidirectional ? '↔' : '→'}</td>'
             '<td>${_esc(g.nodeById(f.toId)?.title ?? '?')}</td><td>${_esc(f.label)}</td></tr>');
+      }
+      b.writeln('</tbody></table>');
+    }
+  }
+  if (issues.isNotEmpty) {
+    b.writeln('<h3>${_esc(tr('ปัญหาที่ตรวจพบ'))}</h3><ul>');
+    for (final i in issues) {
+      b.writeln('<li>${_sev(i.issue.severity)} ${_esc(i.issue.title)} <span class="muted">— ${_esc(_oneLine(i.issue.message))}</span></li>');
+    }
+    b.writeln('</ul>');
+  }
+  b.writeln('</section>');
+}
+
+void _flowchart(StringBuffer b, ProjectDocument d, List<WorkspaceIssue> issues, bool includeDiagrams) {
+  final g = d.flowchart!;
+  b.writeln('<section id="fc-${_safeId(d.id)}">');
+  b.writeln('<h2>Flowchart: ${_esc(d.name)}</h2>');
+  b.writeln('<p class="meta">${_esc(tr('{0} สัญลักษณ์ · {1} เส้นเชื่อม', [g.nodes.length, g.edges.length]))}</p>');
+  if (g.nodes.isEmpty) {
+    b.writeln('<p class="muted">${_esc(tr('ไม่มีสัญลักษณ์'))}</p>');
+  } else {
+    final svg = includeDiagrams ? exportFlowchartSvg(g, title: d.name) : null; // ธีมสว่างเสมอ
+    if (svg != null) b.writeln('<div class="diagram">${_inlineSvg(svg)}</div>');
+    b.writeln('<h3>${_esc(tr('สัญลักษณ์'))}</h3>');
+    b.writeln('<table><thead><tr><th>${_esc(tr('ชนิด'))}</th><th>${_esc(tr('ข้อความ'))}</th></tr></thead><tbody>');
+    for (final n in g.nodes) {
+      b.writeln('<tr><td>${_esc(fcShapeLabel(n.shape))}</td><td>${_esc(n.text).replaceAll('\n', '<br>')}</td></tr>');
+    }
+    b.writeln('</tbody></table>');
+    if (g.edges.isNotEmpty) {
+      b.writeln('<h3>${_esc(tr('เส้นเชื่อม'))}</h3>');
+      b.writeln('<table><thead><tr><th>${_esc(tr('จาก'))}</th><th>${_esc(tr('ถึง'))}</th><th>${_esc(tr('ป้าย'))}</th></tr></thead><tbody>');
+      for (final e in g.edges) {
+        b.writeln('<tr><td>${_esc(fcNodeText(g, e.fromId))}</td><td>${_esc(fcNodeText(g, e.toId))}</td><td>${_esc(e.label)}</td></tr>');
       }
       b.writeln('</tbody></table>');
     }

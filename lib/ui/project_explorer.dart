@@ -42,6 +42,7 @@ class _ProjectExplorerState extends State<ProjectExplorer> {
     final groups = <(DocType, String)>[
       (DocType.er, tr('แผนภาพ ER')),
       (DocType.dfd, tr('แผนภาพกระแสข้อมูล (DFD)')),
+      (DocType.flowchart, tr('ผังงาน (Flowchart)')),
     ];
     return Container(
       key: const ValueKey('project-explorer'),
@@ -94,6 +95,11 @@ class _ProjectExplorerState extends State<ProjectExplorer> {
                   value: DocType.dfd,
                   height: 36,
                   child: Text(tr('DFD (Data Flow Diagram)'), style: const TextStyle(fontSize: 13)),
+                ),
+                PopupMenuItem(
+                  value: DocType.flowchart,
+                  height: 36,
+                  child: Text(tr('Flowchart (ผังงาน)'), style: const TextStyle(fontSize: 13)),
                 ),
               ],
             ),
@@ -227,7 +233,7 @@ class _ExplorerRowState extends State<_ExplorerRow> {
             ),
             child: Row(children: [
               Icon(
-                d.type == DocType.er ? Icons.table_chart_outlined : Icons.account_tree_outlined,
+                docTypeIcon(d.type),
                 size: 14,
                 color: widget.active ? C.primary : C.muted,
               ),

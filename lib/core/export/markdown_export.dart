@@ -2,6 +2,7 @@ import '../models/column_model.dart';
 import '../models/project.dart';
 import '../models/workspace.dart';
 import '../validate/issue.dart';
+import '../validate/flowchart_validator.dart' show fcShapeLabel;
 import '../validate/workspace_validator.dart';
 import 'workspace_summary.dart';
 import '../types/type_label.dart';
@@ -37,7 +38,7 @@ String exportDataDictionary(Project p) {
 String exportWorkspaceDictionary(Workspace w) {
   if (isSingleErWorkspace(w)) return exportDataDictionary(knownDocs(w).first.er!);
   // ER ทุกอันก่อน แล้ว DFD ทุกอัน (ตามลำดับเอกสารในแต่ละชนิด)
-  final docs = [...w.documentsOf(DocType.er), ...w.documentsOf(DocType.dfd)];
+  final docs = [...w.documentsOf(DocType.er), ...w.documentsOf(DocType.dfd), ...w.documentsOf(DocType.flowchart)];
   final c = workspaceCounts(w);
   final issues = exportIssues(w);
   final b = StringBuffer();
@@ -45,9 +46,10 @@ String exportWorkspaceDictionary(Workspace w) {
   b.writeln();
   b.writeln(tr('## ภาพรวมโปรเจกต์'));
   b.writeln();
-  b.writeln(tr('- {0} เอกสาร ({1} ER · {2} DFD)', [c.docs, c.ers, c.dfds]));
+  b.writeln(docCountLine(c, bullet: true));
   b.writeln(tr('- {0} ตาราง · {1} ความสัมพันธ์', [c.tables, c.relations]));
   b.writeln(tr('- {0} วัตถุ DFD · {1} เส้นข้อมูล', [c.objects, c.flows]));
+  if (c.fcs > 0) b.writeln('- ${tr('{0} สัญลักษณ์ Flowchart · {1} เส้นเชื่อม', [c.symbols, c.fcEdges])}');
   final ec = issues.where((i) => i.issue.severity == Severity.error).length;
   b.writeln(tr('- {0} ข้อผิดพลาด · {1} คำเตือน', [ec, issues.length - ec]));
   b.writeln();
@@ -57,6 +59,9 @@ String exportWorkspaceDictionary(Workspace w) {
     if (d.type == DocType.er) {
       final p = d.er!;
       b.writeln('- ER: ${_inline(d.name)} — ${p.dialect.label} · ${tr('{0} ตาราง · {1} ความสัมพันธ์', [p.tables.length, p.relations.length])}');
+    } else if (d.type == DocType.flowchart) {
+      final g = d.flowchart!;
+      b.writeln('- Flowchart: ${_inline(d.name)} — ${tr('{0} สัญลักษณ์ · {1} เส้นเชื่อม', [g.nodes.length, g.edges.length])}');
     } else {
       final g = d.dfd!;
       b.writeln('- DFD: ${_inline(d.name)} — ${tr('{0} วัตถุ DFD · {1} เส้นข้อมูล', [g.nodes.length, g.flows.length])}');
@@ -87,6 +92,8 @@ String exportWorkspaceDictionary(Workspace w) {
       } else {
         _tables(b, p, '###');
       }
+    } else if (d.type == DocType.flowchart) {
+      _flowchart(b, d, [for (final i in issues) if (i.docId == d.id) i]);
     } else {
       _dfd(b, w, d, [for (final i in issues) if (i.docId == d.id) i]);
     }
@@ -122,6 +129,44 @@ void _dfd(StringBuffer b, Workspace w, ProjectDocument d, List<WorkspaceIssue> i
       for (final f in g.flows) {
         final from = g.nodeById(f.fromId)?.title ?? '?', to = g.nodeById(f.toId)?.title ?? '?';
         b.writeln('| ${_cell(from)} | ${f.bidirectional ? '↔' : '→'} | ${_cell(to)} | ${_cell(f.label)} |');
+      }
+    }
+  }
+  if (issues.isNotEmpty) {
+    b.writeln();
+    b.writeln(tr('**ปัญหาที่ตรวจพบ**'));
+    b.writeln();
+    for (final i in issues) {
+      b.writeln('- ${severityLabel(i.issue.severity)} · ${_inline(i.issue.title)} — ${_inline(i.issue.message)}');
+    }
+  }
+}
+
+void _flowchart(StringBuffer b, ProjectDocument d, List<WorkspaceIssue> issues) {
+  final g = d.flowchart!;
+  b.writeln('## Flowchart: ${_inline(d.name)}');
+  b.writeln();
+  b.writeln('- ${tr('{0} สัญลักษณ์ · {1} เส้นเชื่อม', [g.nodes.length, g.edges.length])}');
+  if (g.nodes.isEmpty) {
+    b.writeln();
+    b.writeln(tr('_ไม่มีสัญลักษณ์_'));
+  } else {
+    b.writeln();
+    b.writeln('**${tr('สัญลักษณ์')}**');
+    b.writeln();
+    b.writeln(tr('| ชนิด | ข้อความ |'));
+    b.writeln('|------|---------|');
+    for (final n in g.nodes) {
+      b.writeln('| ${fcShapeLabel(n.shape)} | ${_cell(n.text)} |');
+    }
+    if (g.edges.isNotEmpty) {
+      b.writeln();
+      b.writeln('**${tr('เส้นเชื่อม')}**');
+      b.writeln();
+      b.writeln(tr('| จาก | ถึง | ป้าย |'));
+      b.writeln('|-----|-----|------|');
+      for (final e in g.edges) {
+        b.writeln('| ${_cell(fcNodeText(g, e.fromId))} | ${_cell(fcNodeText(g, e.toId))} | ${_cell(e.label)} |');
       }
     }
   }

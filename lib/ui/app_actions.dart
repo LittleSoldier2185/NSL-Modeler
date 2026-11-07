@@ -12,6 +12,7 @@ import 'file_actions.dart';
 import 'palette/command_palette.dart';
 import 'prompt_dialog.dart';
 import 'dfd/dfd_actions.dart';
+import 'flowchart/fc_actions.dart';
 import 'shortcuts.dart';
 import 'shortcuts_help.dart';
 import '../core/l10n/l10n.dart';
@@ -82,6 +83,11 @@ class AppActions {
         Cmd.dfdEntity: () {},
         Cmd.dfdProcess: () {},
         Cmd.dfdStore: () {},
+        // ใช้เฉพาะแท็บ Flowchart (ดู FlowchartActions) — บนแท็บ ER ไม่ทำอะไร
+        Cmd.fcTerminator: () {},
+        Cmd.fcIo: () {},
+        Cmd.fcSubroutine: () {},
+        Cmd.fcConnector: () {},
       };
 
   /// ทำงานตามคำสั่ง: แท็บ DFD ใช้ชุดคำสั่งของ DFD, แท็บ ER ใช้ชุดเดิม (และเมินคำสั่งของ DFD)
@@ -90,7 +96,11 @@ class AppActions {
       DfdActions(context).run(cmd);
       return;
     }
-    if (DfdActions.dfdOnly.contains(cmd)) return;
+    if (c.workspaceController.activeDocument.type == DocType.flowchart) {
+      FlowchartActions(context).run(cmd);
+      return;
+    }
+    if (DfdActions.dfdOnly.contains(cmd) || FlowchartActions.flowchartOnly.contains(cmd)) return;
     map[cmd]!();
   }
 

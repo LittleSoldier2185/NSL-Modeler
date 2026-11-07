@@ -8,7 +8,8 @@ import '../core/validate/workspace_validator.dart';
 import '../state/workspace_controller.dart';
 import 'canvas/canvas_controller.dart';
 import 'issue_widgets.dart';
-import 'palette/command_palette.dart' show gotoDfd;
+import 'document_actions.dart' show docTypeIcon;
+import 'palette/command_palette.dart' show gotoDfd, gotoFlowchart;
 import 'theme.dart';
 
 /// ปัญหาที่ตรวจพบทั้งโปรเจกต์ — รวมทุกเอกสาร (ER และ DFD ทุกแท็บ) แยกเป็นกลุ่มตามเอกสาร คลิกรายการเพื่อไปที่วัตถุนั้น
@@ -33,6 +34,11 @@ class _WorkspaceIssuesDialogState extends State<WorkspaceIssuesDialog> {
     if (wi.docType == DocType.dfd) {
       nav.pop();
       gotoDfd(context, wi.docId, node: i.tableId, flow: i.relationId);
+      return;
+    }
+    if (wi.docType == DocType.flowchart) {
+      nav.pop();
+      gotoFlowchart(context, wi.docId, node: i.tableId, edge: i.relationId);
       return;
     }
     final er = w.erController(wi.docId);
@@ -91,7 +97,7 @@ class _WorkspaceIssuesDialogState extends State<WorkspaceIssuesDialog> {
                 Padding(
                   padding: const EdgeInsets.only(top: 6, bottom: 6),
                   child: Row(children: [
-                    Icon(w.documentById(e.key)?.type == DocType.dfd ? Icons.account_tree_outlined : Icons.table_chart_outlined,
+                    Icon(docTypeIcon(w.documentById(e.key)?.type),
                         size: 15, color: C.muted),
                     const SizedBox(width: 6),
                     Text(e.value.first.docName, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),

@@ -1,5 +1,6 @@
 import '../models/workspace.dart';
 import 'dfd_validator.dart';
+import 'flowchart_validator.dart';
 import 'issue.dart';
 import 'validator.dart';
 
@@ -13,7 +14,7 @@ class WorkspaceIssue {
   final Issue issue;
 }
 
-/// ตรวจทุกเอกสารในโปรเจกต์ (ER ทุกอัน + DFD ทุกอัน) ตามลำดับเอกสารในไฟล์ ; ชนิดที่ไม่รู้จักข้ามไป
+/// ตรวจทุกเอกสารในโปรเจกต์ (ER ทุกอัน + DFD ทุกอัน + Flowchart ทุกอัน) ตามลำดับเอกสารในไฟล์ ; ชนิดที่ไม่รู้จักข้ามไป
 List<WorkspaceIssue> validateWorkspace(Workspace w) {
   final out = <WorkspaceIssue>[];
   for (final doc in w.documents) {
@@ -24,6 +25,8 @@ List<WorkspaceIssue> validateWorkspace(Workspace w) {
         issues = validateProject(doc.er!);
       case DocType.dfd:
         issues = validateDfd(doc.dfd!, workspace: w, diagramId: doc.id);
+      case DocType.flowchart:
+        issues = validateFlowchart(doc.flowchart!);
       case null:
         continue;
     }

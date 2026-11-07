@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:clock/clock.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -13,6 +11,7 @@ import '../../state/app_settings.dart';
 import '../../state/dfd_controller.dart';
 import '../../state/project_controller.dart';
 import '../canvas/context_menu.dart';
+import '../canvas/dot_grid_painter.dart';
 import '../shortcuts.dart' show Cmd;
 import '../theme.dart';
 import 'dfd_actions.dart';
@@ -315,7 +314,7 @@ class _DfdCanvasState extends State<DfdCanvas> {
                 onPanEnd: (_) => _panEnd(),
                 onPanCancel: _panEnd,
                 child: CustomPaint(
-                  painter: _BackgroundPainter(d.offset, d.scale),
+                  painter: DotGridPainter(d.offset, d.scale),
                   foregroundPainter: DfdScreenPainter(
                     diagram: d.diagram,
                     offset: d.offset,
@@ -352,30 +351,6 @@ class _DfdCanvasState extends State<DfdCanvas> {
       );
     });
   }
-}
-
-/// พื้นหลังจุดเลื่อน/ซูมตามมุมมอง
-class _BackgroundPainter extends CustomPainter {
-  _BackgroundPainter(this.offset, this.scale);
-  final Offset offset;
-  final double scale;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    canvas.drawRect(Offset.zero & size, Paint()..color = C.canvas);
-    final step = kGridSize * scale;
-    if (step < 8) return;
-    final dot = Paint()..color = C.border.withValues(alpha: 0.8);
-    final startX = offset.dx % step, startY = offset.dy % step;
-    for (var x = startX; x < size.width; x += step) {
-      for (var y = startY; y < size.height; y += step) {
-        canvas.drawCircle(Offset(x, y), math.max(0.8, scale * 0.9), dot);
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(_BackgroundPainter old) => old.offset != offset || old.scale != scale;
 }
 
 class _Toolbar extends StatelessWidget {

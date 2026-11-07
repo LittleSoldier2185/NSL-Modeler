@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/export/dfd_svg.dart';
+import '../core/export/flowchart_svg.dart';
 import '../core/export/seed_data.dart';
 import '../core/models/workspace.dart';
 import '../core/export/selection_crop.dart';
@@ -19,6 +20,7 @@ import '../core/export/svg_export.dart';
 import '../state/app_settings.dart';
 import 'board_size_dialog.dart';
 import 'export/dfd_png.dart';
+import 'export/flowchart_png.dart';
 import '../core/db/db_session.dart' show DbKind;
 import '../core/db/mysql_data.dart';
 import '../core/db/sqlite_data.dart';
@@ -223,7 +225,9 @@ class FileActions {
   static Future<void> exportText(BuildContext context, ProjectController c,
       {TextExportKind kind = TextExportKind.dictionary}) async {
     final ws = c.workspaceController.workspace;
-    final empty = ws.tableCount == 0 && !ws.documentsOf(DocType.dfd).any((d) => d.dfd!.nodes.isNotEmpty);
+    final empty = ws.tableCount == 0 &&
+        !ws.documentsOf(DocType.dfd).any((d) => d.dfd!.nodes.isNotEmpty) &&
+        !ws.documentsOf(DocType.flowchart).any((d) => d.flowchart!.nodes.isNotEmpty);
     if (empty) {
       _toast(context, tr('ยังไม่มีตารางให้ Export'));
       return;
@@ -260,6 +264,7 @@ class FileActions {
   /// Export แผนภาพเป็น PNG หรือ SVG (ทั้งแผนภาพ ไม่ขึ้นกับว่าตอนนี้ซูม/เลื่อนอยู่ตรงไหน)
   static Future<void> exportImage(BuildContext context, ProjectController c, {ImageArea? initialArea}) async {
     if (c.workspaceController.activeDocument.type == DocType.dfd) return _exportDfdImage(context, c);
+    if (c.workspaceController.activeDocument.type == DocType.flowchart) return _exportFlowchartImage(context, c);
     final p = c.project;
     if (p.tables.isEmpty && p.notes.isEmpty) {
       _toast(context, tr('ยังไม่มีตารางให้ Export เป็นภาพ'));
@@ -344,6 +349,45 @@ class FileActions {
       final uri = await FilePicker.saveFile(
         dialogTitle: tr('Export ภาพ {0}', [opts.format.name.toUpperCase()]),
         fileName: '${safeName(tab.name)}_dfd.${opts.format.name}',
+        bytes: bytes,
+      );
+      if (uri == null) return;
+      var path = uri.toFilePath();
+      if (!path.toLowerCase().endsWith('.${opts.format.name}')) path = '$path.${opts.format.name}';
+      await File(path).writeAsBytes(bytes);
+      if (context.mounted) _toast(context, tr('Export แล้ว: {0}{1}', [path, note]));
+    } catch (e) {
+      if (context.mounted) _toast(context, tr('Export ภาพไม่ได้: {0}', [e]));
+    }
+  }
+
+  /// Export Flowchart ที่เปิดอยู่เป็น PNG/SVG (ตัดเฉพาะส่วนที่มีสัญลักษณ์ ; PNG เลือกพื้นโปร่งใสได้)
+  static Future<void> _exportFlowchartImage(BuildContext context, ProjectController c) async {
+    final tab = c.workspaceController.activeDocument;
+    final d = c.workspaceController.flowchartOf(tab.id);
+    if (d.nodes.isEmpty) {
+      _toast(context, tr('ยังไม่มีสัญลักษณ์ให้ Export เป็นภาพ'));
+      return;
+    }
+    final opts = await showDialog<ImageExportOptions>(
+      context: context,
+      builder: (_) => const ExportImageDialog(hasNotes: false, showArea: false, showTransparent: true),
+    );
+    if (opts == null || !context.mounted) return;
+    try {
+      late final Uint8List bytes;
+      var note = '';
+      if (opts.format == ImageFormat.svg) {
+        bytes = Uint8List.fromList(utf8.encode(exportFlowchartSvg(d, dark: opts.dark, title: tab.name, transparent: opts.transparent)!));
+      } else {
+        final png = await exportFlowchartPng(d, scale: opts.scale, dark: opts.dark, transparent: opts.transparent);
+        if (png == null) return;
+        bytes = png.bytes;
+        if (png.scale < opts.scale) note = tr(' (ลดสเกลเหลือ {0}x เพราะภาพใหญ่เกินไป)', [png.scale.toStringAsFixed(1)]);
+      }
+      final uri = await FilePicker.saveFile(
+        dialogTitle: tr('Export ภาพ {0}', [opts.format.name.toUpperCase()]),
+        fileName: '${safeName(tab.name)}_flowchart.${opts.format.name}',
         bytes: bytes,
       );
       if (uri == null) return;

@@ -5,9 +5,11 @@ import 'package:flutter/foundation.dart';
 import '../core/models/dfd_model.dart';
 import '../core/models/diagram.dart';
 import '../core/models/doc_ref.dart';
+import '../core/models/flowchart_model.dart';
 import '../core/models/project.dart';
 import '../core/models/workspace.dart';
 import 'dfd_controller.dart';
+import 'flowchart_controller.dart';
 import 'doc_controller.dart';
 import 'project_controller.dart';
 
@@ -81,6 +83,7 @@ class WorkspaceController extends ChangeNotifier {
     final DocController? c = switch (doc.type) {
       DocType.er => ProjectController.forDoc(doc, this),
       DocType.dfd => DfdController.forDoc(doc, this),
+      DocType.flowchart => FlowchartController.forDoc(doc, this),
       null => null,
     };
     if (c != null) _register(c);
@@ -91,6 +94,12 @@ class WorkspaceController extends ChangeNotifier {
   DfdController? dfdController(String id) {
     final c = controllerOf(id);
     return c is DfdController ? c : null;
+  }
+
+  /// controller ของเอกสาร Flowchart [id] (null = ไม่ใช่เอกสาร Flowchart)
+  FlowchartController? flowchartController(String id) {
+    final c = controllerOf(id);
+    return c is FlowchartController ? c : null;
   }
 
   ProjectController? erController(String id) {
@@ -199,7 +208,10 @@ class WorkspaceController extends ChangeNotifier {
   /// เนื้อหา DFD ของเอกสาร [id] — ไม่ใช่เอกสาร DFD/ไม่มีอยู่ = แผนภาพว่างชั่วคราว (ไม่ถูกเก็บในโปรเจกต์)
   DfdDiagram dfdOf(String id) => _workspace.documentById(id)?.dfd ?? DfdDiagram();
 
-  /// เพิ่มเอกสารใหม่ต่อท้าย (ER หรือ DFD) แล้วเปิดเป็นแท็บที่ใช้งาน — ชื่อซ้ำจะต่อเลขให้
+  /// เนื้อหา Flowchart ของเอกสาร [id] — ไม่ใช่ Flowchart/ไม่มีอยู่ = แผนภาพว่างชั่วคราว
+  FlowchartDiagram flowchartOf(String id) => _workspace.documentById(id)?.flowchart ?? FlowchartDiagram();
+
+  /// เพิ่มเอกสารใหม่ต่อท้าย (ER, DFD หรือ Flowchart) แล้วเปิดเป็นแท็บที่ใช้งาน — ชื่อซ้ำจะต่อเลขให้
   ///
   /// ER ใหม่: [er] = เนื้อหาตั้งต้น (null = ว่าง ใช้ dialect และขนาดกระดานเดียวกับ ER ที่ใช้งานอยู่)
   ProjectDocument? addDocument(DocType type, {String? name, String? folderId, Project? er}) {
@@ -228,6 +240,13 @@ class WorkspaceController extends ChangeNotifier {
           content: DfdDiagram(),
           folderId: folder,
         );
+      case DocType.flowchart:
+        doc = ProjectDocument.flowchart(
+          id: newId('c'),
+          name: _workspace.uniqueDocumentName(base.isEmpty ? 'Flowchart' : base),
+          content: FlowchartDiagram(),
+          folderId: folder,
+        );
     }
     _workspace.documents.add(doc);
     _open.add(doc.id);
@@ -248,7 +267,7 @@ class WorkspaceController extends ChangeNotifier {
     return true;
   }
 
-  /// ทำสำเนาเอกสาร [id] (ER หรือ DFD: เนื้อหาเดียวกัน ชื่อใหม่ไม่ซ้ำ ประวัติ undo เริ่มใหม่) วางต่อจากต้นฉบับแล้วเปิด
+  /// ทำสำเนาเอกสาร [id] (ER, DFD หรือ Flowchart: เนื้อหาเดียวกัน ชื่อใหม่ไม่ซ้ำ ประวัติ undo เริ่มใหม่) วางต่อจากต้นฉบับแล้วเปิด
   /// สำเนา ER ใช้ id ตาราง/คอลัมน์เดิม (id มีความหมายภายในเอกสารเท่านั้น) — ที่เก็บข้อมูลใน DFD ยังผูกกับต้นฉบับ
   ProjectDocument? duplicateDocument(String id) {
     final src = _workspace.documentById(id);
@@ -268,6 +287,13 @@ class WorkspaceController extends ChangeNotifier {
           id: newId('d'),
           name: _workspace.uniqueDocumentName(src.name),
           content: DfdDiagram.fromJson(jsonDecode(jsonEncode(src.dfd!.toJson())) as Map<String, dynamic>),
+          folderId: src.folderId,
+        );
+      case DocType.flowchart:
+        copy = ProjectDocument.flowchart(
+          id: newId('c'),
+          name: _workspace.uniqueDocumentName(src.name),
+          content: FlowchartDiagram.fromJson(jsonDecode(jsonEncode(src.flowchart!.toJson()))),
           folderId: src.folderId,
         );
       case null:
@@ -471,6 +497,15 @@ class WorkspaceController extends ChangeNotifier {
     return (d.type == DocType.dfd ? dfdController(d.id) : null) ?? _noDfd;
   }
 
+  /// ตัวแทนตอนเอกสารที่ใช้งานไม่ใช่ Flowchart (แผนภาพว่าง แก้ไขไม่ได้)
+  late final FlowchartController _noFlowchart = FlowchartController.detached(this);
+
+  /// controller ของ Flowchart ที่ใช้งานอยู่ (แท็บที่เปิดไม่ใช่ Flowchart = ตัวแทนที่ว่างและแก้ไขไม่ได้)
+  FlowchartController get currentFlowchart {
+    final d = activeDocument;
+    return (d.type == DocType.flowchart ? flowchartController(d.id) : null) ?? _noFlowchart;
+  }
+
   /// controller ของเอกสารที่ใช้งานอยู่
   DocController get activeController => controllerOf(activeId) ?? _mainEr;
 
@@ -486,6 +521,7 @@ class WorkspaceController extends ChangeNotifier {
     }
     _mainEr.dispose();
     _noDfd.dispose();
+    _noFlowchart.dispose();
     super.dispose();
   }
 }

@@ -13,6 +13,7 @@ import 'core/l10n/l10n.dart';
 import 'state/app_settings.dart';
 import 'state/autosave_coordinator.dart';
 import 'state/dfd_controller.dart';
+import 'state/flowchart_controller.dart';
 import 'state/project_controller.dart';
 import 'state/workspace_controller.dart';
 import 'ui/canvas/canvas_controller.dart';
@@ -131,13 +132,14 @@ class _NslDevAppState extends State<NslDevApp> with WidgetsBindingObserver {
         ChangeNotifierProvider.value(value: _canvas),
         Provider<AutosaveCoordinator?>.value(value: _autosave),
       ],
-      // controller ของเอกสาร ER/DFD ที่ใช้งานอยู่: เปลี่ยนตามแท็บ (วิดเจ็ตเดิมใช้ watch<ProjectController>() ได้ต่อ)
+      // controller ของเอกสาร ER/DFD/Flowchart ที่ใช้งานอยู่: เปลี่ยนตามแท็บ (วิดเจ็ตเดิมใช้ watch<ProjectController>() ได้ต่อ)
       child: ListenableBuilder(
         listenable: _workspace,
         builder: (context, child) => MultiProvider(
           providers: [
             ChangeNotifierProvider<ProjectController>.value(value: _workspace.currentEr),
             ChangeNotifierProvider<DfdController>.value(value: _workspace.currentDfd),
+            ChangeNotifierProvider<FlowchartController>.value(value: _workspace.currentFlowchart),
           ],
           child: child,
         ),

@@ -10,6 +10,7 @@ import '../state/project_controller.dart';
 import '../state/workspace_controller.dart';
 import 'app_actions.dart';
 import '../state/dfd_controller.dart';
+import '../state/flowchart_controller.dart';
 import 'canvas/canvas_controller.dart';
 import 'file_actions.dart';
 import 'line_settings_dialog.dart';
@@ -251,7 +252,14 @@ class TopBar extends StatelessWidget {
           _item(
             tr('จัดวางอัตโนมัติ'),
             '',
-            w.activeDocument.type == DocType.dfd
+            w.activeDocument.type == DocType.flowchart
+                ? (w.flowchartOf(w.activeId).nodes.length < 2
+                    ? null
+                    : () {
+                        final f = context.read<FlowchartController>();
+                        if (f.autoLayout()) f.fit(f.viewport);
+                      })
+                : w.activeDocument.type == DocType.dfd
                 ? (w.dfdOf(w.activeId).nodes.length < 2
                     ? null
                     : () {

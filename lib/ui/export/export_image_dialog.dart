@@ -18,8 +18,12 @@ enum ImageArea {
 }
 
 class ImageExportOptions {
-  const ImageExportOptions(this.format, this.scale, this.includeNotes, {this.area = ImageArea.content, this.dark = false});
+  const ImageExportOptions(this.format, this.scale, this.includeNotes,
+      {this.area = ImageArea.content, this.dark = false, this.transparent = false});
   final ImageFormat format;
+
+  /// พื้นหลังโปร่งใส (มีผลเฉพาะแผนภาพที่เปิดตัวเลือกนี้)
+  final bool transparent;
 
   /// ภาพธีมมืด (ไม่ขึ้นกับธีมของแอป)
   final bool dark;
@@ -30,8 +34,12 @@ class ImageExportOptions {
 
 /// เลือกรูปแบบภาพที่จะ export (PNG พร้อมสเกล หรือ SVG) — คืน null ถ้ายกเลิก
 class ExportImageDialog extends StatefulWidget {
-  const ExportImageDialog({super.key, required this.hasNotes, this.hasSelection = false, this.initialArea, this.showArea = true});
+  const ExportImageDialog(
+      {super.key, required this.hasNotes, this.hasSelection = false, this.initialArea, this.showArea = true, this.showTransparent = false});
   final bool hasNotes;
+
+  /// true = แสดงตัวเลือก "พื้นหลังโปร่งใส" (Flowchart)
+  final bool showTransparent;
 
   /// false = ซ่อนตัวเลือกพื้นที่ (แท็บ DFD ส่งออกเฉพาะส่วนที่มีวัตถุเสมอ)
   final bool showArea;
@@ -51,6 +59,7 @@ class _ExportImageDialogState extends State<ExportImageDialog> {
   double _scale = 2;
   bool _notes = true;
   bool _dark = false;
+  bool _transparent = false;
   late ImageArea _area =
       widget.initialArea == ImageArea.selection && !widget.hasSelection ? ImageArea.content : (widget.initialArea ?? ImageArea.content);
 
@@ -127,6 +136,16 @@ class _ExportImageDialogState extends State<ExportImageDialog> {
               style: TextStyle(fontSize: 12, color: C.muted),
             ),
             ],
+            if (widget.showTransparent)
+              CheckboxListTile(
+                key: const ValueKey('export-transparent'),
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                controlAffinity: ListTileControlAffinity.leading,
+                value: _transparent,
+                onChanged: (v) => setState(() => _transparent = v ?? false),
+                title: Text(tr('พื้นหลังโปร่งใส'), style: const TextStyle(fontSize: 13)),
+              ),
             if (widget.showArea && widget.hasNotes && _area != ImageArea.selection)
               CheckboxListTile(
                 contentPadding: EdgeInsets.zero,
@@ -141,7 +160,7 @@ class _ExportImageDialogState extends State<ExportImageDialog> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: Text(tr('ยกเลิก'))),
           FilledButton(
-            onPressed: () => Navigator.pop(context, ImageExportOptions(_format, _scale, _notes, area: _area, dark: _dark)),
+            onPressed: () => Navigator.pop(context, ImageExportOptions(_format, _scale, _notes, area: _area, dark: _dark, transparent: _transparent)),
             child: const Text('Export'),
           ),
         ],

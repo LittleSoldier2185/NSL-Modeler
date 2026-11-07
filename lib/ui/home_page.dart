@@ -14,6 +14,8 @@ import 'canvas/canvas_controller.dart';
 import 'canvas/canvas_view.dart';
 import 'dfd/dfd_panels.dart';
 import 'dfd/dfd_view.dart';
+import 'flowchart/fc_panels.dart';
+import 'flowchart/fc_view.dart';
 import 'diagram_tabs.dart';
 import 'project_explorer.dart';
 import 'project_home.dart';
@@ -130,6 +132,9 @@ class _HomePageState extends State<HomePage> {
   static const _dfdLeft = DfdLeftPanel();
   static const _dfdRight = DfdRightPanel();
   late final Widget _dfdCanvas = DfdCanvas(focusNode: _focus);
+  static const _fcLeft = FlowchartLeftPanel();
+  static const _fcRight = FlowchartRightPanel();
+  late final Widget _fcCanvas = FlowchartCanvas(focusNode: _focus);
 
   // ขนาดแผง ณ ตอนเริ่มลากขอบ (ลากแบบสัมบูรณ์: ขนาด = ขนาดเริ่ม + ระยะเมาส์ที่เคลื่อน)
   double _startLeft = 0, _startRight = 0, _startDock = 0;
@@ -147,7 +152,9 @@ class _HomePageState extends State<HomePage> {
           final showExplorer = context.select<AppSettings, bool>((s) => s.showExplorer);
           final collapsed = context.select<CanvasController, bool>((cv) => cv.dockCollapsed);
           // แท็บ DFD: แผงซ้าย/ขวาและพื้นที่วาดของแผนภาพนั้น (ไม่มีแผง SQL)
-          final isEr = context.select<WorkspaceController, DocType?>((w) => w.activeDocument.type) == DocType.er;
+          final type = context.select<WorkspaceController, DocType?>((w) => w.activeDocument.type);
+          final isEr = type == DocType.er;
+          final isFc = type == DocType.flowchart;
           // แคนวาสผูกกับเอกสาร: สลับเอกสาร = สร้าง State ใหม่ (ตัวฟัง/ตัวแปรที่จับ controller ของเอกสารเดิมไว้ไม่ค้าง)
           final home = context.select<WorkspaceController, bool>((w) => w.homeView);
           final docId = context.select<WorkspaceController, String>((w) => isEr ? w.currentEr.docId : w.activeId);
@@ -157,7 +164,7 @@ class _HomePageState extends State<HomePage> {
                 width: leftW,
                 child: Column(children: [
                   if (showExplorer) ProjectExplorer(maxHeight: box.maxHeight * 0.4),
-                  Expanded(child: isEr ? _leftPanel : _dfdLeft),
+                  Expanded(child: isEr ? _leftPanel : (isFc ? _fcLeft : _dfdLeft)),
                 ]),
               ),
               Expanded(
@@ -170,10 +177,12 @@ class _HomePageState extends State<HomePage> {
                           Expanded(child: KeyedSubtree(key: ValueKey('er-canvas-$docId'), child: _canvas)),
                           SizedBox(height: collapsed ? 44 : dockH, child: _sqlDock),
                         ])
+                      : isFc
+                      ? KeyedSubtree(key: ValueKey('fc-canvas-$docId'), child: _fcCanvas)
                       : KeyedSubtree(key: ValueKey('dfd-canvas-$docId'), child: _dfdCanvas),
                 ),
               ),
-              if (!home) SizedBox(width: rightW, child: isEr ? _rightPanel : _dfdRight),
+              if (!home) SizedBox(width: rightW, child: isEr ? _rightPanel : (isFc ? _fcRight : _dfdRight)),
             ]),
             Positioned(
               left: leftW - 4,

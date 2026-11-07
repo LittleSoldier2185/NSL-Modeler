@@ -3,9 +3,17 @@ import 'package:provider/provider.dart';
 
 import '../core/l10n/l10n.dart';
 import '../core/models/doc_ref.dart';
+import '../core/models/workspace.dart';
 import '../state/workspace_controller.dart';
 import 'prompt_dialog.dart';
 import 'theme.dart';
+
+/// ไอคอนประจำชนิดเอกสาร (แท็บ / ตัวสำรวจ / Project Home / หน้าต่างปัญหา)
+IconData docTypeIcon(DocType? t) => switch (t) {
+      DocType.er => Icons.table_chart_outlined,
+      DocType.flowchart => Icons.schema_outlined,
+      _ => Icons.account_tree_outlined,
+    };
 
 /// กล่องเปลี่ยนชื่อเอกสาร (ใช้ร่วมกันระหว่างแท็บแผนภาพและ Project Explorer): ชื่อว่าง/ซ้ำ = แจ้งเตือนและไม่เปลี่ยน
 Future<void> renameDocumentDialog(BuildContext context, String docId) async {

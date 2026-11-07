@@ -7,6 +7,7 @@ import '../core/validate/issue.dart';
 import '../core/validate/workspace_validator.dart';
 import '../state/workspace_controller.dart';
 import 'app_actions.dart';
+import 'document_actions.dart' show docTypeIcon;
 import 'shortcuts.dart';
 import 'theme.dart';
 import 'workspace_issues_dialog.dart';
@@ -38,6 +39,8 @@ class ProjectHomeView extends StatelessWidget {
     final dfds = [for (final d in w.documents) if (d.type == DocType.dfd) d];
     final tables = ers.fold<int>(0, (a, d) => a + d.er!.tables.length);
     final objects = dfds.fold<int>(0, (a, d) => a + d.dfd!.nodes.length);
+    final fcs = [for (final d in w.documents) if (d.type == DocType.flowchart) d];
+    final symbols = fcs.fold<int>(0, (a, d) => a + d.flowchart!.nodes.length);
     final path = w.filePath;
     final name = w.workspace.name.trim().isEmpty ? tr('(ไม่มีชื่อ)') : w.workspace.name;
 
@@ -77,6 +80,8 @@ class ProjectHomeView extends StatelessWidget {
               Wrap(spacing: 8, runSpacing: 8, children: [
                 _Action(const ValueKey('home-add-er'), Icons.table_chart_outlined, tr('เพิ่ม ER'), () => w.addDocument(DocType.er)),
                 _Action(const ValueKey('home-add-dfd'), Icons.account_tree_outlined, tr('เพิ่ม DFD'), () => w.addDocument(DocType.dfd)),
+                _Action(const ValueKey('home-add-flowchart'), Icons.schema_outlined, tr('เพิ่ม Flowchart'),
+                    () => w.addDocument(DocType.flowchart)),
                 _Action(const ValueKey('home-issues'), Icons.rule_rounded, tr('ปัญหาทั้งโปรเจกต์…'), () => showWorkspaceIssues(context)),
                 _Action(const ValueKey('home-export'), Icons.ios_share_rounded, tr('Export เอกสารทั้งโปรเจกต์…'),
                     () => AppActions(context).run(Cmd.exportText)),
@@ -87,11 +92,13 @@ class ProjectHomeView extends StatelessWidget {
                 _Stat(const ValueKey('home-stat-docs'), tr('เอกสาร'), '${w.documents.length}'),
                 _Stat(const ValueKey('home-stat-tables'), tr('ตาราง'), '$tables'),
                 _Stat(const ValueKey('home-stat-objects'), tr('วัตถุ DFD'), '$objects'),
+                if (fcs.isNotEmpty) _Stat(const ValueKey('home-stat-symbols'), tr('สัญลักษณ์ Flowchart'), '$symbols'),
                 _Stat(const ValueKey('home-stat-errors'), tr('ข้อผิดพลาด'), '$errors', color: errors > 0 ? C.danger : null),
                 _Stat(const ValueKey('home-stat-warnings'), tr('คำเตือน'), '$warnings', color: warnings > 0 ? C.warnText : null),
               ]),
               _section(tr('แผนภาพ ER'), ers, perDoc, w),
               _section(tr('แผนภาพกระแสข้อมูล (DFD)'), dfds, perDoc, w),
+              _section(tr('ผังงาน (Flowchart)'), fcs, perDoc, w),
             ]),
           ),
         ),
@@ -164,10 +171,13 @@ class _DocCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final er = doc.er;
     final dfd = doc.dfd;
+    final fc = doc.flowchart;
     final String detail;
     if (er != null) {
       final cols = er.tables.fold<int>(0, (a, t) => a + t.columns.length);
       detail = tr('{0} ตาราง · {1} คอลัมน์ · {2} FK', [er.tables.length, cols, er.relations.length]);
+    } else if (fc != null) {
+      detail = tr('{0} สัญลักษณ์ · {1} เส้นเชื่อม', [fc.nodes.length, fc.edges.length]);
     } else {
       detail = tr('{0} วัตถุ · {1} เส้นข้อมูล', [dfd!.nodes.length, dfd.flows.length]);
     }
@@ -185,7 +195,7 @@ class _DocCard extends StatelessWidget {
             padding: const EdgeInsets.all(12),
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
-                Icon(er != null ? Icons.table_chart_outlined : Icons.account_tree_outlined, size: 16, color: C.primary),
+                Icon(docTypeIcon(doc.type), size: 16, color: C.primary),
                 const SizedBox(width: 8),
                 Flexible(
                   child: ConstrainedBox(

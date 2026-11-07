@@ -6,10 +6,12 @@ import '../core/l10n/l10n.dart';
 import '../core/storage/project_file.dart';
 import '../core/models/workspace.dart';
 import '../core/validate/dfd_validator.dart';
+import '../core/validate/flowchart_validator.dart';
 import '../core/validate/issue.dart';
 import 'workspace_issues_dialog.dart';
 import '../state/app_settings.dart';
 import '../state/dfd_controller.dart';
+import '../state/flowchart_controller.dart';
 import '../state/project_controller.dart';
 import '../state/workspace_controller.dart';
 import 'canvas/canvas_controller.dart';
@@ -30,6 +32,7 @@ class StatusBar extends StatelessWidget {
     final settings = context.watch<AppSettings>();
     final isEr = w.activeDocument.type == DocType.er;
     final dfd = context.watch<DfdController>();
+    final fc = context.watch<FlowchartController>();
     final cv = context.watch<CanvasController>();
 
     final p = c.project;
@@ -42,6 +45,11 @@ class StatusBar extends StatelessWidget {
       summary = tr('{0} ตาราง · {1} ความสัมพันธ์', [p.tables.length, p.relations.length]);
       issues = c.issues;
       zoom = cv.scale;
+    } else if (w.activeDocument.type == DocType.flowchart) {
+      final d = w.flowchartOf(w.activeId);
+      summary = tr('{0} สัญลักษณ์ · {1} เส้นเชื่อม', [d.nodes.length, d.edges.length]);
+      issues = validateFlowchart(d);
+      zoom = fc.scale;
     } else {
       final d = w.dfdOf(w.activeId);
       summary = tr('{0} วัตถุ · {1} เส้นข้อมูล', [d.nodes.length, d.flows.length]);

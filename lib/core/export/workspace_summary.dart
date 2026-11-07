@@ -1,5 +1,7 @@
 import '../l10n/l10n.dart';
 import '../models/dfd_model.dart';
+import '../models/flowchart_model.dart';
+import '../validate/flowchart_validator.dart' show fcShapeLabel;
 import '../models/workspace.dart';
 import '../validate/issue.dart';
 import '../validate/workspace_validator.dart';
@@ -31,6 +33,14 @@ String severityLabel(Severity s) => switch (s) {
       Severity.info => tr('คำแนะนำ'),
     };
 
+/// ข้อความของสัญลักษณ์ [id] ใน Flowchart บรรทัดเดียว (ว่าง = ชื่อชนิด ; ไม่มี = ?)
+String fcNodeText(FlowchartDiagram g, String id) {
+  final n = g.nodeById(id);
+  if (n == null) return '?';
+  final t = n.text.trim().replaceAll(RegExp(r'\s+'), ' ');
+  return t.isEmpty ? fcShapeLabel(n.shape) : t;
+}
+
 /// "ชื่อ ER › ตาราง" ของที่เก็บข้อมูลที่ผูกกับตาราง (null = ไม่ได้ผูก/หาไม่พบ)
 String? dfdStoreTableLabel(Workspace w, DfdNode n) {
   final tid = n.tableId;
@@ -46,10 +56,12 @@ String? dfdStoreTableLabel(Workspace w, DfdNode n) {
 }
 
 /// ผลรวมของทั้งโปรเจกต์
-({int docs, int ers, int dfds, int tables, int relations, int objects, int flows}) workspaceCounts(Workspace w) {
+({int docs, int ers, int dfds, int tables, int relations, int objects, int flows, int fcs, int symbols, int fcEdges})
+    workspaceCounts(Workspace w) {
   final k = knownDocs(w);
   final ers = [for (final d in k) if (d.type == DocType.er) d.er!];
   final dfds = [for (final d in k) if (d.type == DocType.dfd) d.dfd!];
+  final fcs = [for (final d in k) if (d.type == DocType.flowchart) d.flowchart!];
   return (
     docs: k.length,
     ers: ers.length,
@@ -58,5 +70,18 @@ String? dfdStoreTableLabel(Workspace w, DfdNode n) {
     relations: ers.fold(0, (a, p) => a + p.relations.length),
     objects: dfds.fold(0, (a, d) => a + d.nodes.length),
     flows: dfds.fold(0, (a, d) => a + d.flows.length),
+    fcs: fcs.length,
+    symbols: fcs.fold(0, (a, d) => a + d.nodes.length),
+    fcEdges: fcs.fold(0, (a, d) => a + d.edges.length),
   );
+}
+
+/// บรรทัด "n เอกสาร (… ER · … DFD)" — มี Flowchart จึงต่อท้ายจำนวน Flowchart (ไม่มี = ข้อความเดิมทุกตัวอักษร)
+String docCountLine(({int docs, int ers, int dfds, int tables, int relations, int objects, int flows, int fcs, int symbols, int fcEdges}) c,
+    {bool bullet = false}) {
+  if (c.fcs == 0) {
+    return bullet ? tr('- {0} เอกสาร ({1} ER · {2} DFD)', [c.docs, c.ers, c.dfds]) : tr('{0} เอกสาร ({1} ER · {2} DFD)', [c.docs, c.ers, c.dfds]);
+  }
+  final s = tr('{0} เอกสาร ({1} ER · {2} DFD · {3} Flowchart)', [c.docs, c.ers, c.dfds, c.fcs]);
+  return bullet ? '- $s' : s;
 }

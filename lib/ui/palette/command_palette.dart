@@ -7,6 +7,12 @@ import '../../core/models/dfd_model.dart';
 import '../../core/models/enums.dart';
 import '../../core/models/workspace.dart';
 import '../../core/validate/dfd_validator.dart';
+import '../../core/layout/flowchart_geometry.dart' show fcRoutes;
+import '../../core/layout/ortho_route.dart' show routeLabelAnchor;
+import '../../core/models/flowchart_model.dart';
+import '../../core/validate/flowchart_validator.dart';
+import '../../state/flowchart_controller.dart';
+import '../flowchart/fc_panels.dart' show fcNodeTitle;
 import '../../state/dfd_controller.dart';
 import '../dfd/dfd_panels.dart' show dfdKindName;
 import '../../core/search/fuzzy.dart';
@@ -21,13 +27,13 @@ import '../workspace_issues_dialog.dart';
 import '../theme.dart';
 import '../../core/l10n/l10n.dart';
 
-enum PaletteKind { command, table, column, group, note, dfdNode, dfdFlow, issue }
+enum PaletteKind { command, table, column, group, note, dfdNode, dfdFlow, fcNode, fcEdge, issue }
 
-/// ตัวนำหน้าที่จำกัดชนิดของผลค้น: @ ตาราง/กลุ่ม · # คอลัมน์ · : วัตถุและเส้นของ DFD · ! ปัญหา · > คำสั่ง · ~ โน้ต
+/// ตัวนำหน้าที่จำกัดชนิดของผลค้น: @ ตาราง/กลุ่ม · # คอลัมน์ · : วัตถุและเส้นของ DFD/Flowchart · ! ปัญหา · > คำสั่ง · ~ โน้ต
 const Map<String, Set<PaletteKind>> kPalettePrefixes = {
   '@': {PaletteKind.table, PaletteKind.group},
   '#': {PaletteKind.column},
-  ':': {PaletteKind.dfdNode, PaletteKind.dfdFlow},
+  ':': {PaletteKind.dfdNode, PaletteKind.dfdFlow, PaletteKind.fcNode, PaletteKind.fcEdge},
   '!': {PaletteKind.issue},
   '>': {PaletteKind.command},
   '~': {PaletteKind.note},
@@ -111,6 +117,10 @@ List<PaletteEntry> buildPaletteEntries(BuildContext context) {
     cmd(tr('จัดวาง DFD อัตโนมัติ'), tr('auto layout dfd จัดตำแหน่ง แผนภาพกระแสข้อมูล'), () {
       final d = context.read<DfdController>();
       if (w.activeDocument.type == DocType.dfd && d.autoLayout()) d.fit(d.viewport);
+    }),
+    cmd(tr('จัดวาง Flowchart อัตโนมัติ'), 'auto layout flowchart ผังงาน จัดตำแหน่ง', () {
+      final f = context.read<FlowchartController>();
+      if (w.activeDocument.type == DocType.flowchart && f.autoLayout()) f.fit(f.viewport);
     }),
     byCmd(tr('พอดีหน้าจอ'), 'fit zoom', Cmd.fit),
     byCmd(tr('ซูม 100%'), 'zoom reset', Cmd.zoom100),
@@ -203,6 +213,34 @@ List<PaletteEntry> buildPaletteEntries(BuildContext context) {
           run: () => gotoDfd(context, tab.id, flow: f.id),
         ),
     ],
+    // ---- Flowchart ทุกแท็บ: สัญลักษณ์ เส้นเชื่อม และปัญหาของแท็บที่เปิดอยู่ ----
+    for (final tab in w.documents.where((t) => t.type == DocType.flowchart)) ...[
+      for (final n in w.flowchartOf(tab.id).nodes)
+        PaletteEntry(
+          kind: PaletteKind.fcNode,
+          title: fcNodeTitle(n),
+          subtitle: '${tab.name} · ${fcShapeLabel(n.shape)}',
+          search: '${n.text} ${fcShapeLabel(n.shape)} ${tab.name}',
+          run: () => gotoFlowchart(context, tab.id, node: n.id),
+        ),
+      for (final e in w.flowchartOf(tab.id).edges)
+        PaletteEntry(
+          kind: PaletteKind.fcEdge,
+          title: e.label.isEmpty ? tr('(ไม่มีป้าย)') : e.label,
+          subtitle: '${tab.name} · ${_fcName(w.flowchartOf(tab.id), e.fromId)} → ${_fcName(w.flowchartOf(tab.id), e.toId)}',
+          search: '${e.label} ${tab.name} ${_fcName(w.flowchartOf(tab.id), e.fromId)} ${_fcName(w.flowchartOf(tab.id), e.toId)}',
+          run: () => gotoFlowchart(context, tab.id, edge: e.id),
+        ),
+    ],
+    if (w.activeDocument.type == DocType.flowchart)
+      for (final i in validateFlowchart(w.flowchartOf(w.activeId)))
+        PaletteEntry(
+          kind: PaletteKind.issue,
+          title: i.title,
+          subtitle: i.message,
+          search: '${i.title} ${i.message} ${i.code}',
+          run: () => gotoFlowchart(context, w.activeId, node: i.tableId, edge: i.relationId),
+        ),
     if (w.activeDocument.type == DocType.dfd)
       for (final i in validateDfd(w.dfdOf(w.activeId), workspace: w.workspace, diagramId: w.activeId))
         PaletteEntry(
@@ -264,6 +302,34 @@ void gotoDfd(BuildContext context, String tabId, {String? node, String? flow}) {
   WidgetsBinding.instance.addPostFrameCallback((_) => apply());
 }
 
+String _fcName(FlowchartDiagram d, String id) {
+  final n = d.nodeById(id);
+  return n == null ? '?' : fcNodeTitle(n);
+}
+
+/// เปิดแท็บ Flowchart [tabId] แล้วเลือกสัญลักษณ์/เส้นที่ต้องการและเลื่อนไปให้เห็น (รอเฟรมถัดไปให้แคนวาสรู้ขนาด)
+void gotoFlowchart(BuildContext context, String tabId, {String? node, String? edge}) {
+  final w = context.read<ProjectController>().workspaceController;
+  final f = w.flowchartController(tabId);
+  if (f == null || !w.openDocument(tabId)) return;
+  void apply() {
+    if (node != null) {
+      f.selectNode(node);
+      f.reveal(node, f.viewport);
+    } else if (edge != null) {
+      f.selectEdge(edge);
+      final r = fcRoutes(f.diagram)[edge];
+      if (r != null) {
+        final (x, y) = routeLabelAnchor(r);
+        f.revealPoint(Offset(x, y), f.viewport);
+      }
+    }
+  }
+
+  apply();
+  WidgetsBinding.instance.addPostFrameCallback((_) => apply());
+}
+
 /// แยกตัวนำหน้า (@ # : ! > ~) ออกจากคำค้น — คืนชุดชนิดที่จำกัด (null = ไม่จำกัด) และคำค้นที่เหลือ
 ({Set<PaletteKind>? kinds, String query}) parsePaletteQuery(String raw) {
   final t = raw.trimLeft();
@@ -281,7 +347,15 @@ List<PaletteEntry> paletteResults(List<PaletteEntry> all, String query, {int lim
   final pool = p.kinds == null ? all : all.where((e) => p.kinds!.contains(e.kind)).toList();
   if (p.query.trim().isEmpty) {
     if (p.kinds != null) return pool.take(limit).toList();
-    const hiddenWhenEmpty = {PaletteKind.column, PaletteKind.dfdNode, PaletteKind.dfdFlow, PaletteKind.issue, PaletteKind.note};
+    const hiddenWhenEmpty = {
+      PaletteKind.column,
+      PaletteKind.dfdNode,
+      PaletteKind.dfdFlow,
+      PaletteKind.fcNode,
+      PaletteKind.fcEdge,
+      PaletteKind.issue,
+      PaletteKind.note,
+    };
     return pool.where((e) => !hiddenWhenEmpty.contains(e.kind)).take(limit).toList();
   }
   return fuzzyRank(pool, p.query, (e) => e.search).take(limit).toList();
@@ -431,6 +505,8 @@ class _CommandPaletteState extends State<CommandPalette> {
       PaletteKind.note => Icons.sticky_note_2_outlined,
       PaletteKind.dfdNode => Icons.account_tree_outlined,
       PaletteKind.dfdFlow => Icons.arrow_right_alt_rounded,
+      PaletteKind.fcNode => Icons.schema_outlined,
+      PaletteKind.fcEdge => Icons.trending_flat_rounded,
       PaletteKind.issue => Icons.warning_amber_rounded,
     };
     return MouseRegion(

@@ -9,7 +9,7 @@ import 'canvas/context_menu.dart';
 import 'document_actions.dart';
 import 'theme.dart';
 
-export 'document_actions.dart' show brokenLinkLines;
+export 'document_actions.dart' show brokenLinkLines, docTypeIcon;
 
 /// แท็บแผนภาพเหนือแคนวาส (แบบแท็บเอกสารของโปรแกรมกราฟิก): คลิกสลับ ลากเรียงลำดับ
 /// คลิกขวา = เปลี่ยนชื่อ/ทำสำเนา/ลบ, ปุ่ม + = สร้างแผนภาพใหม่ (ER หรือ DFD) — ER อันสุดท้ายลบไม่ได้
@@ -66,6 +66,14 @@ class _DiagramTabBarState extends State<DiagramTabBar> {
             height: 36,
             child: Text(
               tr('DFD (Data Flow Diagram)'),
+              style: const TextStyle(fontSize: 13),
+            ),
+          ),
+          PopupMenuItem(
+            value: DocType.flowchart,
+            height: 36,
+            child: Text(
+              tr('Flowchart (ผังงาน)'),
               style: const TextStyle(fontSize: 13),
             ),
           ),
@@ -219,9 +227,7 @@ class _TabState extends State<_Tab> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
-                      t.type == DocType.er
-                          ? Icons.table_chart_outlined
-                          : Icons.account_tree_outlined,
+                      docTypeIcon(t.type),
                       size: 14,
                       color: widget.active ? C.primary : C.muted,
                     ),
