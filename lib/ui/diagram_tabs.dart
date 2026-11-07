@@ -3,12 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/l10n/l10n.dart';
-import '../core/models/doc_ref.dart';
 import '../core/models/workspace.dart';
 import '../state/workspace_controller.dart';
 import 'canvas/context_menu.dart';
-import 'prompt_dialog.dart';
+import 'document_actions.dart';
 import 'theme.dart';
+
+export 'document_actions.dart' show brokenLinkLines;
 
 /// แท็บแผนภาพเหนือแคนวาส (แบบแท็บเอกสารของโปรแกรมกราฟิก): คลิกสลับ ลากเรียงลำดับ
 /// คลิกขวา = เปลี่ยนชื่อ/ทำสำเนา/ลบ, ปุ่ม + = สร้างแผนภาพใหม่ (ER หรือ DFD) — ER อันสุดท้ายลบไม่ได้
@@ -148,83 +149,12 @@ class _Tab extends StatefulWidget {
 class _TabState extends State<_Tab> {
   bool _hover = false;
 
-  Future<void> _rename(BuildContext context) async {
-    final c = context.read<WorkspaceController>();
-    final r = await showDialog<PromptResult>(
-      context: context,
-      builder: (_) => TextPromptDialog(
-        title: tr('เปลี่ยนชื่อแผนภาพ'),
-        initial: widget.tab.name,
-        label: tr('ชื่อ'),
-      ),
-    );
-    if (r == null || !context.mounted) return;
-    if (!c.renameDocument(widget.tab.id, r.text)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr('ชื่อว่างหรือซ้ำกับแผนภาพอื่น'))),
-      );
-    }
-  }
+  Future<void> _rename(BuildContext context) => renameDocumentDialog(context, widget.tab.id);
 
   void _duplicate(BuildContext context) =>
       context.read<WorkspaceController>().duplicateDocument(widget.tab.id);
 
-  Future<void> _delete(BuildContext context) async {
-    final c = context.read<WorkspaceController>();
-    if (!c.canDeleteDocument(widget.tab.id)) return;
-    final broken = brokenLinkLines(c, widget.tab.id);
-    const maxLines = 8;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(tr('ลบแผนภาพ "{0}"', [widget.tab.name])),
-        content: SizedBox(
-          width: 420,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(tr('เนื้อหาในแผนภาพนี้จะหายไปและย้อนกลับด้วย Ctrl+Z ไม่ได้')),
-              if (broken.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Text(
-                  tr('ลิงก์จากแผนภาพอื่น {0} รายการจะใช้ไม่ได้:', [broken.length]),
-                  key: const ValueKey('delete-broken-links'),
-                  style: TextStyle(color: C.danger, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 6),
-                for (final line in broken.take(maxLines))
-                  Padding(
-                    padding: const EdgeInsets.only(left: 8, bottom: 2),
-                    child: Text('• $line', style: const TextStyle(fontSize: 12.5)),
-                  ),
-                if (broken.length > maxLines)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 8),
-                    child: Text(
-                      tr('และอีก {0} รายการ', [broken.length - maxLines]),
-                      style: TextStyle(fontSize: 12.5, color: C.muted),
-                    ),
-                  ),
-              ],
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(tr('ยกเลิก')),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: C.danger),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(tr('ลบ')),
-          ),
-        ],
-      ),
-    );
-    if (ok == true) c.deleteDocument(widget.tab.id);
-  }
+  Future<void> _delete(BuildContext context) => deleteDocumentDialog(context, widget.tab.id);
 
   @override
   Widget build(BuildContext context) {
@@ -335,23 +265,4 @@ class _TabState extends State<_Tab> {
       ),
     );
   }
-}
-
-/// รายการลิงก์จากเอกสารอื่นที่จะใช้ไม่ได้ถ้าลบเอกสาร [docId] (ข้อความหนึ่งบรรทัดต่อหนึ่งลิงก์ ใช้ในกล่องยืนยันการลบ)
-List<String> brokenLinkLines(WorkspaceController c, String docId) {
-  final target = c.documentById(docId);
-  final out = <String>[];
-  for (final (fromDoc, fromElement, ref) in c.backlinksOf(docId)) {
-    final src = c.documentById(fromDoc);
-    final node = src?.dfd?.nodeById(fromElement);
-    final from = '${src?.name ?? fromDoc} · ${node == null || node.title.isEmpty ? tr('(ไม่มีชื่อ)') : node.title}';
-    out.add(switch (ref.kind) {
-      DocRefKind.storeTable => tr('{0} → ตาราง {1}', [
-          from,
-          target?.er?.tableById(ref.elementId ?? '')?.name ?? ref.elementId ?? '?',
-        ]),
-      DocRefKind.dfdChild => tr('{0} → แผนภาพย่อย', [from]),
-    });
-  }
-  return out;
 }

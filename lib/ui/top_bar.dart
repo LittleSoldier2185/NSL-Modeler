@@ -280,6 +280,14 @@ class TopBar extends StatelessWidget {
             () => cv.showDock(DockTab.issues),
           ),
           _item(tr('ปัญหาทั้งโปรเจกต์…'), '', () => showWorkspaceIssues(context)),
+          _item(
+            '${context.read<AppSettings>().showExplorer ? '✓ ' : '    '}${tr('แสดงตัวสำรวจโปรเจกต์')}',
+            '',
+            () {
+              final s = context.read<AppSettings>();
+              s.setShowExplorer(!s.showExplorer);
+            },
+          ),
           div,
           _item(
             tr('ขนาดกระดาน…'),

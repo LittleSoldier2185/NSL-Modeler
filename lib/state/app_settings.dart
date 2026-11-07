@@ -93,6 +93,7 @@ class AppSettings extends ChangeNotifier {
     bool showFlow = true,
     bool flowAnimation = false,
     bool flowAlways = false,
+    bool showExplorer = false,
     FlowSpeed flowSpeed = FlowSpeed.normal,
     String? lastSeenVersion,
     PanelLayout? layout,
@@ -105,6 +106,8 @@ class AppSettings extends ChangeNotifier {
         _flowAnim = flowAnimation,
         // ignore: prefer_initializing_formals
         _flowAlways = flowAlways,
+        // ignore: prefer_initializing_formals
+        _showExplorer = showExplorer,
         // ignore: prefer_initializing_formals
         _flowSpeed = flowSpeed,
         _lang = lang ?? Lang.th,
@@ -127,6 +130,7 @@ class AppSettings extends ChangeNotifier {
   bool _showFlow;
   bool _flowAnim;
   bool _flowAlways;
+  bool _showExplorer;
   FlowSpeed _flowSpeed;
   String? _lastSeen;
 
@@ -147,6 +151,9 @@ class AppSettings extends ChangeNotifier {
   bool get flowAlways => _flowAlways;
 
   FlowSpeed get flowSpeed => _flowSpeed;
+
+  /// แสดงแผง Project Explorer (รายการเอกสารทั้งโปรเจกต์) เหนือแผงซ้าย
+  bool get showExplorer => _showExplorer;
 
   /// รุ่นของโปรแกรมที่ผู้ใช้เปิดดู patch note ไปแล้วล่าสุด (null = ยังไม่เคย)
   String? get lastSeenVersion => _lastSeen;
@@ -176,6 +183,7 @@ class AppSettings extends ChangeNotifier {
           showFlow: m['flow'] != false,
           flowAnimation: m['flowAnim'] != false,
           flowAlways: m['flowAll'] != false,
+          showExplorer: m['explorer'] != false,
           flowSpeed: FlowSpeed.fromName(m['flowSpeed']),
           lastSeenVersion: m['seen'] as String?,
           layout: PanelLayout.fromJson(m['layout']),
@@ -183,7 +191,7 @@ class AppSettings extends ChangeNotifier {
         );
       }
     } catch (_) {}
-    return AppSettings(file: file, flowAnimation: true, flowAlways: true);
+    return AppSettings(file: file, flowAnimation: true, flowAlways: true, showExplorer: true);
   }
 
   void setLang(Lang l) {
@@ -234,6 +242,13 @@ class AppSettings extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setShowExplorer(bool v) {
+    if (_showExplorer == v) return;
+    _showExplorer = v;
+    _save();
+    notifyListeners();
+  }
+
   void setFlowSpeed(FlowSpeed v) {
     if (_flowSpeed == v) return;
     _flowSpeed = v;
@@ -253,6 +268,7 @@ class AppSettings extends ChangeNotifier {
         'flow': _showFlow,
         'flowAnim': _flowAnim,
         'flowAll': _flowAlways,
+        'explorer': _showExplorer,
         'flowSpeed': _flowSpeed.name,
         if (_lastSeen != null) 'seen': _lastSeen,
         'layout': layout.toJson(),

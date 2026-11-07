@@ -15,6 +15,7 @@ import 'canvas/canvas_view.dart';
 import 'dfd/dfd_panels.dart';
 import 'dfd/dfd_view.dart';
 import 'diagram_tabs.dart';
+import 'project_explorer.dart';
 import 'status_bar.dart';
 import 'language_dialog.dart';
 import 'panel_splitter.dart';
@@ -140,6 +141,7 @@ class _HomePageState extends State<HomePage> {
         builder: (context, _) {
           final (leftW, rightW) = layout.effectiveWidths(box.maxWidth);
           final dockH = layout.effectiveDock(box.maxHeight);
+          final showExplorer = context.select<AppSettings, bool>((s) => s.showExplorer);
           final collapsed = context.select<CanvasController, bool>((cv) => cv.dockCollapsed);
           // แท็บ DFD: แผงซ้าย/ขวาและพื้นที่วาดของแผนภาพนั้น (ไม่มีแผง SQL)
           final isEr = context.select<WorkspaceController, DocType?>((w) => w.activeDocument.type) == DocType.er;
@@ -147,7 +149,13 @@ class _HomePageState extends State<HomePage> {
           final docId = context.select<WorkspaceController, String>((w) => isEr ? w.currentEr.docId : w.activeId);
           return Stack(children: [
             Row(children: [
-              SizedBox(width: leftW, child: isEr ? _leftPanel : _dfdLeft),
+              SizedBox(
+                width: leftW,
+                child: Column(children: [
+                  if (showExplorer) ProjectExplorer(maxHeight: box.maxHeight * 0.4),
+                  Expanded(child: isEr ? _leftPanel : _dfdLeft),
+                ]),
+              ),
               Expanded(
                 child: CustomPaint(
                   foregroundPainter: const _EdgeShadow(),
