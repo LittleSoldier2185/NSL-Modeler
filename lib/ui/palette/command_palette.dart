@@ -17,6 +17,7 @@ import '../app_actions.dart';
 import '../file_actions.dart';
 import '../shortcuts.dart';
 import '../whats_new_dialog.dart';
+import '../workspace_issues_dialog.dart';
 import '../theme.dart';
 import '../../core/l10n/l10n.dart';
 
@@ -119,6 +120,7 @@ List<PaletteEntry> buildPaletteEntries(BuildContext context) {
     byCmd(tr('ใช้ {0}', [Dialect.mssql.label]), tr('dialect mssql สลับ'), Cmd.dialectMssql),
     cmd(tr('แสดง SQL Preview'), 'sql preview', () => cv.showDock(DockTab.sql)),
     cmd(tr('แสดงปัญหาที่ตรวจพบ'), tr('issues problems validate ตรวจสอบ'), () => cv.showDock(DockTab.issues)),
+    cmd(tr('ปัญหาทั้งโปรเจกต์…'), 'workspace project issues problems all documents ทุกเอกสาร ตรวจสอบ', () => showWorkspaceIssues(context)),
     byCmd(tr('ค้นหาตาราง / คอลัมน์'), 'search find', Cmd.find),
     byCmd(tr('ดูคีย์ลัดทั้งหมด'), 'shortcuts help keyboard', Cmd.help),
     cmd(tr('มีอะไรใหม่ (Patch note)'), 'whats new patch note changelog release version อัปเดต รุ่น', () => showWhatsNew(context)),
@@ -177,7 +179,7 @@ List<PaletteEntry> buildPaletteEntries(BuildContext context) {
           title: n.title.isEmpty ? tr('(ไม่มีชื่อ)') : n.title,
           subtitle: '${tab.name} · ${dfdKindName(n.kind)}',
           search: '${n.title} ${tab.name}',
-          run: () => _gotoDfd(context, tab.id, node: n.id),
+          run: () => gotoDfd(context, tab.id, node: n.id),
         ),
       for (final f in w.dfdOf(tab.id).flows)
         PaletteEntry(
@@ -185,7 +187,7 @@ List<PaletteEntry> buildPaletteEntries(BuildContext context) {
           title: f.label.isEmpty ? tr('(ไม่มีชื่อ)') : f.label,
           subtitle: '${tab.name} · ${w.dfdOf(tab.id).nodeById(f.fromId)?.title ?? '?'} → ${w.dfdOf(tab.id).nodeById(f.toId)?.title ?? '?'}',
           search: '${f.label} ${tab.name} ${w.dfdOf(tab.id).nodeById(f.fromId)?.title ?? ''} ${w.dfdOf(tab.id).nodeById(f.toId)?.title ?? ''}',
-          run: () => _gotoDfd(context, tab.id, flow: f.id),
+          run: () => gotoDfd(context, tab.id, flow: f.id),
         ),
     ],
     if (w.activeDocument.type == DocType.dfd)
@@ -195,7 +197,7 @@ List<PaletteEntry> buildPaletteEntries(BuildContext context) {
           title: i.title,
           subtitle: i.message,
           search: '${i.title} ${i.message} ${i.code}',
-          run: () => _gotoDfd(context, w.activeId, node: i.tableId, flow: i.relationId),
+          run: () => gotoDfd(context, w.activeId, node: i.tableId, flow: i.relationId),
         ),
     for (final t in c.project.tables) ...[
       PaletteEntry(
@@ -225,7 +227,7 @@ List<PaletteEntry> buildPaletteEntries(BuildContext context) {
 }
 
 /// เปิดแท็บ DFD [tabId] แล้วเลือกวัตถุ/เส้นที่ต้องการและเลื่อนไปให้เห็น (รอเฟรมถัดไปเพื่อให้แคนวาสของแท็บนั้นสร้างเสร็จและรู้ขนาด)
-void _gotoDfd(BuildContext context, String tabId, {String? node, String? flow}) {
+void gotoDfd(BuildContext context, String tabId, {String? node, String? flow}) {
   final w = context.read<ProjectController>().workspaceController;
   final d = w.dfdController(tabId);
   if (d == null || !w.openDocument(tabId)) return;

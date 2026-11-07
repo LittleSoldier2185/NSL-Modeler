@@ -7,6 +7,7 @@ import '../core/storage/project_file.dart';
 import '../core/models/workspace.dart';
 import '../core/validate/dfd_validator.dart';
 import '../core/validate/issue.dart';
+import 'workspace_issues_dialog.dart';
 import '../state/app_settings.dart';
 import '../state/dfd_controller.dart';
 import '../state/project_controller.dart';
@@ -95,7 +96,7 @@ class StatusBar extends StatelessWidget {
           ),
         ),
         sep(),
-        _IssueBadge(errors: errors, warnings: warnings, onTap: isEr ? () => cv.showDock(DockTab.issues) : null),
+        _IssueBadge(errors: errors, warnings: warnings, onTap: isEr ? () => cv.showDock(DockTab.issues) : () => showWorkspaceIssues(context)),
         sep(),
         Text('${(zoom * 100).round()}%', key: const ValueKey('status-zoom'), style: small),
         if (w.dirty) ...[

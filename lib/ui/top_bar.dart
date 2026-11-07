@@ -17,6 +17,7 @@ import 'palette/command_palette.dart';
 import 'search_launcher.dart';
 import 'shortcuts.dart';
 import 'whats_new_dialog.dart';
+import 'workspace_issues_dialog.dart';
 import 'theme.dart';
 import 'window_chrome.dart';
 
@@ -278,6 +279,7 @@ class TopBar extends StatelessWidget {
             '',
             () => cv.showDock(DockTab.issues),
           ),
+          _item(tr('ปัญหาทั้งโปรเจกต์…'), '', () => showWorkspaceIssues(context)),
           div,
           _item(
             tr('ขนาดกระดาน…'),

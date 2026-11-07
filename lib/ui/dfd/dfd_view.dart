@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:clock/clock.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -77,7 +78,7 @@ class _DfdCanvasState extends State<DfdCanvas> {
 
     switch (d.tool) {
       case DfdTool.select:
-        final now = DateTime.now();
+        final now = clock.now();
         final id = hit.node?.id ?? hit.flow ?? hit.boundary?.id;
         final doubleTap = id != null && id == _lastTapId && now.difference(_lastTap).inMilliseconds < 400;
         _lastTap = now;
