@@ -4,18 +4,29 @@ import '../models/project.dart';
 import '../models/workspace.dart';
 import '../models/table_model.dart';
 import '../types/type_label.dart';
+import '../validate/issue.dart';
+import '../validate/workspace_validator.dart';
 import 'dfd_svg.dart';
+import 'workspace_summary.dart';
 import 'svg_export.dart';
 
 /// เอกสารโครงสร้างฐานข้อมูลเป็นไฟล์ HTML ไฟล์เดียว (CSS ฝังในไฟล์ ไม่มี JavaScript ไม่เรียกของภายนอก)
 /// - มีสารบัญ ภาพแผนภาพ ER (SVG ฝัง) แผนภาพ DFD และรายละเอียดทุกตาราง
 /// - ปรับสีตามโหมดมืด/สว่างของเครื่องผู้อ่าน และมี CSS สำหรับพิมพ์ — เปิดในเบราว์เซอร์แล้วสั่งพิมพ์เป็น PDF ได้
 /// ผลลัพธ์คงที่ (ไม่มีวันที่/สุ่ม)
-/// เนื้อหา ER มาจากเอกสาร ER ชิ้นแรกของ [w] (ไม่มี = โปรเจกต์ว่าง) ; DFD = เอกสาร DFD ทุกชิ้นที่มีวัตถุ ตามลำดับเอกสาร
+/// - โปรเจกต์ที่มี ER ชิ้นเดียวและไม่มีเอกสารอื่น (หรือไม่มีเอกสารเลย) = รูปแบบเดิม
+/// - นอกนั้น = ภาพรวมโปรเจกต์ (เอกสาร ตัวเลขสรุป ปัญหาทั้งโปรเจกต์) -> ER ทุกอัน (ตามลำดับเอกสาร มี dialect ของตัวเอง)
+///   -> DFD ทุกอัน (ภาพ + ตารางวัตถุ/เส้นข้อมูล + ปัญหาของ DFD นั้น) ; anchor ของตารางมี id เอกสารนำหน้ากันชนข้าม ER
 String exportHtmlDocument(Workspace w, {bool includeDiagrams = true}) {
-  final p = w.documentsOf(DocType.er).firstOrNull?.er ?? Project(name: w.name);
+  final docs = knownDocs(w);
+  final legacy = docs.isEmpty || isSingleErWorkspace(w);
+  final erDocs = [for (final d in docs) if (d.type == DocType.er) d];
+  final dfdDocs = [for (final d in docs) if (d.type == DocType.dfd) d];
+  final p0 = erDocs.firstOrNull?.er ?? Project(name: w.name);
   final b = StringBuffer();
-  final title = _esc(p.name.trim().isEmpty ? 'schema' : p.name.trim());
+  final title = _esc(legacy
+      ? (p0.name.trim().isEmpty ? 'schema' : p0.name.trim())
+      : (w.name.trim().isEmpty ? 'project' : w.name.trim()));
   b.writeln('<!DOCTYPE html>');
   b.writeln('<html lang="${currentLang.code}">');
   b.writeln('<head>');
@@ -28,50 +39,72 @@ String exportHtmlDocument(Workspace w, {bool includeDiagrams = true}) {
   b.writeln('<main>');
   b.writeln('<header>');
   b.writeln('<h1>$title</h1>');
-  b.writeln('<p class="meta">${_esc(p.dialect.label)} · ${_esc(tr('{0} ตาราง · {1} ความสัมพันธ์', [p.tables.length, p.relations.length]))}</p>');
+  if (legacy) {
+    b.writeln('<p class="meta">${_esc(p0.dialect.label)} · ${_esc(tr('{0} ตาราง · {1} ความสัมพันธ์', [p0.tables.length, p0.relations.length]))}</p>');
+  } else {
+    final c = workspaceCounts(w);
+    b.writeln('<p class="meta">${_esc(tr('{0} เอกสาร ({1} ER · {2} DFD)', [c.docs, c.ers, c.dfds]))}</p>');
+  }
   b.writeln('</header>');
 
+  final prefixOf = {for (final d in erDocs) d.id: legacy ? '' : '${_safeId(d.id)}-'};
+  final erSvgs = {
+    for (final d in erDocs) d.id: includeDiagrams ? exportSvg(d.er!, includeNotes: true) : null,
+  };
+  String erDiagramId(ProjectDocument d) => legacy ? 'er-diagram' : 'er-${_safeId(d.id)}';
+
   // สารบัญ
-  final dfdTabs = [for (final d in w.documentsOf(DocType.dfd)) if (d.dfd!.nodes.isNotEmpty) d];
-  final erSvg = includeDiagrams ? exportSvg(p, includeNotes: true) : null;
-  if (p.tables.isNotEmpty || dfdTabs.isNotEmpty) {
+  final hasAny = erDocs.any((d) => d.er!.tables.isNotEmpty) || dfdDocs.isNotEmpty;
+  if (hasAny || !legacy) {
     b.writeln('<nav aria-label="${_esc(tr('สารบัญ'))}">');
     b.writeln('<h2>${_esc(tr('สารบัญ'))}</h2>');
     b.writeln('<ul>');
-    if (erSvg != null) b.writeln('<li><a href="#er-diagram">${_esc(tr('แผนภาพ ER'))}</a></li>');
-    for (final d in includeDiagrams ? dfdTabs : const <ProjectDocument>[]) {
-      b.writeln('<li><a href="#dfd-${_esc(d.id)}">DFD: ${_esc(d.name)}</a></li>');
+    if (!legacy) b.writeln('<li><a href="#overview">${_esc(tr('ภาพรวมโปรเจกต์'))}</a></li>');
+    for (final d in erDocs) {
+      if (!legacy) b.writeln('<li><a href="#erdoc-${_safeId(d.id)}">ER: ${_esc(d.name)}</a></li>');
+      if (erSvgs[d.id] != null) b.writeln('<li><a href="#${erDiagramId(d)}">${_esc(tr('แผนภาพ ER'))}</a></li>');
+      for (final t in d.er!.tables) {
+        final c = t.comment.trim().isEmpty ? '' : ' <span class="muted">— ${_esc(_oneLine(t.comment))}</span>';
+        b.writeln('<li><a href="#${_anchor(t, prefixOf[d.id]!)}">${_esc(t.name)}</a>$c</li>');
+      }
     }
-    for (final t in p.tables) {
-      final c = t.comment.trim().isEmpty ? '' : ' <span class="muted">— ${_esc(_oneLine(t.comment))}</span>';
-      b.writeln('<li><a href="#${_anchor(t)}">${_esc(t.name)}</a>$c</li>');
+    for (final d in dfdDocs) {
+      b.writeln('<li><a href="#dfd-${_esc(d.id)}">DFD: ${_esc(d.name)}</a></li>');
     }
     b.writeln('</ul>');
     b.writeln('</nav>');
   }
 
-  if (erSvg != null) {
-    b.writeln('<section id="er-diagram">');
-    b.writeln('<h2>${_esc(tr('แผนภาพ ER'))}</h2>');
-    b.writeln('<div class="diagram">${_inlineSvg(erSvg)}</div>');
-    b.writeln('</section>');
-  }
-  if (includeDiagrams) {
-    for (final d in dfdTabs) {
-      final svg = exportDfdSvg(d.dfd!, title: d.name);
-      if (svg == null) continue;
-      b.writeln('<section id="dfd-${_esc(d.id)}">');
-      b.writeln('<h2>DFD: ${_esc(d.name)}</h2>');
-      b.writeln('<div class="diagram">${_inlineSvg(svg)}</div>');
+  if (!legacy) _overview(b, w, [...erDocs, ...dfdDocs]);
+
+  for (final d in erDocs) {
+    final p = d.er!;
+    final pre = prefixOf[d.id]!;
+    if (!legacy) {
+      b.writeln('<section class="group" id="erdoc-${_safeId(d.id)}">');
+      b.writeln('<h2>ER: ${_esc(d.name)}</h2>');
+      b.writeln('<p class="meta">${_esc(p.dialect.label)} · ${_esc(tr('{0} ตาราง · {1} ความสัมพันธ์', [p.tables.length, p.relations.length]))}</p>');
       b.writeln('</section>');
     }
+    final erSvg = erSvgs[d.id];
+    if (erSvg != null) {
+      b.writeln('<section id="${erDiagramId(d)}">');
+      b.writeln('<h2>${_esc(tr('แผนภาพ ER'))}</h2>');
+      b.writeln('<div class="diagram">${_inlineSvg(erSvg)}</div>');
+      b.writeln('</section>');
+    }
+    if (p.tables.isEmpty) {
+      b.writeln('<p class="muted">${_esc(tr('ยังไม่มีตาราง'))}</p>');
+    }
+    for (final t in p.tables) {
+      _table(b, p, t, pre);
+    }
   }
+  if (erDocs.isEmpty && legacy) b.writeln('<p class="muted">${_esc(tr('ยังไม่มีตาราง'))}</p>');
 
-  if (p.tables.isEmpty) {
-    b.writeln('<p class="muted">${_esc(tr('ยังไม่มีตาราง'))}</p>');
-  }
-  for (final t in p.tables) {
-    _table(b, p, t);
+  final issues = exportIssues(w);
+  for (final d in dfdDocs) {
+    _dfd(b, w, d, [for (final i in issues) if (i.docId == d.id) i], includeDiagrams);
   }
   b.writeln('<footer>${_esc(tr('สร้างโดย NSL Dev'))}</footer>');
   b.writeln('</main>');
@@ -80,8 +113,93 @@ String exportHtmlDocument(Workspace w, {bool includeDiagrams = true}) {
   return b.toString();
 }
 
-void _table(StringBuffer b, Project p, TableModel t) {
-  b.writeln('<section class="table" id="${_anchor(t)}">');
+void _overview(StringBuffer b, Workspace w, List<ProjectDocument> docs) {
+  final c = workspaceCounts(w);
+  final issues = exportIssues(w);
+  final ec = issues.where((i) => i.issue.severity == Severity.error).length;
+  b.writeln('<section id="overview">');
+  b.writeln('<h2>${_esc(tr('ภาพรวมโปรเจกต์'))}</h2>');
+  b.writeln('<ul>');
+  b.writeln('<li>${_esc(tr('{0} เอกสาร ({1} ER · {2} DFD)', [c.docs, c.ers, c.dfds]))}</li>');
+  b.writeln('<li>${_esc(tr('{0} ตาราง · {1} ความสัมพันธ์', [c.tables, c.relations]))}</li>');
+  b.writeln('<li>${_esc(tr('{0} วัตถุ DFD · {1} เส้นข้อมูล', [c.objects, c.flows]))}</li>');
+  b.writeln('<li>${_esc(tr('{0} ข้อผิดพลาด · {1} คำเตือน', [ec, issues.length - ec]))}</li>');
+  b.writeln('</ul>');
+  b.writeln('<h3>${_esc(tr('เอกสารในโปรเจกต์'))}</h3><ul>');
+  for (final d in docs) {
+    if (d.type == DocType.er) {
+      final p = d.er!;
+      b.writeln('<li><a href="#erdoc-${_safeId(d.id)}">ER: ${_esc(d.name)}</a> <span class="muted">— ${_esc(p.dialect.label)} · '
+          '${_esc(tr('{0} ตาราง · {1} ความสัมพันธ์', [p.tables.length, p.relations.length]))}</span></li>');
+    } else {
+      final g = d.dfd!;
+      b.writeln('<li><a href="#dfd-${_esc(d.id)}">DFD: ${_esc(d.name)}</a> <span class="muted">— '
+          '${_esc(tr('{0} วัตถุ DFD · {1} เส้นข้อมูล', [g.nodes.length, g.flows.length]))}</span></li>');
+    }
+  }
+  b.writeln('</ul>');
+  b.writeln('<h3>${_esc(tr('ปัญหาที่ตรวจพบทั้งโปรเจกต์'))}</h3>');
+  if (issues.isEmpty) {
+    b.writeln('<p class="muted">${_esc(tr('ไม่พบปัญหา'))}</p>');
+  } else {
+    b.writeln('<table><thead><tr><th>${_esc(tr('ระดับ'))}</th><th>${_esc(tr('เอกสาร'))}</th><th>${_esc(tr('ปัญหา'))}</th></tr></thead><tbody>');
+    for (final i in issues) {
+      b.writeln('<tr><td>${_sev(i.issue.severity)}</td><td>${_esc(i.docName)}</td>'
+          '<td>${_esc(i.issue.title)} <span class="muted">— ${_esc(_oneLine(i.issue.message))}</span></td></tr>');
+    }
+    b.writeln('</tbody></table>');
+  }
+  b.writeln('</section>');
+}
+
+String _sev(Severity s) => '<span class="tag sev-${s.name}">${_esc(severityLabel(s))}</span>';
+
+void _dfd(StringBuffer b, Workspace w, ProjectDocument d, List<WorkspaceIssue> issues, bool includeDiagrams) {
+  final g = d.dfd!;
+  b.writeln('<section id="dfd-${_esc(d.id)}">');
+  b.writeln('<h2>DFD: ${_esc(d.name)}</h2>');
+  b.writeln('<p class="meta">${_esc(tr('{0} วัตถุ DFD · {1} เส้นข้อมูล', [g.nodes.length, g.flows.length]))}</p>');
+  if (g.nodes.isEmpty) {
+    b.writeln('<p class="muted">${_esc(tr('ไม่มีวัตถุ'))}</p>');
+  } else {
+    final svg = includeDiagrams ? exportDfdSvg(g, title: d.name) : null; // ธีมสว่างเสมอ
+    if (svg != null) b.writeln('<div class="diagram">${_inlineSvg(svg)}</div>');
+    b.writeln('<h3>${_esc(tr('วัตถุ'))}</h3>');
+    b.writeln('<table><thead><tr><th>${_esc(tr('ชนิด'))}</th><th>${_esc(tr('เลข/รหัส'))}</th><th>${_esc(tr('ชื่อ'))}</th>'
+        '<th>${_esc(tr('ตาราง ER'))}</th><th>${_esc(tr('แผนภาพย่อย'))}</th></tr></thead><tbody>');
+    for (final n in g.nodes) {
+      final childId = n.childId;
+      final child = childId == null ? null : w.documentById(childId);
+      final childCell = child == null ? '' : '<a href="#dfd-${_esc(child.id)}">${_esc(child.name)}</a>';
+      b.writeln('<tr><td>${_esc(dfdKindLabel(n.kind))}</td><td>${_esc(n.number)}</td><td>${_esc(n.name)}</td>'
+          '<td>${_esc(dfdStoreTableLabel(w, n) ?? '')}</td><td>$childCell</td></tr>');
+    }
+    b.writeln('</tbody></table>');
+    if (g.flows.isNotEmpty) {
+      b.writeln('<h3>${_esc(tr('เส้นข้อมูล'))}</h3>');
+      b.writeln('<table><thead><tr><th>${_esc(tr('จาก'))}</th><th class="c">${_esc(tr('ทิศทาง'))}</th><th>${_esc(tr('ถึง'))}</th>'
+          '<th>${_esc(tr('ป้ายชื่อ'))}</th></tr></thead><tbody>');
+      for (final f in g.flows) {
+        b.writeln('<tr><td>${_esc(g.nodeById(f.fromId)?.title ?? '?')}</td><td class="c">${f.bidirectional ? '↔' : '→'}</td>'
+            '<td>${_esc(g.nodeById(f.toId)?.title ?? '?')}</td><td>${_esc(f.label)}</td></tr>');
+      }
+      b.writeln('</tbody></table>');
+    }
+  }
+  if (issues.isNotEmpty) {
+    b.writeln('<h3>${_esc(tr('ปัญหาที่ตรวจพบ'))}</h3><ul>');
+    for (final i in issues) {
+      b.writeln('<li>${_sev(i.issue.severity)} ${_esc(i.issue.title)} <span class="muted">— ${_esc(_oneLine(i.issue.message))}</span></li>');
+    }
+    b.writeln('</ul>');
+  }
+  b.writeln('</section>');
+}
+
+String _safeId(String s) => s.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
+
+void _table(StringBuffer b, Project p, TableModel t, String pre) {
+  b.writeln('<section class="table" id="${_anchor(t, pre)}">');
   b.writeln('<h2>${_esc(t.name)}</h2>');
   if (t.comment.trim().isNotEmpty) b.writeln('<p class="comment">${_esc(t.comment.trim()).replaceAll('\n', '<br>')}</p>');
   if (t.columns.isEmpty) {
@@ -115,7 +233,7 @@ void _table(StringBuffer b, Project p, TableModel t) {
     for (final r in out) {
       final to = p.tableById(r.toTableId);
       final target = to == null ? '?' : to.name;
-      final link = to == null ? _esc(target) : '<a href="#${_anchor(to)}">${_esc(target)}</a>';
+      final link = to == null ? _esc(target) : '<a href="#${_anchor(to, pre)}">${_esc(target)}</a>';
       final actions = [
         if (r.onDelete.sql != 'NO ACTION') 'ON DELETE ${r.onDelete.sql}',
         if (r.onUpdate.sql != 'NO ACTION') 'ON UPDATE ${r.onUpdate.sql}',
@@ -131,7 +249,7 @@ void _table(StringBuffer b, Project p, TableModel t) {
     b.writeln('<h3>${_esc(tr('ถูกอ้างถึงโดย'))}</h3><ul>');
     for (final r in incoming) {
       final from = p.tableById(r.fromTableId);
-      final link = from == null ? '?' : '<a href="#${_anchor(from)}">${_esc(from.name)}</a>';
+      final link = from == null ? '?' : '<a href="#${_anchor(from, pre)}">${_esc(from.name)}</a>';
       b.writeln('<li>$link.<code>${_esc(from?.columnById(r.fromColumnId)?.name ?? '?')}</code></li>');
     }
     b.writeln('</ul>');
@@ -152,7 +270,7 @@ String _def(ColumnModel c) => (c.defaultValue ?? '').trim();
 String _oneLine(String s) => s.replaceAll(RegExp(r'\s+'), ' ').trim();
 
 /// id ของ anchor ต่อตาราง — ใช้ id ภายในไม่ใช่ชื่อ (ชื่อซ้ำ/มีอักขระพิเศษก็ไม่ชน)
-String _anchor(TableModel t) => 't-${t.id.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_')}';
+String _anchor(TableModel t, String pre) => 't-$pre${t.id.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_')}';
 
 /// ตัดส่วนหัว `<?xml ...?>` ออก และให้ภาพย่อลงตามความกว้างหน้า
 String _inlineSvg(String svg) {
@@ -201,6 +319,8 @@ th{background:var(--head);font-weight:600}
 .c{text-align:center}
 code{font:13px/1.4 Consolas,"Cascadia Mono",monospace}
 .tag{display:inline-block;padding:0 6px;border-radius:4px;background:var(--tag);color:var(--tagfg);font-size:11.5px;font-weight:600}
+.tag.sev-error{background:#fee2e2;color:#991b1b}.tag.sev-warning{background:var(--pk);color:var(--pkfg)}
+.group h2{font-size:24px;margin:0}
 .tag.pk{background:var(--pk);color:var(--pkfg)}.tag.fk{background:var(--fk);color:var(--fkfg)}
 ul{margin:4px 0;padding-left:22px}
 footer{margin-top:40px;color:var(--muted);font-size:12px;text-align:center}

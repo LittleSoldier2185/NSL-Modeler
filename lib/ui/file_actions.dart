@@ -222,15 +222,21 @@ class FileActions {
   /// เปิดหน้าต่าง Export เอกสาร/ข้อมูล (Data dictionary, Mermaid, DBML, ข้อมูลตัวอย่าง)
   static Future<void> exportText(BuildContext context, ProjectController c,
       {TextExportKind kind = TextExportKind.dictionary}) async {
-    if (c.project.tables.isEmpty) {
+    final ws = c.workspaceController.workspace;
+    final empty = ws.tableCount == 0 && !ws.documentsOf(DocType.dfd).any((d) => d.dfd!.nodes.isNotEmpty);
+    if (empty) {
       _toast(context, tr('ยังไม่มีตารางให้ Export'));
       return;
     }
     await showDialog<void>(
       context: context,
-      builder: (_) => TextExportDialog(project: c.project, initial: kind),
+      builder: (_) => TextExportDialog(project: c.project, workspace: ws, erName: erDocName(c), initial: kind),
     );
   }
+
+  /// ชื่อเอกสาร ER ที่ [c] เป็นเจ้าของ (ใช้บอกผู้ใช้ว่า Export .sql / Mermaid / DBML ใช้ ER ไหน)
+  static String erDocName(ProjectController c) =>
+      c.workspaceController.workspace.documentById(c.docId)?.name ?? c.project.name;
 
   /// บันทึกข้อความ (UTF-8 ไม่มี BOM) ลงไฟล์ที่ผู้ใช้เลือก
   static Future<void> saveText(BuildContext context, String text, String fileName, String title) async {
@@ -396,13 +402,18 @@ class FileActions {
   /// สร้างไฟล์ .sql ตาม dialect ปัจจุบันแล้วให้เลือกที่บันทึก
   static Future<void> exportSql(BuildContext context, ProjectController c) async {
     final dialect = c.project.dialect;
+    final erName = erDocName(c);
+    final multiEr = c.workspaceController.workspace.documentsOf(DocType.er).length > 1;
     final errors = c.issues.where((i) => i.severity == Severity.error).length;
     if (errors > 0) {
       final go = await showDialog<String>(
         context: context,
         builder: (ctx) => AlertDialog(
           title: Text(tr('พบข้อผิดพลาด {0} รายการ', [errors])),
-          content: Text(tr('SQL ที่ได้อาจ import เข้า {0} ไม่ผ่าน ต้องการดูปัญหาก่อน หรือ Export ต่อเลย?', [dialect.label])),
+          content: Text([
+            if (multiEr) tr('ER: {0}', [erName]),
+            tr('SQL ที่ได้อาจ import เข้า {0} ไม่ผ่าน ต้องการดูปัญหาก่อน หรือ Export ต่อเลย?', [dialect.label]),
+          ].join('\n')),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx, 'cancel'), child: Text(tr('ยกเลิก'))),
             TextButton(onPressed: () => Navigator.pop(ctx, 'export'), child: Text(tr('Export ต่อ'))),
@@ -468,7 +479,7 @@ class FileActions {
     final sql = buildExportSql(c.project, includeSeed: includeSeed);
     try {
       final uri = await FilePicker.saveFile(
-        dialogTitle: 'Export .sql (${dialect.label})',
+        dialogTitle: multiEr ? tr('Export .sql — ER: {0} ({1})', [erName, dialect.label]) : 'Export .sql (${dialect.label})',
         fileName: sqlFileName(c.project.name, dialect),
         bytes: utf8.encode(sql),
       );

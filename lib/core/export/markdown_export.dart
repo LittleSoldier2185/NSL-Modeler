@@ -1,5 +1,9 @@
 import '../models/column_model.dart';
 import '../models/project.dart';
+import '../models/workspace.dart';
+import '../validate/issue.dart';
+import '../validate/workspace_validator.dart';
+import 'workspace_summary.dart';
 import '../types/type_label.dart';
 import '../l10n/l10n.dart';
 
@@ -24,9 +28,117 @@ String exportDataDictionary(Project p) {
     b.writeln('- [${_inline(t.name)}](#${_anchor(t.name)})${t.comment.isEmpty ? '' : ' — ${_inline(t.comment)}'}');
   }
 
+  _tables(b, p, '##');
+  return b.toString();
+}
+
+/// Data dictionary ของทั้งโปรเจกต์: ภาพรวม (เอกสาร ตัวเลขสรุป ปัญหา) -> ER ทุกอัน -> DFD ทุกอัน
+/// โปรเจกต์ที่มี ER ชิ้นเดียวและไม่มีเอกสารอื่น = ผลลัพธ์เดียวกับ [exportDataDictionary] ทุกตัวอักษร
+String exportWorkspaceDictionary(Workspace w) {
+  if (isSingleErWorkspace(w)) return exportDataDictionary(knownDocs(w).first.er!);
+  // ER ทุกอันก่อน แล้ว DFD ทุกอัน (ตามลำดับเอกสารในแต่ละชนิด)
+  final docs = [...w.documentsOf(DocType.er), ...w.documentsOf(DocType.dfd)];
+  final c = workspaceCounts(w);
+  final issues = exportIssues(w);
+  final b = StringBuffer();
+  b.writeln('# ${_inline(w.name.trim().isEmpty ? 'project' : w.name)} — Data Dictionary');
+  b.writeln();
+  b.writeln(tr('## ภาพรวมโปรเจกต์'));
+  b.writeln();
+  b.writeln(tr('- {0} เอกสาร ({1} ER · {2} DFD)', [c.docs, c.ers, c.dfds]));
+  b.writeln(tr('- {0} ตาราง · {1} ความสัมพันธ์', [c.tables, c.relations]));
+  b.writeln(tr('- {0} วัตถุ DFD · {1} เส้นข้อมูล', [c.objects, c.flows]));
+  final ec = issues.where((i) => i.issue.severity == Severity.error).length;
+  b.writeln(tr('- {0} ข้อผิดพลาด · {1} คำเตือน', [ec, issues.length - ec]));
+  b.writeln();
+  b.writeln(tr('**เอกสารในโปรเจกต์**'));
+  b.writeln();
+  for (final d in docs) {
+    if (d.type == DocType.er) {
+      final p = d.er!;
+      b.writeln('- ER: ${_inline(d.name)} — ${p.dialect.label} · ${tr('{0} ตาราง · {1} ความสัมพันธ์', [p.tables.length, p.relations.length])}');
+    } else {
+      final g = d.dfd!;
+      b.writeln('- DFD: ${_inline(d.name)} — ${tr('{0} วัตถุ DFD · {1} เส้นข้อมูล', [g.nodes.length, g.flows.length])}');
+    }
+  }
+  b.writeln();
+  b.writeln(tr('**ปัญหาที่ตรวจพบทั้งโปรเจกต์**'));
+  b.writeln();
+  if (issues.isEmpty) {
+    b.writeln(tr('_ไม่พบปัญหา_'));
+  } else {
+    for (final i in issues) {
+      b.writeln('- ${severityLabel(i.issue.severity)} · ${_inline(i.docName)}: ${_inline(i.issue.title)} — ${_inline(i.issue.message)}');
+    }
+  }
+
+  for (final d in docs) {
+    b.writeln();
+    if (d.type == DocType.er) {
+      final p = d.er!;
+      b.writeln('## ER: ${_inline(d.name)}');
+      b.writeln();
+      b.writeln('- Dialect: ${p.dialect.label}');
+      b.writeln(tr('- {0} ตาราง · {1} ความสัมพันธ์', [p.tables.length, p.relations.length]));
+      if (p.tables.isEmpty) {
+        b.writeln();
+        b.writeln(tr('_ยังไม่มีตาราง_'));
+      } else {
+        _tables(b, p, '###');
+      }
+    } else {
+      _dfd(b, w, d, [for (final i in issues) if (i.docId == d.id) i]);
+    }
+  }
+  return b.toString();
+}
+
+void _dfd(StringBuffer b, Workspace w, ProjectDocument d, List<WorkspaceIssue> issues) {
+  final g = d.dfd!;
+  b.writeln('## DFD: ${_inline(d.name)}');
+  b.writeln();
+  b.writeln(tr('- {0} วัตถุ DFD · {1} เส้นข้อมูล', [g.nodes.length, g.flows.length]));
+  if (g.nodes.isEmpty) {
+    b.writeln();
+    b.writeln(tr('_ไม่มีวัตถุ_'));
+  } else {
+    b.writeln();
+    b.writeln('**${tr('วัตถุ')}**');
+    b.writeln();
+    b.writeln(tr('| ชนิด | เลข/รหัส | ชื่อ | ตาราง ER | แผนภาพย่อย |'));
+    b.writeln('|------|----------|------|----------|------------|');
+    for (final n in g.nodes) {
+      final child = n.childId == null ? null : w.documentById(n.childId!)?.name;
+      b.writeln('| ${dfdKindLabel(n.kind)} | ${_cell(n.number)} | ${_cell(n.name)} | '
+          '${_cell(dfdStoreTableLabel(w, n) ?? '')} | ${_cell(child ?? '')} |');
+    }
+    if (g.flows.isNotEmpty) {
+      b.writeln();
+      b.writeln('**${tr('เส้นข้อมูล')}**');
+      b.writeln();
+      b.writeln(tr('| จาก | ทิศทาง | ถึง | ป้ายชื่อ |'));
+      b.writeln('|-----|:------:|-----|----------|');
+      for (final f in g.flows) {
+        final from = g.nodeById(f.fromId)?.title ?? '?', to = g.nodeById(f.toId)?.title ?? '?';
+        b.writeln('| ${_cell(from)} | ${f.bidirectional ? '↔' : '→'} | ${_cell(to)} | ${_cell(f.label)} |');
+      }
+    }
+  }
+  if (issues.isNotEmpty) {
+    b.writeln();
+    b.writeln(tr('**ปัญหาที่ตรวจพบ**'));
+    b.writeln();
+    for (final i in issues) {
+      b.writeln('- ${severityLabel(i.issue.severity)} · ${_inline(i.issue.title)} — ${_inline(i.issue.message)}');
+    }
+  }
+}
+
+void _tables(StringBuffer b, Project p, String h) {
   for (final t in p.tables) {
     b.writeln();
-    b.writeln('## ${_inline(t.name)}');
+    b.writeln('$h ${_inline(t.name)}');
     if (t.comment.isNotEmpty) {
       b.writeln();
       b.writeln(_inline(t.comment));
@@ -90,7 +202,6 @@ String exportDataDictionary(Project p) {
       }
     }
   }
-  return b.toString();
 }
 
 String _def(ColumnModel c) {

@@ -78,6 +78,8 @@ class ProjectHomeView extends StatelessWidget {
                 _Action(const ValueKey('home-add-er'), Icons.table_chart_outlined, tr('เพิ่ม ER'), () => w.addDocument(DocType.er)),
                 _Action(const ValueKey('home-add-dfd'), Icons.account_tree_outlined, tr('เพิ่ม DFD'), () => w.addDocument(DocType.dfd)),
                 _Action(const ValueKey('home-issues'), Icons.rule_rounded, tr('ปัญหาทั้งโปรเจกต์…'), () => showWorkspaceIssues(context)),
+                _Action(const ValueKey('home-export'), Icons.ios_share_rounded, tr('Export เอกสารทั้งโปรเจกต์…'),
+                    () => AppActions(context).run(Cmd.exportText)),
                 _Action(const ValueKey('home-save'), Icons.save_outlined, tr('บันทึก'), () => AppActions(context).run(Cmd.save)),
               ]),
               const SizedBox(height: 20),
