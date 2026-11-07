@@ -128,14 +128,15 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('status-whats-new')));
       await tester.pumpAndSettle();
       Finder inDialog(String t) => find.descendant(of: find.byType(WhatsNewDialog), matching: find.text(t));
-      expect(inDialog('เพิ่มใหม่'), findsOneWidget);
-      expect(inDialog('ปรับปรุง'), findsOneWidget);
-      expect(inDialog('แก้ไข'), findsOneWidget);
+      // หลายรุ่นในหน้าเดียว: หัวข้อหมวดซ้ำตามจำนวนรุ่นที่มีหมวดนั้น (0.6.0 ไม่มีหมวดแก้ไข)
+      expect(inDialog('เพิ่มใหม่'), findsNWidgets(kReleaseNotes.length));
+      expect(inDialog('ปรับปรุง'), findsNWidgets(kReleaseNotes.length));
+      expect(inDialog('แก้ไข'), findsWidgets);
       expect(find.text(kReleaseNotes.first.added.first), findsOneWidget);
       // บรรทัดท้าย ๆ ต้องเลื่อนถึง
       await tester.drag(find.byKey(const ValueKey('whats-new-scroll')), const Offset(0, -2000));
       await tester.pumpAndSettle();
-      expect(find.text(kReleaseNotes.first.fixed.last), findsOneWidget);
+      expect(find.text(kReleaseNotes.first.improved.last), findsOneWidget);
     });
 
     testWidgets('เมนูช่วยเหลือ: มีอะไรใหม่ / เกี่ยวกับ (แสดงรุ่น)', (tester) async {
@@ -212,7 +213,7 @@ void main() {
       expect(find.text("What's new"), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('status-whats-new')));
       await tester.pumpAndSettle();
-      expect(find.text('Added'), findsOneWidget);
+      expect(find.text('Added'), findsWidgets);
       expect(find.textContaining('DFD diagrams:'), findsOneWidget);
       currentLang = Lang.th;
     });

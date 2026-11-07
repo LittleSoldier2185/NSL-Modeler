@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:clock/clock.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nsl_dev/core/export/dfd_svg.dart';
 import 'package:nsl_dev/core/l10n/l10n.dart';
@@ -586,18 +587,23 @@ void main() {
     });
 
     testWidgets('ดับเบิลคลิกวัตถุ = เปลี่ยนชื่อ; F2 เปลี่ยนชื่อวัตถุที่เลือก', (tester) async {
-      await boot(tester, withSample: true);
-      final at = screen(tester, 480, 30);
-      await tester.tapAt(at);
-      await tester.pump(const Duration(milliseconds: 80));
-      await tester.tapAt(at);
-      await tester.pumpAndSettle();
-      await promptText(tester, 'Checkout');
-      expect(d.diagram.nodeById('p')!.name, 'Checkout');
-      await tester.sendKeyEvent(LogicalKeyboardKey.f2);
-      await tester.pumpAndSettle();
-      await promptText(tester, 'Pay');
-      expect(d.diagram.nodeById('p')!.name, 'Pay');
+      // เวลาจำลอง: ไม่ผันตามเวลาจริงของเครื่อง
+      var t = DateTime(2026, 11, 7, 12);
+      await withClock(Clock(() => t), () async {
+        await boot(tester, withSample: true);
+        final at = screen(tester, 480, 30);
+        await tester.tapAt(at);
+        t = t.add(const Duration(milliseconds: 80));
+        await tester.pump(const Duration(milliseconds: 80));
+        await tester.tapAt(at);
+        await tester.pumpAndSettle();
+        await promptText(tester, 'Checkout');
+        expect(d.diagram.nodeById('p')!.name, 'Checkout');
+        await tester.sendKeyEvent(LogicalKeyboardKey.f2);
+        await tester.pumpAndSettle();
+        await promptText(tester, 'Pay');
+        expect(d.diagram.nodeById('p')!.name, 'Pay');
+      });
     });
 
     testWidgets('คลิกขวา: วัตถุ/เส้น/พื้นว่าง ให้เมนูที่ถูกต้อง', (tester) async {

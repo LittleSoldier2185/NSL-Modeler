@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:clock/clock.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -70,28 +71,31 @@ void main() {
   });
 
   testWidgets('เปลี่ยนชื่อด้วย F2 / ดับเบิลคลิก: ชื่อซ้ำถูกปฏิเสธ ชื่อใหม่ผ่าน', (tester) async {
-    await boot(tester);
-    final d = w.addDocument(DocType.dfd, name: 'Flow')!;
-    await tester.pump();
-    await tester.tap(row(d.id));
-    await tester.pumpAndSettle();
-    await tester.sendKeyEvent(LogicalKeyboardKey.f2);
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).last, 'er'); // ซ้ำกับ ER (ไม่สนตัวพิมพ์)
-    await tester.tap(find.text('ตกลง'));
-    await tester.pumpAndSettle();
-    expect(w.documentById(d.id)!.name, 'Flow');
-    expect(find.text('ชื่อว่างหรือซ้ำกับแผนภาพอื่น'), findsOneWidget);
+    var t = DateTime(2026, 11, 7, 12); // เวลาจำลอง ไม่ผันตามเวลาจริง
+    await withClock(Clock(() => t), () async {
+      await boot(tester);
+      final d = w.addDocument(DocType.dfd, name: 'Flow')!;
+      await tester.pump();
+      await tester.tap(row(d.id));
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.f2);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).last, 'er'); // ซ้ำกับ ER (ไม่สนตัวพิมพ์)
+      await tester.tap(find.text('ตกลง'));
+      await tester.pumpAndSettle();
+      expect(w.documentById(d.id)!.name, 'Flow');
+      expect(find.text('ชื่อว่างหรือซ้ำกับแผนภาพอื่น'), findsOneWidget);
 
-    await tester.pump(const Duration(seconds: 1));
-    await tester.tap(row(d.id));
-    await tester.pump(const Duration(milliseconds: 50));
-    await tester.tap(row(d.id)); // ดับเบิลคลิก
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).last, 'Level 1');
-    await tester.tap(find.text('ตกลง'));
-    await tester.pumpAndSettle();
-    expect(w.documentById(d.id)!.name, 'Level 1');
+      t = t.add(const Duration(seconds: 1));
+      await tester.tap(row(d.id));
+      t = t.add(const Duration(milliseconds: 50));
+      await tester.tap(row(d.id)); // ดับเบิลคลิก
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).last, 'Level 1');
+      await tester.tap(find.text('ตกลง'));
+      await tester.pumpAndSettle();
+      expect(w.documentById(d.id)!.name, 'Level 1');
+    });
   });
 
   testWidgets('เมนูคลิกขวา: ทำสำเนา ; ลบมีกล่องยืนยัน (ยกเลิก = ไม่ลบ) ; ER อันสุดท้ายไม่มีเมนูลบ', (tester) async {
