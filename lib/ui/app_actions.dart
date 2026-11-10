@@ -91,6 +91,10 @@ class AppActions {
         Cmd.fcIo: () {},
         Cmd.fcSubroutine: () {},
         Cmd.fcConnector: () {},
+        Cmd.fcHexagon: () {},
+        Cmd.fcCylinder: () {},
+        Cmd.fcDocument: () {},
+        Cmd.fcText: () {},
         // ใช้เฉพาะแท็บ Wireframe (ดู WireframeActions) — บนแท็บ ER ไม่ทำอะไร
         Cmd.wfButton: () {},
         Cmd.wfContainer: () {},

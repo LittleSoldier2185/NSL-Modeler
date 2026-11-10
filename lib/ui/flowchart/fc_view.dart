@@ -60,6 +60,10 @@ String fcShapeShortcut(FcShape s) => switch (s) {
       FcShape.subroutine => shortcutText(Cmd.fcSubroutine),
       FcShape.connector => shortcutText(Cmd.fcConnector),
       FcShape.note => 'N',
+      FcShape.hexagon => shortcutText(Cmd.fcHexagon),
+      FcShape.cylinder => shortcutText(Cmd.fcCylinder),
+      FcShape.document => shortcutText(Cmd.fcDocument),
+      FcShape.text => shortcutText(Cmd.fcText),
       _ => '',
     };
 

@@ -23,7 +23,17 @@ class FlowchartActions {
   final FlowchartController f;
 
   /// คำสั่งของ Flowchart เอง (แท็บ ER/DFD ไม่ใช้)
-  static const flowchartOnly = {Cmd.fcTerminator, Cmd.fcIo, Cmd.fcSubroutine, Cmd.fcConnector};
+  static const flowchartOnly = {
+    Cmd.fcTerminator,
+    Cmd.fcIo,
+    Cmd.fcSubroutine,
+    Cmd.fcConnector,
+    Cmd.fcHexagon,
+    Cmd.fcCylinder,
+    Cmd.fcDocument,
+    Cmd.fcText,
+    Cmd.ungroupSelected,
+  };
 
   /// ทำงานตามคำสั่ง ; คำสั่งที่ไม่เกี่ยวกับ Flowchart (แก้ตาราง/dialect ฯลฯ) ถูกเมินอย่างเงียบ ๆ
   void run(Cmd cmd) {
@@ -82,6 +92,14 @@ class FlowchartActions {
         f.setShapeTool(FcShape.subroutine);
       case Cmd.fcConnector:
         f.setShapeTool(FcShape.connector);
+      case Cmd.fcHexagon:
+        f.setShapeTool(FcShape.hexagon);
+      case Cmd.fcCylinder:
+        f.setShapeTool(FcShape.cylinder);
+      case Cmd.fcDocument:
+        f.setShapeTool(FcShape.document);
+      case Cmd.fcText:
+        f.setShapeTool(FcShape.text);
       case Cmd.fit:
         f.fit(f.viewport);
       case Cmd.zoom100:
