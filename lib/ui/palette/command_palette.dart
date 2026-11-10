@@ -12,6 +12,13 @@ import '../../core/layout/ortho_route.dart' show routeLabelAnchor;
 import '../../core/models/flowchart_model.dart';
 import '../../core/validate/flowchart_validator.dart';
 import '../../state/flowchart_controller.dart';
+import '../../core/export/workspace_summary.dart' show sfNodeText;
+import '../../core/layout/screenflow_geometry.dart' show sfRoutes;
+import '../../core/models/wireframe_model.dart' show WfStyle;
+import '../../core/validate/screenflow_validator.dart';
+import '../../core/validate/wireframe_validator.dart';
+import '../../state/screenflow_controller.dart';
+import '../../state/wireframe_controller.dart';
 import '../flowchart/fc_panels.dart' show fcNodeTitle;
 import '../../state/dfd_controller.dart';
 import '../dfd/dfd_panels.dart' show dfdKindName;
@@ -27,13 +34,13 @@ import '../workspace_issues_dialog.dart';
 import '../theme.dart';
 import '../../core/l10n/l10n.dart';
 
-enum PaletteKind { command, table, column, group, note, dfdNode, dfdFlow, fcNode, fcEdge, issue }
+enum PaletteKind { command, table, column, group, note, dfdNode, dfdFlow, fcNode, fcEdge, wfComponent, sfNode, sfEdge, issue }
 
 /// ตัวนำหน้าที่จำกัดชนิดของผลค้น: @ ตาราง/กลุ่ม · # คอลัมน์ · : วัตถุและเส้นของ DFD/Flowchart · ! ปัญหา · > คำสั่ง · ~ โน้ต
 const Map<String, Set<PaletteKind>> kPalettePrefixes = {
   '@': {PaletteKind.table, PaletteKind.group},
   '#': {PaletteKind.column},
-  ':': {PaletteKind.dfdNode, PaletteKind.dfdFlow, PaletteKind.fcNode, PaletteKind.fcEdge},
+  ':': {PaletteKind.dfdNode, PaletteKind.dfdFlow, PaletteKind.fcNode, PaletteKind.fcEdge, PaletteKind.wfComponent, PaletteKind.sfNode, PaletteKind.sfEdge},
   '!': {PaletteKind.issue},
   '>': {PaletteKind.command},
   '~': {PaletteKind.note},
@@ -134,6 +141,18 @@ List<PaletteEntry> buildPaletteEntries(BuildContext context) {
     byCmd(tr('ใช้ {0}', [Dialect.mssql.label]), tr('dialect mssql สลับ'), Cmd.dialectMssql),
     cmd(tr('แสดง SQL Preview'), 'sql preview', () => cv.showDock(DockTab.sql)),
     cmd(tr('แสดงปัญหาที่ตรวจพบ'), tr('issues problems validate ตรวจสอบ'), () => cv.showDock(DockTab.issues)),
+    cmd(tr('จัดวาง Screen Flow อัตโนมัติ'), 'auto layout screen flow navigation จัดตำแหน่ง ลำดับหน้าจอ', () {
+      final f = context.read<ScreenFlowController>();
+      if (w.activeDocument.type == DocType.screenflow && f.autoLayout()) f.fit(f.viewport);
+    }),
+    cmd(tr('เพิ่ม Wireframe'), 'new wireframe screen mockup หน้าจอ', () => w.addDocument(DocType.wireframe)),
+    cmd(tr('เพิ่ม Screen Flow'), 'new screen flow navigation map ลำดับหน้าจอ', () => w.addDocument(DocType.screenflow)),
+    cmd(tr('สลับรูปแบบ Wireframe (ร่าง / เรียบร้อย)'), 'wireframe style sketch clean fidelity รูปแบบ', () {
+      final f = context.read<WireframeController>();
+      if (w.activeDocument.type == DocType.wireframe) {
+        f.setStyle(f.diagram.style == WfStyle.sketch ? WfStyle.clean : WfStyle.sketch);
+      }
+    }),
     cmd(tr('หน้า Project Home'), 'project home overview dashboard ภาพรวม โปรเจกต์ หน้าแรก', () => w.showHome()),
     cmd(tr('ปัญหาทั้งโปรเจกต์…'), 'workspace project issues problems all documents ทุกเอกสาร ตรวจสอบ', () => showWorkspaceIssues(context)),
     byCmd(tr('ค้นหาตาราง / คอลัมน์'), 'search find', Cmd.find),
@@ -232,6 +251,53 @@ List<PaletteEntry> buildPaletteEntries(BuildContext context) {
           run: () => gotoFlowchart(context, tab.id, edge: e.id),
         ),
     ],
+    // ---- Wireframe ทุกแท็บ: ชิ้นส่วน ----
+    for (final tab in w.documents.where((t) => t.type == DocType.wireframe))
+      for (final c in w.wireframeOf(tab.id).components)
+        PaletteEntry(
+          kind: PaletteKind.wfComponent,
+          title: c.text.trim().isEmpty ? wfKindLabel(c.kind) : c.text.trim().replaceAll(RegExp(r'\s+'), ' '),
+          subtitle: '${tab.name} · ${wfKindLabel(c.kind)}',
+          search: '${c.text} ${wfKindLabel(c.kind)} ${c.kind.name} ${tab.name}',
+          run: () => gotoWireframe(context, tab.id, component: c.id),
+        ),
+    // ---- Screen Flow ทุกแท็บ: หน้าจอ และการเปลี่ยนหน้า ----
+    for (final tab in w.documents.where((t) => t.type == DocType.screenflow)) ...[
+      for (final n in w.screenflowOf(tab.id).nodes)
+        PaletteEntry(
+          kind: PaletteKind.sfNode,
+          title: sfNodeTitle(n),
+          subtitle: '${tab.name} · ${sfKindLabel(n.kind)}',
+          search: '${n.title} ${sfKindLabel(n.kind)} ${tab.name}',
+          run: () => gotoScreenFlow(context, tab.id, node: n.id),
+        ),
+      for (final e in w.screenflowOf(tab.id).edges)
+        PaletteEntry(
+          kind: PaletteKind.sfEdge,
+          title: e.caption.isEmpty ? tr('(ไม่มีป้าย)') : e.caption,
+          subtitle: '${tab.name} · ${sfNodeText(w.screenflowOf(tab.id), e.fromId)} → ${sfNodeText(w.screenflowOf(tab.id), e.toId)}',
+          search: '${e.label} ${e.condition} ${tab.name}',
+          run: () => gotoScreenFlow(context, tab.id, edge: e.id),
+        ),
+    ],
+    if (w.activeDocument.type == DocType.wireframe)
+      for (final i in validateWireframe(w.wireframeOf(w.activeId), workspace: w.workspace))
+        PaletteEntry(
+          kind: PaletteKind.issue,
+          title: i.title,
+          subtitle: i.message,
+          search: '${i.title} ${i.message} ${i.code}',
+          run: () => gotoWireframe(context, w.activeId, component: i.tableId),
+        ),
+    if (w.activeDocument.type == DocType.screenflow)
+      for (final i in validateScreenFlow(w.screenflowOf(w.activeId), workspace: w.workspace))
+        PaletteEntry(
+          kind: PaletteKind.issue,
+          title: i.title,
+          subtitle: i.message,
+          search: '${i.title} ${i.message} ${i.code}',
+          run: () => gotoScreenFlow(context, w.activeId, node: i.tableId, edge: i.relationId),
+        ),
     if (w.activeDocument.type == DocType.flowchart)
       for (final i in validateFlowchart(w.flowchartOf(w.activeId)))
         PaletteEntry(
@@ -330,6 +396,44 @@ void gotoFlowchart(BuildContext context, String tabId, {String? node, String? ed
   WidgetsBinding.instance.addPostFrameCallback((_) => apply());
 }
 
+/// เปิดแท็บ Wireframe [tabId] แล้วเลือกชิ้นส่วนและเลื่อนไปให้เห็น
+void gotoWireframe(BuildContext context, String tabId, {String? component}) {
+  final w = context.read<ProjectController>().workspaceController;
+  final f = w.wireframeController(tabId);
+  if (f == null || !w.openDocument(tabId)) return;
+  void apply() {
+    if (component == null || f.diagram.componentById(component) == null) return;
+    f.selectBox(component);
+    f.reveal(component, f.viewport);
+  }
+
+  apply();
+  WidgetsBinding.instance.addPostFrameCallback((_) => apply());
+}
+
+/// เปิดแท็บ Screen Flow [tabId] แล้วเลือกหน้าจอ/เส้นที่ต้องการและเลื่อนไปให้เห็น
+void gotoScreenFlow(BuildContext context, String tabId, {String? node, String? edge}) {
+  final w = context.read<ProjectController>().workspaceController;
+  final f = w.screenflowController(tabId);
+  if (f == null || !w.openDocument(tabId)) return;
+  void apply() {
+    if (node != null) {
+      f.selectBox(node);
+      f.reveal(node, f.viewport);
+    } else if (edge != null) {
+      f.selectEdge(edge);
+      final r = sfRoutes(f.diagram)[edge];
+      if (r != null) {
+        final (x, y) = routeLabelAnchor(r);
+        f.revealPoint(Offset(x, y), f.viewport);
+      }
+    }
+  }
+
+  apply();
+  WidgetsBinding.instance.addPostFrameCallback((_) => apply());
+}
+
 /// แยกตัวนำหน้า (@ # : ! > ~) ออกจากคำค้น — คืนชุดชนิดที่จำกัด (null = ไม่จำกัด) และคำค้นที่เหลือ
 ({Set<PaletteKind>? kinds, String query}) parsePaletteQuery(String raw) {
   final t = raw.trimLeft();
@@ -353,6 +457,9 @@ List<PaletteEntry> paletteResults(List<PaletteEntry> all, String query, {int lim
       PaletteKind.dfdFlow,
       PaletteKind.fcNode,
       PaletteKind.fcEdge,
+      PaletteKind.wfComponent,
+      PaletteKind.sfNode,
+      PaletteKind.sfEdge,
       PaletteKind.issue,
       PaletteKind.note,
     };
@@ -507,6 +614,9 @@ class _CommandPaletteState extends State<CommandPalette> {
       PaletteKind.dfdFlow => Icons.arrow_right_alt_rounded,
       PaletteKind.fcNode => Icons.schema_outlined,
       PaletteKind.fcEdge => Icons.trending_flat_rounded,
+      PaletteKind.wfComponent => Icons.web_outlined,
+      PaletteKind.sfNode => Icons.alt_route_rounded,
+      PaletteKind.sfEdge => Icons.arrow_right_alt_rounded,
       PaletteKind.issue => Icons.warning_amber_rounded,
     };
     return MouseRegion(

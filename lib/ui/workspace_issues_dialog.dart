@@ -9,7 +9,7 @@ import '../state/workspace_controller.dart';
 import 'canvas/canvas_controller.dart';
 import 'issue_widgets.dart';
 import 'document_actions.dart' show docTypeIcon;
-import 'palette/command_palette.dart' show gotoDfd, gotoFlowchart;
+import 'palette/command_palette.dart' show gotoDfd, gotoFlowchart, gotoScreenFlow, gotoWireframe;
 import 'theme.dart';
 
 /// ปัญหาที่ตรวจพบทั้งโปรเจกต์ — รวมทุกเอกสาร (ER และ DFD ทุกแท็บ) แยกเป็นกลุ่มตามเอกสาร คลิกรายการเพื่อไปที่วัตถุนั้น
@@ -34,6 +34,16 @@ class _WorkspaceIssuesDialogState extends State<WorkspaceIssuesDialog> {
     if (wi.docType == DocType.dfd) {
       nav.pop();
       gotoDfd(context, wi.docId, node: i.tableId, flow: i.relationId);
+      return;
+    }
+    if (wi.docType == DocType.wireframe) {
+      nav.pop();
+      gotoWireframe(context, wi.docId, component: i.tableId);
+      return;
+    }
+    if (wi.docType == DocType.screenflow) {
+      nav.pop();
+      gotoScreenFlow(context, wi.docId, node: i.tableId, edge: i.relationId);
       return;
     }
     if (wi.docType == DocType.flowchart) {

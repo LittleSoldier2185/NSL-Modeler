@@ -77,6 +77,16 @@ class _DiagramTabBarState extends State<DiagramTabBar> {
               style: const TextStyle(fontSize: 13),
             ),
           ),
+          PopupMenuItem(
+            value: DocType.wireframe,
+            height: 36,
+            child: Text(tr('Wireframe (หน้าจอ)'), style: const TextStyle(fontSize: 13)),
+          ),
+          PopupMenuItem(
+            value: DocType.screenflow,
+            height: 36,
+            child: Text(tr('Screen Flow (ลำดับหน้าจอ)'), style: const TextStyle(fontSize: 13)),
+          ),
         ],
       ),
     );

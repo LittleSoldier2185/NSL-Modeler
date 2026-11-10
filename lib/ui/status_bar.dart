@@ -7,11 +7,15 @@ import '../core/storage/project_file.dart';
 import '../core/models/workspace.dart';
 import '../core/validate/dfd_validator.dart';
 import '../core/validate/flowchart_validator.dart';
+import '../core/validate/screenflow_validator.dart';
+import '../core/validate/wireframe_validator.dart';
 import '../core/validate/issue.dart';
 import 'workspace_issues_dialog.dart';
 import '../state/app_settings.dart';
 import '../state/dfd_controller.dart';
 import '../state/flowchart_controller.dart';
+import '../state/screenflow_controller.dart';
+import '../state/wireframe_controller.dart';
 import '../state/project_controller.dart';
 import '../state/workspace_controller.dart';
 import 'canvas/canvas_controller.dart';
@@ -33,6 +37,8 @@ class StatusBar extends StatelessWidget {
     final isEr = w.activeDocument.type == DocType.er;
     final dfd = context.watch<DfdController>();
     final fc = context.watch<FlowchartController>();
+    final wf = context.watch<WireframeController>();
+    final sf = context.watch<ScreenFlowController>();
     final cv = context.watch<CanvasController>();
 
     final p = c.project;
@@ -45,6 +51,16 @@ class StatusBar extends StatelessWidget {
       summary = tr('{0} ตาราง · {1} ความสัมพันธ์', [p.tables.length, p.relations.length]);
       issues = c.issues;
       zoom = cv.scale;
+    } else if (w.activeDocument.type == DocType.wireframe) {
+      final d = w.wireframeOf(w.activeId);
+      summary = tr('{0} ชิ้นส่วน · {1}', [d.components.length, wfStyleLabel(d.style)]);
+      issues = validateWireframe(d, workspace: w.workspace);
+      zoom = wf.scale;
+    } else if (w.activeDocument.type == DocType.screenflow) {
+      final d = w.screenflowOf(w.activeId);
+      summary = tr('{0} หน้าจอ · {1} การเปลี่ยนหน้า', [d.nodes.length, d.edges.length]);
+      issues = validateScreenFlow(d, workspace: w.workspace);
+      zoom = sf.scale;
     } else if (w.activeDocument.type == DocType.flowchart) {
       final d = w.flowchartOf(w.activeId);
       summary = tr('{0} สัญลักษณ์ · {1} เส้นเชื่อม', [d.nodes.length, d.edges.length]);

@@ -16,6 +16,10 @@ import 'dfd/dfd_panels.dart';
 import 'dfd/dfd_view.dart';
 import 'flowchart/fc_panels.dart';
 import 'flowchart/fc_view.dart';
+import 'screenflow/sf_panels.dart';
+import 'screenflow/sf_view.dart';
+import 'wireframe/wf_panels.dart';
+import 'wireframe/wf_view.dart';
 import 'diagram_tabs.dart';
 import 'project_explorer.dart';
 import 'project_home.dart';
@@ -135,6 +139,12 @@ class _HomePageState extends State<HomePage> {
   static const _fcLeft = FlowchartLeftPanel();
   static const _fcRight = FlowchartRightPanel();
   late final Widget _fcCanvas = FlowchartCanvas(focusNode: _focus);
+  static const _wfLeft = WireframeLeftPanel();
+  static const _wfRight = WireframeRightPanel();
+  late final Widget _wfCanvas = WireframeCanvas(focusNode: _focus);
+  static const _sfLeft = ScreenFlowLeftPanel();
+  static const _sfRight = ScreenFlowRightPanel();
+  late final Widget _sfCanvas = ScreenFlowCanvas(focusNode: _focus);
 
   // ขนาดแผง ณ ตอนเริ่มลากขอบ (ลากแบบสัมบูรณ์: ขนาด = ขนาดเริ่ม + ระยะเมาส์ที่เคลื่อน)
   double _startLeft = 0, _startRight = 0, _startDock = 0;
@@ -164,7 +174,13 @@ class _HomePageState extends State<HomePage> {
                 width: leftW,
                 child: Column(children: [
                   if (showExplorer) ProjectExplorer(maxHeight: box.maxHeight * 0.4),
-                  Expanded(child: isEr ? _leftPanel : (isFc ? _fcLeft : _dfdLeft)),
+                  Expanded(child: switch (type) {
+                    DocType.flowchart => _fcLeft,
+                    DocType.wireframe => _wfLeft,
+                    DocType.screenflow => _sfLeft,
+                    DocType.dfd => _dfdLeft,
+                    _ => _leftPanel,
+                  }),
                 ]),
               ),
               Expanded(
@@ -179,10 +195,24 @@ class _HomePageState extends State<HomePage> {
                         ])
                       : isFc
                       ? KeyedSubtree(key: ValueKey('fc-canvas-$docId'), child: _fcCanvas)
+                      : type == DocType.wireframe
+                      ? KeyedSubtree(key: ValueKey('wf-canvas-$docId'), child: _wfCanvas)
+                      : type == DocType.screenflow
+                      ? KeyedSubtree(key: ValueKey('sf-canvas-$docId'), child: _sfCanvas)
                       : KeyedSubtree(key: ValueKey('dfd-canvas-$docId'), child: _dfdCanvas),
                 ),
               ),
-              if (!home) SizedBox(width: rightW, child: isEr ? _rightPanel : (isFc ? _fcRight : _dfdRight)),
+              if (!home)
+                SizedBox(
+                  width: rightW,
+                  child: switch (type) {
+                    DocType.flowchart => _fcRight,
+                    DocType.wireframe => _wfRight,
+                    DocType.screenflow => _sfRight,
+                    DocType.dfd => _dfdRight,
+                    _ => _rightPanel,
+                  },
+                ),
             ]),
             Positioned(
               left: leftW - 4,

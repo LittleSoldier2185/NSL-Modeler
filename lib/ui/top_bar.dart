@@ -11,6 +11,7 @@ import '../state/workspace_controller.dart';
 import 'app_actions.dart';
 import '../state/dfd_controller.dart';
 import '../state/flowchart_controller.dart';
+import '../state/screenflow_controller.dart';
 import 'canvas/canvas_controller.dart';
 import 'file_actions.dart';
 import 'line_settings_dialog.dart';
@@ -252,7 +253,16 @@ class TopBar extends StatelessWidget {
           _item(
             tr('จัดวางอัตโนมัติ'),
             '',
-            w.activeDocument.type == DocType.flowchart
+            w.activeDocument.type == DocType.wireframe
+                ? null
+                : w.activeDocument.type == DocType.screenflow
+                ? (w.screenflowOf(w.activeId).nodes.length < 2
+                    ? null
+                    : () {
+                        final f = context.read<ScreenFlowController>();
+                        if (f.autoLayout()) f.fit(f.viewport);
+                      })
+                : w.activeDocument.type == DocType.flowchart
                 ? (w.flowchartOf(w.activeId).nodes.length < 2
                     ? null
                     : () {

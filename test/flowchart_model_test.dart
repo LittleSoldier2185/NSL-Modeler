@@ -96,7 +96,7 @@ void main() {
 
     test('ชนิดที่ไม่รู้จักยังเก็บกลับครบ (ชนิดอื่นจากไฟล์รุ่นใหม่กว่า)', () {
       final j = roundTrip(encodeProjectMap(ws()));
-      (j['documents'] as List).add({'id': 'x', 'type': 'wireframe', 'name': 'Screens', 'typeVersion': 2, 'extra': 1, 'content': {'any': [1, 2]}});
+      (j['documents'] as List).add({'id': 'x', 'type': 'mindmap', 'name': 'Screens', 'typeVersion': 2, 'extra': 1, 'content': {'any': [1, 2]}});
       final back = decodeProjectMap(j);
       expect(back.documentById('x')!.type, isNull);
       expect(jsonEncode(encodeProjectMap(back)), jsonEncode(j));

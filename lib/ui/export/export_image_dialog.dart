@@ -35,11 +35,14 @@ class ImageExportOptions {
 /// เลือกรูปแบบภาพที่จะ export (PNG พร้อมสเกล หรือ SVG) — คืน null ถ้ายกเลิก
 class ExportImageDialog extends StatefulWidget {
   const ExportImageDialog(
-      {super.key, required this.hasNotes, this.hasSelection = false, this.initialArea, this.showArea = true, this.showTransparent = false});
+      {super.key, required this.hasNotes, this.hasSelection = false, this.initialArea, this.showArea = true, this.showTransparent = false, this.showTheme = true});
   final bool hasNotes;
 
   /// true = แสดงตัวเลือก "พื้นหลังโปร่งใส" (Flowchart)
   final bool showTransparent;
+
+  /// false = ซ่อนตัวเลือกธีมของภาพ (Wireframe ใช้รูปแบบการแสดงผลของเอกสารเอง)
+  final bool showTheme;
 
   /// false = ซ่อนตัวเลือกพื้นที่ (แท็บ DFD ส่งออกเฉพาะส่วนที่มีวัตถุเสมอ)
   final bool showArea;
@@ -98,6 +101,7 @@ class _ExportImageDialogState extends State<ExportImageDialog> {
                 onSelectionChanged: (s) => setState(() => _scale = s.first),
               ),
             ],
+            if (widget.showTheme) ...[
             const SizedBox(height: 14),
             Text(tr('ธีมของภาพ'), style: TextStyle(fontSize: 12, color: C.muted, fontWeight: FontWeight.w500)),
             const SizedBox(height: 6),
@@ -111,6 +115,7 @@ class _ExportImageDialogState extends State<ExportImageDialog> {
               selected: {_dark},
               onSelectionChanged: (s) => setState(() => _dark = s.first),
             ),
+            ],
             if (widget.showArea) ...[
             const SizedBox(height: 14),
             Text(tr('พื้นที่ที่ส่งออก'), style: TextStyle(fontSize: 12, color: C.muted, fontWeight: FontWeight.w500)),

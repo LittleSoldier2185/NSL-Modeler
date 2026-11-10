@@ -15,6 +15,8 @@ import 'state/autosave_coordinator.dart';
 import 'state/dfd_controller.dart';
 import 'state/flowchart_controller.dart';
 import 'state/project_controller.dart';
+import 'state/screenflow_controller.dart';
+import 'state/wireframe_controller.dart';
 import 'state/workspace_controller.dart';
 import 'ui/canvas/canvas_controller.dart';
 import 'ui/db_connect_dialog.dart';
@@ -140,6 +142,8 @@ class _NslDevAppState extends State<NslDevApp> with WidgetsBindingObserver {
             ChangeNotifierProvider<ProjectController>.value(value: _workspace.currentEr),
             ChangeNotifierProvider<DfdController>.value(value: _workspace.currentDfd),
             ChangeNotifierProvider<FlowchartController>.value(value: _workspace.currentFlowchart),
+            ChangeNotifierProvider<WireframeController>.value(value: _workspace.currentWireframe),
+            ChangeNotifierProvider<ScreenFlowController>.value(value: _workspace.currentScreenflow),
           ],
           child: child,
         ),

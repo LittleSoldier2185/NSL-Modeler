@@ -13,6 +13,8 @@ import 'palette/command_palette.dart';
 import 'prompt_dialog.dart';
 import 'dfd/dfd_actions.dart';
 import 'flowchart/fc_actions.dart';
+import 'screenflow/sf_actions.dart';
+import 'wireframe/wf_actions.dart';
 import 'shortcuts.dart';
 import 'shortcuts_help.dart';
 import '../core/l10n/l10n.dart';
@@ -88,6 +90,11 @@ class AppActions {
         Cmd.fcIo: () {},
         Cmd.fcSubroutine: () {},
         Cmd.fcConnector: () {},
+        // ใช้เฉพาะแท็บ Wireframe (ดู WireframeActions) — บนแท็บ ER ไม่ทำอะไร
+        Cmd.wfButton: () {},
+        Cmd.wfContainer: () {},
+        Cmd.wfImage: () {},
+        Cmd.wfInput: () {},
       };
 
   /// ทำงานตามคำสั่ง: แท็บ DFD ใช้ชุดคำสั่งของ DFD, แท็บ ER ใช้ชุดเดิม (และเมินคำสั่งของ DFD)
@@ -100,7 +107,19 @@ class AppActions {
       FlowchartActions(context).run(cmd);
       return;
     }
-    if (DfdActions.dfdOnly.contains(cmd) || FlowchartActions.flowchartOnly.contains(cmd)) return;
+    if (c.workspaceController.activeDocument.type == DocType.wireframe) {
+      WireframeActions(context).run(cmd);
+      return;
+    }
+    if (c.workspaceController.activeDocument.type == DocType.screenflow) {
+      ScreenFlowActions(context).run(cmd);
+      return;
+    }
+    if (DfdActions.dfdOnly.contains(cmd) ||
+        FlowchartActions.flowchartOnly.contains(cmd) ||
+        WireframeActions.wireframeOnly.contains(cmd)) {
+      return;
+    }
     map[cmd]!();
   }
 

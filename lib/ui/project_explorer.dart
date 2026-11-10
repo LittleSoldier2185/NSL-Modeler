@@ -43,6 +43,8 @@ class _ProjectExplorerState extends State<ProjectExplorer> {
       (DocType.er, tr('แผนภาพ ER')),
       (DocType.dfd, tr('แผนภาพกระแสข้อมูล (DFD)')),
       (DocType.flowchart, tr('ผังงาน (Flowchart)')),
+      (DocType.wireframe, tr('หน้าจอ (Wireframe)')),
+      (DocType.screenflow, tr('ลำดับหน้าจอ (Screen Flow)')),
     ];
     return Container(
       key: const ValueKey('project-explorer'),
@@ -100,6 +102,16 @@ class _ProjectExplorerState extends State<ProjectExplorer> {
                   value: DocType.flowchart,
                   height: 36,
                   child: Text(tr('Flowchart (ผังงาน)'), style: const TextStyle(fontSize: 13)),
+                ),
+                PopupMenuItem(
+                  value: DocType.wireframe,
+                  height: 36,
+                  child: Text(tr('Wireframe (หน้าจอ)'), style: const TextStyle(fontSize: 13)),
+                ),
+                PopupMenuItem(
+                  value: DocType.screenflow,
+                  height: 36,
+                  child: Text(tr('Screen Flow (ลำดับหน้าจอ)'), style: const TextStyle(fontSize: 13)),
                 ),
               ],
             ),

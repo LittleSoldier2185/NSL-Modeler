@@ -8,6 +8,8 @@ import '../core/validate/workspace_validator.dart';
 import '../state/workspace_controller.dart';
 import 'app_actions.dart';
 import 'document_actions.dart' show docTypeIcon;
+import 'wireframe/wf_panels.dart' show WireframeThumbnail;
+import '../core/export/workspace_summary.dart' show wireframeSummary;
 import 'shortcuts.dart';
 import 'theme.dart';
 import 'workspace_issues_dialog.dart';
@@ -41,6 +43,10 @@ class ProjectHomeView extends StatelessWidget {
     final objects = dfds.fold<int>(0, (a, d) => a + d.dfd!.nodes.length);
     final fcs = [for (final d in w.documents) if (d.type == DocType.flowchart) d];
     final symbols = fcs.fold<int>(0, (a, d) => a + d.flowchart!.nodes.length);
+    final wfs = [for (final d in w.documents) if (d.type == DocType.wireframe) d];
+    final sfs = [for (final d in w.documents) if (d.type == DocType.screenflow) d];
+    final components = wfs.fold<int>(0, (a, d) => a + d.wireframe!.components.length);
+    final screens = sfs.fold<int>(0, (a, d) => a + d.screenflow!.nodes.length);
     final path = w.filePath;
     final name = w.workspace.name.trim().isEmpty ? tr('(ไม่มีชื่อ)') : w.workspace.name;
 
@@ -82,6 +88,10 @@ class ProjectHomeView extends StatelessWidget {
                 _Action(const ValueKey('home-add-dfd'), Icons.account_tree_outlined, tr('เพิ่ม DFD'), () => w.addDocument(DocType.dfd)),
                 _Action(const ValueKey('home-add-flowchart'), Icons.schema_outlined, tr('เพิ่ม Flowchart'),
                     () => w.addDocument(DocType.flowchart)),
+                _Action(const ValueKey('home-add-wireframe'), Icons.web_outlined, tr('เพิ่ม Wireframe'),
+                    () => w.addDocument(DocType.wireframe)),
+                _Action(const ValueKey('home-add-screenflow'), Icons.alt_route_rounded, tr('เพิ่ม Screen Flow'),
+                    () => w.addDocument(DocType.screenflow)),
                 _Action(const ValueKey('home-issues'), Icons.rule_rounded, tr('ปัญหาทั้งโปรเจกต์…'), () => showWorkspaceIssues(context)),
                 _Action(const ValueKey('home-export'), Icons.ios_share_rounded, tr('Export เอกสารทั้งโปรเจกต์…'),
                     () => AppActions(context).run(Cmd.exportText)),
@@ -93,12 +103,16 @@ class ProjectHomeView extends StatelessWidget {
                 _Stat(const ValueKey('home-stat-tables'), tr('ตาราง'), '$tables'),
                 _Stat(const ValueKey('home-stat-objects'), tr('วัตถุ DFD'), '$objects'),
                 if (fcs.isNotEmpty) _Stat(const ValueKey('home-stat-symbols'), tr('สัญลักษณ์ Flowchart'), '$symbols'),
+                if (wfs.isNotEmpty) _Stat(const ValueKey('home-stat-components'), tr('ชิ้นส่วน Wireframe'), '$components'),
+                if (sfs.isNotEmpty) _Stat(const ValueKey('home-stat-screens'), tr('หน้าจอใน Screen Flow'), '$screens'),
                 _Stat(const ValueKey('home-stat-errors'), tr('ข้อผิดพลาด'), '$errors', color: errors > 0 ? C.danger : null),
                 _Stat(const ValueKey('home-stat-warnings'), tr('คำเตือน'), '$warnings', color: warnings > 0 ? C.warnText : null),
               ]),
               _section(tr('แผนภาพ ER'), ers, perDoc, w),
               _section(tr('แผนภาพกระแสข้อมูล (DFD)'), dfds, perDoc, w),
               _section(tr('ผังงาน (Flowchart)'), fcs, perDoc, w),
+              _section(tr('หน้าจอ (Wireframe)'), wfs, perDoc, w),
+              _section(tr('ลำดับหน้าจอ (Screen Flow)'), sfs, perDoc, w),
             ]),
           ),
         ),
@@ -178,6 +192,10 @@ class _DocCard extends StatelessWidget {
       detail = tr('{0} ตาราง · {1} คอลัมน์ · {2} FK', [er.tables.length, cols, er.relations.length]);
     } else if (fc != null) {
       detail = tr('{0} สัญลักษณ์ · {1} เส้นเชื่อม', [fc.nodes.length, fc.edges.length]);
+    } else if (doc.wireframe != null) {
+      detail = wireframeSummary(doc.wireframe!);
+    } else if (doc.screenflow != null) {
+      detail = tr('{0} หน้าจอ · {1} การเปลี่ยนหน้า', [doc.screenflow!.nodes.length, doc.screenflow!.edges.length]);
     } else {
       detail = tr('{0} วัตถุ · {1} เส้นข้อมูล', [dfd!.nodes.length, dfd.flows.length]);
     }
@@ -222,6 +240,10 @@ class _DocCard extends StatelessWidget {
               const SizedBox(height: 6),
               Text(detail, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, color: C.muted)),
               if (er != null) Text(er.dialect.label, style: TextStyle(fontSize: 12, color: C.muted)),
+              if (doc.wireframe != null) ...[
+                const SizedBox(height: 6),
+                SizedBox(width: 220, child: WireframeThumbnail(diagram: doc.wireframe!, height: 80)),
+              ],
             ]),
           ),
         ),

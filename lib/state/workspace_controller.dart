@@ -7,11 +7,15 @@ import '../core/models/diagram.dart';
 import '../core/models/doc_ref.dart';
 import '../core/models/flowchart_model.dart';
 import '../core/models/project.dart';
+import '../core/models/screenflow_model.dart';
+import '../core/models/wireframe_model.dart';
 import '../core/models/workspace.dart';
 import 'dfd_controller.dart';
 import 'flowchart_controller.dart';
 import 'doc_controller.dart';
 import 'project_controller.dart';
+import 'screenflow_controller.dart';
+import 'wireframe_controller.dart';
 
 /// ถือทั้งโปรเจกต์ ([Workspace]) ที่เปิดอยู่: ไฟล์ สถานะยังไม่บันทึก แท็บที่เปิด/แท็บที่ใช้งาน
 /// และ controller ของแต่ละเอกสาร (สร้างเมื่อใช้ครั้งแรก, ทิ้งเมื่อเอกสารถูกลบหรือเปิดโปรเจกต์ใหม่)
@@ -84,6 +88,8 @@ class WorkspaceController extends ChangeNotifier {
       DocType.er => ProjectController.forDoc(doc, this),
       DocType.dfd => DfdController.forDoc(doc, this),
       DocType.flowchart => FlowchartController.forDoc(doc, this),
+      DocType.wireframe => WireframeController.forDoc(doc, this),
+      DocType.screenflow => ScreenFlowController.forDoc(doc, this),
       null => null,
     };
     if (c != null) _register(c);
@@ -100,6 +106,18 @@ class WorkspaceController extends ChangeNotifier {
   FlowchartController? flowchartController(String id) {
     final c = controllerOf(id);
     return c is FlowchartController ? c : null;
+  }
+
+  /// controller ของเอกสาร Wireframe [id] (null = ไม่ใช่เอกสาร Wireframe)
+  WireframeController? wireframeController(String id) {
+    final c = controllerOf(id);
+    return c is WireframeController ? c : null;
+  }
+
+  /// controller ของเอกสาร Screen Flow [id] (null = ไม่ใช่เอกสาร Screen Flow)
+  ScreenFlowController? screenflowController(String id) {
+    final c = controllerOf(id);
+    return c is ScreenFlowController ? c : null;
   }
 
   ProjectController? erController(String id) {
@@ -211,7 +229,13 @@ class WorkspaceController extends ChangeNotifier {
   /// เนื้อหา Flowchart ของเอกสาร [id] — ไม่ใช่ Flowchart/ไม่มีอยู่ = แผนภาพว่างชั่วคราว
   FlowchartDiagram flowchartOf(String id) => _workspace.documentById(id)?.flowchart ?? FlowchartDiagram();
 
-  /// เพิ่มเอกสารใหม่ต่อท้าย (ER, DFD หรือ Flowchart) แล้วเปิดเป็นแท็บที่ใช้งาน — ชื่อซ้ำจะต่อเลขให้
+  /// เนื้อหา Wireframe ของเอกสาร [id] — ไม่ใช่ Wireframe/ไม่มีอยู่ = หน้าจอว่างชั่วคราว
+  WireframeDiagram wireframeOf(String id) => _workspace.documentById(id)?.wireframe ?? WireframeDiagram();
+
+  /// เนื้อหา Screen Flow ของเอกสาร [id] — ไม่ใช่ Screen Flow/ไม่มีอยู่ = แผนผังว่างชั่วคราว
+  ScreenFlowDiagram screenflowOf(String id) => _workspace.documentById(id)?.screenflow ?? ScreenFlowDiagram();
+
+  /// เพิ่มเอกสารใหม่ต่อท้าย (ER, DFD, Flowchart, Wireframe หรือ Screen Flow) แล้วเปิดเป็นแท็บที่ใช้งาน — ชื่อซ้ำจะต่อเลขให้
   ///
   /// ER ใหม่: [er] = เนื้อหาตั้งต้น (null = ว่าง ใช้ dialect และขนาดกระดานเดียวกับ ER ที่ใช้งานอยู่)
   ProjectDocument? addDocument(DocType type, {String? name, String? folderId, Project? er}) {
@@ -245,6 +269,20 @@ class WorkspaceController extends ChangeNotifier {
           id: newId('c'),
           name: _workspace.uniqueDocumentName(base.isEmpty ? 'Flowchart' : base),
           content: FlowchartDiagram(),
+          folderId: folder,
+        );
+      case DocType.wireframe:
+        doc = ProjectDocument.wireframe(
+          id: newId('w'),
+          name: _workspace.uniqueDocumentName(base.isEmpty ? 'Wireframe' : base),
+          content: WireframeDiagram(),
+          folderId: folder,
+        );
+      case DocType.screenflow:
+        doc = ProjectDocument.screenflow(
+          id: newId('s'),
+          name: _workspace.uniqueDocumentName(base.isEmpty ? 'Screen Flow' : base),
+          content: ScreenFlowDiagram(),
           folderId: folder,
         );
     }
@@ -294,6 +332,20 @@ class WorkspaceController extends ChangeNotifier {
           id: newId('c'),
           name: _workspace.uniqueDocumentName(src.name),
           content: FlowchartDiagram.fromJson(jsonDecode(jsonEncode(src.flowchart!.toJson()))),
+          folderId: src.folderId,
+        );
+      case DocType.wireframe:
+        copy = ProjectDocument.wireframe(
+          id: newId('w'),
+          name: _workspace.uniqueDocumentName(src.name),
+          content: WireframeDiagram.fromJson(jsonDecode(jsonEncode(src.wireframe!.toJson()))),
+          folderId: src.folderId,
+        );
+      case DocType.screenflow:
+        copy = ProjectDocument.screenflow(
+          id: newId('s'),
+          name: _workspace.uniqueDocumentName(src.name),
+          content: ScreenFlowDiagram.fromJson(jsonDecode(jsonEncode(src.screenflow!.toJson()))),
           folderId: src.folderId,
         );
       case null:
@@ -506,6 +558,24 @@ class WorkspaceController extends ChangeNotifier {
     return (d.type == DocType.flowchart ? flowchartController(d.id) : null) ?? _noFlowchart;
   }
 
+  /// ตัวแทนตอนเอกสารที่ใช้งานไม่ใช่ Wireframe (หน้าจอว่าง แก้ไขไม่ได้)
+  late final WireframeController _noWireframe = WireframeController.detached(this);
+
+  /// controller ของ Wireframe ที่ใช้งานอยู่ (แท็บที่เปิดไม่ใช่ Wireframe = ตัวแทนที่ว่างและแก้ไขไม่ได้)
+  WireframeController get currentWireframe {
+    final d = activeDocument;
+    return (d.type == DocType.wireframe ? wireframeController(d.id) : null) ?? _noWireframe;
+  }
+
+  /// ตัวแทนตอนเอกสารที่ใช้งานไม่ใช่ Screen Flow
+  late final ScreenFlowController _noScreenflow = ScreenFlowController.detached(this);
+
+  /// controller ของ Screen Flow ที่ใช้งานอยู่ (แท็บที่เปิดไม่ใช่ Screen Flow = ตัวแทนที่ว่างและแก้ไขไม่ได้)
+  ScreenFlowController get currentScreenflow {
+    final d = activeDocument;
+    return (d.type == DocType.screenflow ? screenflowController(d.id) : null) ?? _noScreenflow;
+  }
+
   /// controller ของเอกสารที่ใช้งานอยู่
   DocController get activeController => controllerOf(activeId) ?? _mainEr;
 
@@ -522,6 +592,8 @@ class WorkspaceController extends ChangeNotifier {
     _mainEr.dispose();
     _noDfd.dispose();
     _noFlowchart.dispose();
+    _noWireframe.dispose();
+    _noScreenflow.dispose();
     super.dispose();
   }
 }

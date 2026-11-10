@@ -5,6 +5,8 @@ import '../models/dfd_model.dart';
 import '../models/diagram.dart';
 import '../models/flowchart_model.dart';
 import '../models/project.dart';
+import '../models/screenflow_model.dart';
+import '../models/wireframe_model.dart';
 import '../models/workspace.dart';
 import 'project_format_exception.dart';
 
@@ -178,6 +180,8 @@ Workspace _decodeV3(Map<String, dynamic> j) {
       DocType.er => raw is Map ? Project.fromContentJson(Map<String, dynamic>.from(raw)) : Project(),
       DocType.dfd => DfdDiagram.fromJson(raw),
       DocType.flowchart => FlowchartDiagram.fromJson(raw),
+      DocType.wireframe => WireframeDiagram.fromJson(raw),
+      DocType.screenflow => ScreenFlowDiagram.fromJson(raw),
       null => RawDocContent(raw),
     };
     final folder = e['folder'];
@@ -216,6 +220,8 @@ void _uniqueNames(List<ProjectDocument> docs) {
         DocType.er => 'ER',
         DocType.dfd => 'DFD',
         DocType.flowchart => 'Flowchart',
+        DocType.wireframe => 'Wireframe',
+        DocType.screenflow => 'Screen Flow',
         null => 'Document',
       };
     }

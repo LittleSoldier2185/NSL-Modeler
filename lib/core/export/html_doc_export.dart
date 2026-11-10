@@ -9,6 +9,9 @@ import '../validate/workspace_validator.dart';
 import '../validate/flowchart_validator.dart' show fcShapeLabel;
 import 'dfd_svg.dart';
 import 'flowchart_svg.dart';
+import 'screenflow_svg.dart';
+import 'wireframe_svg.dart';
+import '../validate/screenflow_validator.dart' show sfKindLabel;
 import 'workspace_summary.dart';
 import 'svg_export.dart';
 
@@ -25,6 +28,8 @@ String exportHtmlDocument(Workspace w, {bool includeDiagrams = true}) {
   final erDocs = [for (final d in docs) if (d.type == DocType.er) d];
   final dfdDocs = [for (final d in docs) if (d.type == DocType.dfd) d];
   final fcDocs = [for (final d in docs) if (d.type == DocType.flowchart) d];
+  final wfDocs = [for (final d in docs) if (d.type == DocType.wireframe) d];
+  final sfDocs = [for (final d in docs) if (d.type == DocType.screenflow) d];
   final p0 = erDocs.firstOrNull?.er ?? Project(name: w.name);
   final b = StringBuffer();
   final title = _esc(legacy
@@ -57,7 +62,11 @@ String exportHtmlDocument(Workspace w, {bool includeDiagrams = true}) {
   String erDiagramId(ProjectDocument d) => legacy ? 'er-diagram' : 'er-${_safeId(d.id)}';
 
   // สารบัญ
-  final hasAny = erDocs.any((d) => d.er!.tables.isNotEmpty) || dfdDocs.isNotEmpty || fcDocs.isNotEmpty;
+  final hasAny = erDocs.any((d) => d.er!.tables.isNotEmpty) ||
+      dfdDocs.isNotEmpty ||
+      fcDocs.isNotEmpty ||
+      wfDocs.isNotEmpty ||
+      sfDocs.isNotEmpty;
   if (hasAny || !legacy) {
     b.writeln('<nav aria-label="${_esc(tr('สารบัญ'))}">');
     b.writeln('<h2>${_esc(tr('สารบัญ'))}</h2>');
@@ -77,11 +86,17 @@ String exportHtmlDocument(Workspace w, {bool includeDiagrams = true}) {
     for (final d in fcDocs) {
       b.writeln('<li><a href="#fc-${_safeId(d.id)}">Flowchart: ${_esc(d.name)}</a></li>');
     }
+    for (final d in wfDocs) {
+      b.writeln('<li><a href="#wf-${_safeId(d.id)}">Wireframe: ${_esc(d.name)}</a></li>');
+    }
+    for (final d in sfDocs) {
+      b.writeln('<li><a href="#sf-${_safeId(d.id)}">Screen Flow: ${_esc(d.name)}</a></li>');
+    }
     b.writeln('</ul>');
     b.writeln('</nav>');
   }
 
-  if (!legacy) _overview(b, w, [...erDocs, ...dfdDocs, ...fcDocs]);
+  if (!legacy) _overview(b, w, [...erDocs, ...dfdDocs, ...fcDocs, ...wfDocs, ...sfDocs]);
 
   for (final d in erDocs) {
     final p = d.er!;
@@ -115,6 +130,12 @@ String exportHtmlDocument(Workspace w, {bool includeDiagrams = true}) {
   for (final d in fcDocs) {
     _flowchart(b, d, [for (final i in issues) if (i.docId == d.id) i], includeDiagrams);
   }
+  for (final d in wfDocs) {
+    _wireframe(b, w, d, [for (final i in issues) if (i.docId == d.id) i], includeDiagrams);
+  }
+  for (final d in sfDocs) {
+    _screenflow(b, w, d, [for (final i in issues) if (i.docId == d.id) i], includeDiagrams);
+  }
   b.writeln('<footer>${_esc(tr('สร้างโดย NSL Dev'))}</footer>');
   b.writeln('</main>');
   b.writeln('</body>');
@@ -133,6 +154,8 @@ void _overview(StringBuffer b, Workspace w, List<ProjectDocument> docs) {
   b.writeln('<li>${_esc(tr('{0} ตาราง · {1} ความสัมพันธ์', [c.tables, c.relations]))}</li>');
   b.writeln('<li>${_esc(tr('{0} วัตถุ DFD · {1} เส้นข้อมูล', [c.objects, c.flows]))}</li>');
   if (c.fcs > 0) b.writeln('<li>${_esc(tr('{0} สัญลักษณ์ Flowchart · {1} เส้นเชื่อม', [c.symbols, c.fcEdges]))}</li>');
+  if (c.wfs > 0) b.writeln('<li>${_esc(tr('{0} ชิ้นส่วน Wireframe', [c.components]))}</li>');
+  if (c.sfs > 0) b.writeln('<li>${_esc(tr('{0} หน้าจอใน Screen Flow · {1} การเปลี่ยนหน้า', [c.screens, c.navs]))}</li>');
   b.writeln('<li>${_esc(tr('{0} ข้อผิดพลาด · {1} คำเตือน', [ec, issues.length - ec]))}</li>');
   b.writeln('</ul>');
   b.writeln('<h3>${_esc(tr('เอกสารในโปรเจกต์'))}</h3><ul>');
@@ -145,6 +168,13 @@ void _overview(StringBuffer b, Workspace w, List<ProjectDocument> docs) {
       final g = d.flowchart!;
       b.writeln('<li><a href="#fc-${_safeId(d.id)}">Flowchart: ${_esc(d.name)}</a> <span class="muted">— '
           '${_esc(tr('{0} สัญลักษณ์ · {1} เส้นเชื่อม', [g.nodes.length, g.edges.length]))}</span></li>');
+    } else if (d.type == DocType.wireframe) {
+      b.writeln('<li><a href="#wf-${_safeId(d.id)}">Wireframe: ${_esc(d.name)}</a> <span class="muted">— '
+          '${_esc(wireframeSummary(d.wireframe!))}</span></li>');
+    } else if (d.type == DocType.screenflow) {
+      final g = d.screenflow!;
+      b.writeln('<li><a href="#sf-${_safeId(d.id)}">Screen Flow: ${_esc(d.name)}</a> <span class="muted">— '
+          '${_esc(tr('{0} หน้าจอ · {1} การเปลี่ยนหน้า', [g.nodes.length, g.edges.length]))}</span></li>');
     } else {
       final g = d.dfd!;
       b.writeln('<li><a href="#dfd-${_esc(d.id)}">DFD: ${_esc(d.name)}</a> <span class="muted">— '
@@ -242,6 +272,75 @@ void _flowchart(StringBuffer b, ProjectDocument d, List<WorkspaceIssue> issues, 
     }
     b.writeln('</ul>');
   }
+  b.writeln('</section>');
+}
+
+void _issueList(StringBuffer b, List<WorkspaceIssue> issues) {
+  if (issues.isEmpty) return;
+  b.writeln('<h3>${_esc(tr('ปัญหาที่ตรวจพบ'))}</h3><ul>');
+  for (final i in issues) {
+    b.writeln('<li>${_sev(i.issue.severity)} ${_esc(i.issue.title)} <span class="muted">— ${_esc(_oneLine(i.issue.message))}</span></li>');
+  }
+  b.writeln('</ul>');
+}
+
+void _wireframe(StringBuffer b, Workspace w, ProjectDocument d, List<WorkspaceIssue> issues, bool includeDiagrams) {
+  final g = d.wireframe!;
+  b.writeln('<section id="wf-${_safeId(d.id)}">');
+  b.writeln('<h2>Wireframe: ${_esc(d.name)}</h2>');
+  b.writeln('<p class="meta">${_esc(wireframeSummary(g))}</p>');
+  final linked = screensLinkingTo(w, d.id);
+  if (linked.isNotEmpty) b.writeln('<p class="meta">${_esc(tr('ใช้ใน Screen Flow: {0}', [linked.join(', ')]))}</p>');
+  // ภาพตามรูปแบบการแสดงผลของเอกสาร (แสดงแม้ยังไม่มีชิ้นส่วน = กรอบหน้าจอเปล่า)
+  if (includeDiagrams) b.writeln('<div class="diagram">${_inlineSvg(exportWireframeSvg(g, title: d.name))}</div>');
+  if (g.components.isEmpty) {
+    b.writeln('<p class="muted">${_esc(tr('ไม่มีชิ้นส่วน'))}</p>');
+  } else {
+    b.writeln('<h3>${_esc(tr('ชิ้นส่วน'))}</h3>');
+    b.writeln('<table><thead><tr><th>${_esc(tr('ชนิด'))}</th><th>${_esc(tr('ข้อความ'))}</th><th>${_esc(tr('ตำแหน่ง / ขนาด'))}</th>'
+        '<th>${_esc(tr('สถานะ'))}</th><th>${_esc(tr('ข้อมูล ER'))}</th></tr></thead><tbody>');
+    for (final r in wireframeRows(w, g)) {
+      b.writeln('<tr><td style="padding-left:${10 + r.depth * 16}px">${_esc(r.kind)}</td><td>${_esc(r.text).replaceAll('\n', '<br>')}</td>'
+          '<td>${_esc(r.geometry)}</td><td>${_esc(r.state)}</td><td>${_esc(r.binding)}</td></tr>');
+    }
+    b.writeln('</tbody></table>');
+  }
+  _issueList(b, issues);
+  b.writeln('</section>');
+}
+
+void _screenflow(StringBuffer b, Workspace w, ProjectDocument d, List<WorkspaceIssue> issues, bool includeDiagrams) {
+  final g = d.screenflow!;
+  b.writeln('<section id="sf-${_safeId(d.id)}">');
+  b.writeln('<h2>Screen Flow: ${_esc(d.name)}</h2>');
+  b.writeln('<p class="meta">${_esc(tr('{0} หน้าจอ · {1} การเปลี่ยนหน้า', [g.nodes.length, g.edges.length]))}</p>');
+  if (g.nodes.isEmpty) {
+    b.writeln('<p class="muted">${_esc(tr('ไม่มีหน้าจอ'))}</p>');
+  } else {
+    final svg = includeDiagrams
+        ? exportScreenFlowSvg(g, title: d.name, wireframeOf: (id) => w.documentById(id)?.wireframe)
+        : null; // ธีมสว่างเสมอ
+    if (svg != null) b.writeln('<div class="diagram">${_inlineSvg(svg)}</div>');
+    b.writeln('<h3>${_esc(tr('หน้าจอ'))}</h3>');
+    b.writeln('<table><thead><tr><th>${_esc(tr('ชนิด'))}</th><th>${_esc(tr('ชื่อ'))}</th><th>Wireframe</th></tr></thead><tbody>');
+    for (final n in g.nodes) {
+      final wf = n.wireframeId == null ? null : w.documentById(n.wireframeId!);
+      final cell = wf?.wireframe != null ? '<a href="#wf-${_safeId(wf!.id)}">${_esc(wf.name)}</a>' : _esc(sfWireframeLabel(w, n));
+      b.writeln('<tr><td>${_esc(sfKindLabel(n.kind))}</td><td>${_esc(n.title)}</td><td>$cell</td></tr>');
+    }
+    b.writeln('</tbody></table>');
+    if (g.edges.isNotEmpty) {
+      b.writeln('<h3>${_esc(tr('การเปลี่ยนหน้า'))}</h3>');
+      b.writeln('<table><thead><tr><th>${_esc(tr('จาก'))}</th><th>${_esc(tr('ถึง'))}</th><th>${_esc(tr('เมื่อ (trigger)'))}</th>'
+          '<th>${_esc(tr('เงื่อนไข'))}</th></tr></thead><tbody>');
+      for (final e in g.edges) {
+        b.writeln('<tr><td>${_esc(sfNodeText(g, e.fromId))}</td><td>${_esc(sfNodeText(g, e.toId))}</td>'
+            '<td>${_esc(e.label)}</td><td>${_esc(e.condition)}</td></tr>');
+      }
+      b.writeln('</tbody></table>');
+    }
+  }
+  _issueList(b, issues);
   b.writeln('</section>');
 }
 

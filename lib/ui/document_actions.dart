@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import '../core/l10n/l10n.dart';
 import '../core/models/doc_ref.dart';
 import '../core/models/workspace.dart';
+import '../core/validate/screenflow_validator.dart' show sfNodeTitle;
+import '../core/validate/wireframe_validator.dart' show wfComponentTitle;
 import '../state/workspace_controller.dart';
 import 'prompt_dialog.dart';
 import 'theme.dart';
@@ -12,6 +14,8 @@ import 'theme.dart';
 IconData docTypeIcon(DocType? t) => switch (t) {
       DocType.er => Icons.table_chart_outlined,
       DocType.flowchart => Icons.schema_outlined,
+      DocType.wireframe => Icons.web_outlined,
+      DocType.screenflow => Icons.alt_route_rounded,
       _ => Icons.account_tree_outlined,
     };
 
@@ -101,14 +105,31 @@ List<String> brokenLinkLines(WorkspaceController c, String docId) {
   final out = <String>[];
   for (final (fromDoc, fromElement, ref) in c.backlinksOf(docId)) {
     final src = c.documentById(fromDoc);
-    final node = src?.dfd?.nodeById(fromElement);
-    final from = '${src?.name ?? fromDoc} · ${node == null || node.title.isEmpty ? tr('(ไม่มีชื่อ)') : node.title}';
+    final String what;
+    if (src?.wireframe != null) {
+      final comp = src!.wireframe!.componentById(fromElement);
+      what = comp == null ? tr('(ไม่มีชื่อ)') : wfComponentTitle(comp);
+    } else if (src?.screenflow != null) {
+      final n = src!.screenflow!.nodeById(fromElement);
+      what = n == null ? tr('(ไม่มีชื่อ)') : sfNodeTitle(n);
+    } else {
+      final node = src?.dfd?.nodeById(fromElement);
+      what = node == null || node.title.isEmpty ? tr('(ไม่มีชื่อ)') : node.title;
+    }
+    final from = '${src?.name ?? fromDoc} · $what';
+    final table = target?.er?.tableById(ref.elementId ?? '');
     out.add(switch (ref.kind) {
       DocRefKind.storeTable => tr('{0} → ตาราง {1}', [
           from,
-          target?.er?.tableById(ref.elementId ?? '')?.name ?? ref.elementId ?? '?',
+          table?.name ?? ref.elementId ?? '?',
         ]),
       DocRefKind.dfdChild => tr('{0} → แผนภาพย่อย', [from]),
+      DocRefKind.wireframeTable => tr('{0} → ตาราง {1}', [
+          from,
+          '${table?.name ?? ref.elementId ?? '?'}'
+              '${ref.subElementId == null ? '' : '.${table?.columnById(ref.subElementId!)?.name ?? ref.subElementId}'}',
+        ]),
+      DocRefKind.screenWireframe => tr('{0} → หน้าจอ Wireframe', [from]),
     });
   }
   return out;

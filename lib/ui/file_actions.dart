@@ -21,6 +21,10 @@ import '../state/app_settings.dart';
 import 'board_size_dialog.dart';
 import 'export/dfd_png.dart';
 import 'export/flowchart_png.dart';
+import 'export/wireframe_png.dart';
+import '../core/export/screenflow_svg.dart';
+import '../core/export/wireframe_svg.dart';
+import '../core/models/wireframe_model.dart' show WireframeDiagram;
 import '../core/db/db_session.dart' show DbKind;
 import '../core/db/mysql_data.dart';
 import '../core/db/sqlite_data.dart';
@@ -227,7 +231,9 @@ class FileActions {
     final ws = c.workspaceController.workspace;
     final empty = ws.tableCount == 0 &&
         !ws.documentsOf(DocType.dfd).any((d) => d.dfd!.nodes.isNotEmpty) &&
-        !ws.documentsOf(DocType.flowchart).any((d) => d.flowchart!.nodes.isNotEmpty);
+        !ws.documentsOf(DocType.flowchart).any((d) => d.flowchart!.nodes.isNotEmpty) &&
+        ws.documentsOf(DocType.wireframe).isEmpty &&
+        !ws.documentsOf(DocType.screenflow).any((d) => d.screenflow!.nodes.isNotEmpty);
     if (empty) {
       _toast(context, tr('ยังไม่มีตารางให้ Export'));
       return;
@@ -265,6 +271,8 @@ class FileActions {
   static Future<void> exportImage(BuildContext context, ProjectController c, {ImageArea? initialArea}) async {
     if (c.workspaceController.activeDocument.type == DocType.dfd) return _exportDfdImage(context, c);
     if (c.workspaceController.activeDocument.type == DocType.flowchart) return _exportFlowchartImage(context, c);
+    if (c.workspaceController.activeDocument.type == DocType.wireframe) return _exportWireframeImage(context, c);
+    if (c.workspaceController.activeDocument.type == DocType.screenflow) return _exportScreenFlowImage(context, c);
     final p = c.project;
     if (p.tables.isEmpty && p.notes.isEmpty) {
       _toast(context, tr('ยังไม่มีตารางให้ Export เป็นภาพ'));
@@ -395,6 +403,81 @@ class FileActions {
       if (!path.toLowerCase().endsWith('.${opts.format.name}')) path = '$path.${opts.format.name}';
       await File(path).writeAsBytes(bytes);
       if (context.mounted) _toast(context, tr('Export แล้ว: {0}{1}', [path, note]));
+    } catch (e) {
+      if (context.mounted) _toast(context, tr('Export ภาพไม่ได้: {0}', [e]));
+    }
+  }
+
+  /// บันทึกภาพที่สร้างแล้วลงไฟล์ที่ผู้ใช้เลือก (ใช้ร่วมกันของ Wireframe / Screen Flow)
+  static Future<void> _saveImage(BuildContext context, Uint8List bytes, ImageFormat format, String fileName, String note) async {
+    final uri = await FilePicker.saveFile(
+      dialogTitle: tr('Export ภาพ {0}', [format.name.toUpperCase()]),
+      fileName: fileName,
+      bytes: bytes,
+    );
+    if (uri == null) return;
+    var path = uri.toFilePath();
+    if (!path.toLowerCase().endsWith('.${format.name}')) path = '$path.${format.name}';
+    await File(path).writeAsBytes(bytes);
+    if (context.mounted) _toast(context, tr('Export แล้ว: {0}{1}', [path, note]));
+  }
+
+  /// Export หน้าจอ Wireframe ที่เปิดอยู่เป็น PNG/SVG — ภาพตามรูปแบบการแสดงผลของเอกสาร (ร่าง/เรียบร้อย) ไม่ขึ้นกับธีม
+  static Future<void> _exportWireframeImage(BuildContext context, ProjectController c) async {
+    final tab = c.workspaceController.activeDocument;
+    final d = c.workspaceController.wireframeOf(tab.id);
+    final opts = await showDialog<ImageExportOptions>(
+      context: context,
+      builder: (_) => const ExportImageDialog(hasNotes: false, showArea: false, showTransparent: true, showTheme: false),
+    );
+    if (opts == null || !context.mounted) return;
+    try {
+      late final Uint8List bytes;
+      var note = '';
+      if (opts.format == ImageFormat.svg) {
+        bytes = Uint8List.fromList(utf8.encode(exportWireframeSvg(d, title: tab.name, transparent: opts.transparent)));
+      } else {
+        final png = await exportWireframePng(d, scale: opts.scale, transparent: opts.transparent);
+        if (png == null) return;
+        bytes = png.bytes;
+        if (png.scale < opts.scale) note = tr(' (ลดสเกลเหลือ {0}x เพราะภาพใหญ่เกินไป)', [png.scale.toStringAsFixed(1)]);
+      }
+      if (!context.mounted) return;
+      await _saveImage(context, bytes, opts.format, '${safeName(tab.name)}_wireframe.${opts.format.name}', note);
+    } catch (e) {
+      if (context.mounted) _toast(context, tr('Export ภาพไม่ได้: {0}', [e]));
+    }
+  }
+
+  /// Export Screen Flow ที่เปิดอยู่เป็น PNG/SVG (ภาพย่อ Wireframe ในหน้าจอที่ผูกไว้)
+  static Future<void> _exportScreenFlowImage(BuildContext context, ProjectController c) async {
+    final w = c.workspaceController;
+    final tab = w.activeDocument;
+    final d = w.screenflowOf(tab.id);
+    if (d.nodes.isEmpty) {
+      _toast(context, tr('ยังไม่มีหน้าจอให้ Export เป็นภาพ'));
+      return;
+    }
+    final opts = await showDialog<ImageExportOptions>(
+      context: context,
+      builder: (_) => const ExportImageDialog(hasNotes: false, showArea: false, showTransparent: true),
+    );
+    if (opts == null || !context.mounted) return;
+    WireframeDiagram? wfOf(String id) => w.documentById(id)?.wireframe;
+    try {
+      late final Uint8List bytes;
+      var note = '';
+      if (opts.format == ImageFormat.svg) {
+        bytes = Uint8List.fromList(
+            utf8.encode(exportScreenFlowSvg(d, wireframeOf: wfOf, dark: opts.dark, title: tab.name, transparent: opts.transparent)!));
+      } else {
+        final png = await exportScreenFlowPng(d, wireframeOf: wfOf, scale: opts.scale, dark: opts.dark, transparent: opts.transparent);
+        if (png == null) return;
+        bytes = png.bytes;
+        if (png.scale < opts.scale) note = tr(' (ลดสเกลเหลือ {0}x เพราะภาพใหญ่เกินไป)', [png.scale.toStringAsFixed(1)]);
+      }
+      if (!context.mounted) return;
+      await _saveImage(context, bytes, opts.format, '${safeName(tab.name)}_screenflow.${opts.format.name}', note);
     } catch (e) {
       if (context.mounted) _toast(context, tr('Export ภาพไม่ได้: {0}', [e]));
     }

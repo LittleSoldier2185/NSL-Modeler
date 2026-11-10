@@ -2,6 +2,8 @@ import 'dfd_model.dart';
 import 'diagram.dart';
 import 'flowchart_model.dart';
 import 'project.dart';
+import 'screenflow_model.dart';
+import 'wireframe_model.dart';
 
 /// ชนิดเอกสารที่โปรแกรมรู้จัก (ชนิดอื่นจากไฟล์รุ่นใหม่กว่าเก็บเป็น [RawDocContent] และเขียนกลับไม่เปลี่ยน)
 enum DocType {
@@ -13,6 +15,12 @@ enum DocType {
 
   /// Flowchart — เนื้อหาคือ [FlowchartDiagram] (ชนิดในไฟล์ `flowchart` ; รุ่น 0.6.0 เก็บเป็นชนิดที่ไม่รู้จักและเขียนกลับครบ)
   flowchart,
+
+  /// Wireframe — หน้าจอหนึ่งหน้า เนื้อหาคือ [WireframeDiagram] (ชนิดในไฟล์ `wireframe`)
+  wireframe,
+
+  /// Screen Flow — แผนผังการเปลี่ยนหน้าจอ เนื้อหาคือ [ScreenFlowDiagram] (ชนิดในไฟล์ `screenflow`)
+  screenflow,
 }
 
 /// เนื้อหาของเอกสารหนึ่งชิ้น — เขียนเป็นค่า `content` ของเอกสารในไฟล์ v3
@@ -79,6 +87,12 @@ class ProjectDocument {
   ProjectDocument.flowchart({required String id, required String name, required FlowchartDiagram content, String? folderId})
       : this(id: id, typeName: DocType.flowchart.name, name: name, content: content, folderId: folderId);
 
+  ProjectDocument.wireframe({required String id, required String name, required WireframeDiagram content, String? folderId})
+      : this(id: id, typeName: DocType.wireframe.name, name: name, content: content, folderId: folderId);
+
+  ProjectDocument.screenflow({required String id, required String name, required ScreenFlowDiagram content, String? folderId})
+      : this(id: id, typeName: DocType.screenflow.name, name: name, content: content, folderId: folderId);
+
   final String id;
 
   /// ชื่อชนิดตามที่เขียนในไฟล์ (คงไว้แม้ไม่รู้จัก)
@@ -102,6 +116,12 @@ class ProjectDocument {
 
   /// เนื้อหา Flowchart (null ถ้าไม่ใช่เอกสาร Flowchart)
   FlowchartDiagram? get flowchart => content is FlowchartDiagram ? content as FlowchartDiagram : null;
+
+  /// เนื้อหา Wireframe (null ถ้าไม่ใช่เอกสาร Wireframe)
+  WireframeDiagram? get wireframe => content is WireframeDiagram ? content as WireframeDiagram : null;
+
+  /// เนื้อหา Screen Flow (null ถ้าไม่ใช่เอกสาร Screen Flow)
+  ScreenFlowDiagram? get screenflow => content is ScreenFlowDiagram ? content as ScreenFlowDiagram : null;
 }
 
 /// ทั้งโปรเจกต์ (ไฟล์ `.nsld` v3): ชื่อ ข้อมูลประกอบ โฟลเดอร์ เอกสาร และลิงก์ระหว่างเอกสาร

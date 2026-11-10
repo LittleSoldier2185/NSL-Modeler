@@ -3,6 +3,7 @@ import '../models/project.dart';
 import '../models/workspace.dart';
 import '../validate/issue.dart';
 import '../validate/flowchart_validator.dart' show fcShapeLabel;
+import '../validate/screenflow_validator.dart' show sfKindLabel;
 import '../validate/workspace_validator.dart';
 import 'workspace_summary.dart';
 import '../types/type_label.dart';
@@ -38,7 +39,13 @@ String exportDataDictionary(Project p) {
 String exportWorkspaceDictionary(Workspace w) {
   if (isSingleErWorkspace(w)) return exportDataDictionary(knownDocs(w).first.er!);
   // ER ทุกอันก่อน แล้ว DFD ทุกอัน (ตามลำดับเอกสารในแต่ละชนิด)
-  final docs = [...w.documentsOf(DocType.er), ...w.documentsOf(DocType.dfd), ...w.documentsOf(DocType.flowchart)];
+  final docs = [
+    ...w.documentsOf(DocType.er),
+    ...w.documentsOf(DocType.dfd),
+    ...w.documentsOf(DocType.flowchart),
+    ...w.documentsOf(DocType.wireframe),
+    ...w.documentsOf(DocType.screenflow),
+  ];
   final c = workspaceCounts(w);
   final issues = exportIssues(w);
   final b = StringBuffer();
@@ -50,6 +57,8 @@ String exportWorkspaceDictionary(Workspace w) {
   b.writeln(tr('- {0} ตาราง · {1} ความสัมพันธ์', [c.tables, c.relations]));
   b.writeln(tr('- {0} วัตถุ DFD · {1} เส้นข้อมูล', [c.objects, c.flows]));
   if (c.fcs > 0) b.writeln('- ${tr('{0} สัญลักษณ์ Flowchart · {1} เส้นเชื่อม', [c.symbols, c.fcEdges])}');
+  if (c.wfs > 0) b.writeln('- ${tr('{0} ชิ้นส่วน Wireframe', [c.components])}');
+  if (c.sfs > 0) b.writeln('- ${tr('{0} หน้าจอใน Screen Flow · {1} การเปลี่ยนหน้า', [c.screens, c.navs])}');
   final ec = issues.where((i) => i.issue.severity == Severity.error).length;
   b.writeln(tr('- {0} ข้อผิดพลาด · {1} คำเตือน', [ec, issues.length - ec]));
   b.writeln();
@@ -62,6 +71,11 @@ String exportWorkspaceDictionary(Workspace w) {
     } else if (d.type == DocType.flowchart) {
       final g = d.flowchart!;
       b.writeln('- Flowchart: ${_inline(d.name)} — ${tr('{0} สัญลักษณ์ · {1} เส้นเชื่อม', [g.nodes.length, g.edges.length])}');
+    } else if (d.type == DocType.wireframe) {
+      b.writeln('- Wireframe: ${_inline(d.name)} — ${wireframeSummary(d.wireframe!)}');
+    } else if (d.type == DocType.screenflow) {
+      final g = d.screenflow!;
+      b.writeln('- Screen Flow: ${_inline(d.name)} — ${tr('{0} หน้าจอ · {1} การเปลี่ยนหน้า', [g.nodes.length, g.edges.length])}');
     } else {
       final g = d.dfd!;
       b.writeln('- DFD: ${_inline(d.name)} — ${tr('{0} วัตถุ DFD · {1} เส้นข้อมูล', [g.nodes.length, g.flows.length])}');
@@ -94,6 +108,10 @@ String exportWorkspaceDictionary(Workspace w) {
       }
     } else if (d.type == DocType.flowchart) {
       _flowchart(b, d, [for (final i in issues) if (i.docId == d.id) i]);
+    } else if (d.type == DocType.wireframe) {
+      _wireframe(b, w, d, [for (final i in issues) if (i.docId == d.id) i]);
+    } else if (d.type == DocType.screenflow) {
+      _screenflow(b, w, d, [for (final i in issues) if (i.docId == d.id) i]);
     } else {
       _dfd(b, w, d, [for (final i in issues) if (i.docId == d.id) i]);
     }
@@ -178,6 +196,70 @@ void _flowchart(StringBuffer b, ProjectDocument d, List<WorkspaceIssue> issues) 
       b.writeln('- ${severityLabel(i.issue.severity)} · ${_inline(i.issue.title)} — ${_inline(i.issue.message)}');
     }
   }
+}
+
+void _issues(StringBuffer b, List<WorkspaceIssue> issues) {
+  if (issues.isEmpty) return;
+  b.writeln();
+  b.writeln(tr('**ปัญหาที่ตรวจพบ**'));
+  b.writeln();
+  for (final i in issues) {
+    b.writeln('- ${severityLabel(i.issue.severity)} · ${_inline(i.issue.title)} — ${_inline(i.issue.message)}');
+  }
+}
+
+void _wireframe(StringBuffer b, Workspace w, ProjectDocument d, List<WorkspaceIssue> issues) {
+  final g = d.wireframe!;
+  b.writeln('## Wireframe: ${_inline(d.name)}');
+  b.writeln();
+  b.writeln('- ${wireframeSummary(g)}');
+  final linked = screensLinkingTo(w, d.id);
+  if (linked.isNotEmpty) b.writeln('- ${tr('ใช้ใน Screen Flow: {0}', [linked.join(', ')])}');
+  if (g.components.isEmpty) {
+    b.writeln();
+    b.writeln(tr('_ไม่มีชิ้นส่วน_'));
+  } else {
+    b.writeln();
+    b.writeln('**${tr('ชิ้นส่วน')}**');
+    b.writeln();
+    b.writeln(tr('| ชนิด | ข้อความ | ตำแหน่ง / ขนาด | สถานะ | ข้อมูล ER |'));
+    b.writeln('|------|---------|----------------|-------|-----------|');
+    for (final r in wireframeRows(w, g)) {
+      b.writeln('| ${'&nbsp;&nbsp;' * r.depth}${_cell(r.kind)} | ${_cell(r.text)} | ${r.geometry} | ${_cell(r.state)} | ${_cell(r.binding)} |');
+    }
+  }
+  _issues(b, issues);
+}
+
+void _screenflow(StringBuffer b, Workspace w, ProjectDocument d, List<WorkspaceIssue> issues) {
+  final g = d.screenflow!;
+  b.writeln('## Screen Flow: ${_inline(d.name)}');
+  b.writeln();
+  b.writeln('- ${tr('{0} หน้าจอ · {1} การเปลี่ยนหน้า', [g.nodes.length, g.edges.length])}');
+  if (g.nodes.isEmpty) {
+    b.writeln();
+    b.writeln(tr('_ไม่มีหน้าจอ_'));
+  } else {
+    b.writeln();
+    b.writeln('**${tr('หน้าจอ')}**');
+    b.writeln();
+    b.writeln(tr('| ชนิด | ชื่อ | Wireframe |'));
+    b.writeln('|------|------|-----------|');
+    for (final n in g.nodes) {
+      b.writeln('| ${sfKindLabel(n.kind)} | ${_cell(n.title)} | ${_cell(sfWireframeLabel(w, n))} |');
+    }
+    if (g.edges.isNotEmpty) {
+      b.writeln();
+      b.writeln('**${tr('การเปลี่ยนหน้า')}**');
+      b.writeln();
+      b.writeln(tr('| จาก | ถึง | เมื่อ (trigger) | เงื่อนไข |'));
+      b.writeln('|-----|-----|-----------------|----------|');
+      for (final e in g.edges) {
+        b.writeln('| ${_cell(sfNodeText(g, e.fromId))} | ${_cell(sfNodeText(g, e.toId))} | ${_cell(e.label)} | ${_cell(e.condition)} |');
+      }
+    }
+  }
+  _issues(b, issues);
 }
 
 void _tables(StringBuffer b, Project p, String h) {
