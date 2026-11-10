@@ -169,4 +169,8 @@ String fcShapeLabel(FcShape s) => switch (s) {
       FcShape.note => tr('โน้ต'),
       FcShape.rounded => tr('สี่เหลี่ยมมุมมน'),
       FcShape.ellipse => tr('วงรี'),
+      FcShape.text => tr('ข้อความ'),
+      FcShape.hexagon => tr('หกเหลี่ยม'),
+      FcShape.cylinder => tr('ทรงกระบอก (ฐานข้อมูล)'),
+      FcShape.document => tr('เอกสาร@@fcshape'),
     };

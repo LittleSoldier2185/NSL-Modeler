@@ -60,6 +60,10 @@ class FlowchartActions {
         copy();
       case Cmd.paste:
         paste();
+      case Cmd.groupSelected:
+        f.groupSelection();
+      case Cmd.ungroupSelected:
+        f.ungroupSelection();
       case Cmd.toolSelect:
         f.setTool(FcTool.select);
       case Cmd.toolFk:

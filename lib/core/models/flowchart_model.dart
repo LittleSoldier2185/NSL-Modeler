@@ -34,10 +34,22 @@ enum FcShape {
 
   /// วงรี
   ellipse,
+
+  /// ข้อความลอย (ไม่มีกรอบ/สีพื้น เว้นแต่กำหนดเอง) — เป็นคำอธิบาย ไม่นับในกฎการไหล
+  text,
+
+  /// หกเหลี่ยม (ขั้นเตรียมการ / preparation)
+  hexagon,
+
+  /// ทรงกระบอก (ฐานข้อมูล / ที่เก็บข้อมูล)
+  cylinder,
+
+  /// เอกสาร (ขอบล่างเป็นคลื่น)
+  document,
 }
 
 /// สัญลักษณ์ที่เป็นคำอธิบาย ไม่ใช่ขั้นตอน (ข้ามในกฎการไหลและการจัดวางอัตโนมัติ)
-bool fcIsAnnotation(FcShape s) => s == FcShape.note;
+bool fcIsAnnotation(FcShape s) => s == FcShape.note || s == FcShape.text;
 
 /// ขนาดเริ่มต้นของแต่ละรูปทรง
 (double, double) fcDefaultSize(FcShape s) => switch (s) {
@@ -47,6 +59,10 @@ bool fcIsAnnotation(FcShape s) => s == FcShape.note;
       FcShape.connector => (44, 44),
       FcShape.note => (170, 80),
       FcShape.ellipse => (130, 76),
+      FcShape.text => (160, 36),
+      FcShape.hexagon => (160, 64),
+      FcShape.cylinder => (110, 90),
+      FcShape.document => (160, 70),
     };
 
 /// สีประจำรูปทรง (ใช้เมื่อไม่ได้กำหนดสีเส้นเอง) — ใช้ร่วมกันทั้งบนจอ PNG และ SVG
@@ -61,6 +77,10 @@ const Map<FcShape, int> kFcShapeColors = {
   FcShape.note: 0xFFCA8A04,
   FcShape.rounded: 0xFF4F46E5,
   FcShape.ellipse: 0xFFDB2777,
+  FcShape.text: 0xFF64748B,
+  FcShape.hexagon: 0xFF0891B2,
+  FcShape.cylinder: 0xFF65A30D,
+  FcShape.document: 0xFFEA580C,
 };
 
 const double kFcMinSide = 24;
@@ -92,6 +112,7 @@ class FcNode {
     this.italic = false,
     this.align = FcAlign.center,
     this.dash = FcDash.solid,
+    this.group,
   })  : w = w ?? fcDefaultSize(shape).$1,
         h = h ?? fcDefaultSize(shape).$2;
 
@@ -110,6 +131,9 @@ class FcNode {
 
   /// เส้นขอบ
   FcDash dash;
+
+  /// รหัสกลุ่ม — สัญลักษณ์ที่มีรหัสเดียวกันถูกเลือก/ย้ายพร้อมกัน (null = ไม่อยู่ในกลุ่ม)
+  String? group;
 
   double get cx => x + w / 2;
   double get cy => y + h / 2;
@@ -132,6 +156,7 @@ class FcNode {
         if (italic) 'italic': true,
         if (align != FcAlign.center) 'align': align.name,
         if (dash != FcDash.solid) 'dash': dash.name,
+        if (group != null) 'group': group,
       };
 
   /// ค่าผิดปกติ = null (ข้ามสัญลักษณ์นั้น) หรือใช้ค่าปลอดภัย
@@ -164,6 +189,7 @@ class FcNode {
       italic: j['italic'] == true,
       align: FcAlign.values.asNameMap()[j['align']] ?? FcAlign.center,
       dash: FcDash.values.asNameMap()[j['dash']] ?? FcDash.solid,
+      group: j['group'] is String && (j['group'] as String).isNotEmpty ? j['group'] as String : null,
     );
   }
 }

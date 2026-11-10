@@ -45,6 +45,10 @@ IconData fcShapeIcon(FcShape s) => switch (s) {
       FcShape.note => Icons.sticky_note_2_outlined,
       FcShape.rounded => Icons.rounded_corner_rounded,
       FcShape.ellipse => Icons.panorama_fish_eye_rounded,
+      FcShape.text => Icons.text_fields_rounded,
+      FcShape.hexagon => Icons.hexagon_outlined,
+      FcShape.cylinder => Icons.storage_rounded,
+      FcShape.document => Icons.description_outlined,
     };
 
 /// คีย์ลัดของเครื่องมือวางรูปทรง ("" = ไม่มี)
@@ -71,12 +75,19 @@ class FlowchartCanvas extends StatefulWidget {
   State<FlowchartCanvas> createState() => _FlowchartCanvasState();
 }
 
-enum _Drag { none, move, marquee, pan, resize }
+enum _Drag { none, move, marquee, pan, resize, link }
 
 class _FlowchartCanvasState extends State<FlowchartCanvas> {
   _Drag _drag = _Drag.none;
   Offset? _marqueeStart, _marqueeEnd;
   final ValueNotifier<Offset?> _cursor = ValueNotifier(null);
+
+  /// สัญลักษณ์ที่เมาส์ชี้อยู่ (แสดงจุดต่อเส้น) — แยกจาก [_cursor] เพื่อให้วาดใหม่เฉพาะตอนเปลี่ยนตัว
+  final ValueNotifier<String?> _hoverId = ValueNotifier(null);
+  late final Listenable _repaint = Listenable.merge([_cursor, _hoverId]);
+
+  /// ต้นทางของเส้นที่กำลังลากจากจุดต่อเส้น (null = ไม่ได้ลาก)
+  String? _dragLinkFrom;
   DateTime _lastTap = DateTime.fromMillisecondsSinceEpoch(0);
   String? _lastTapId;
   Set<String> _marqueeBase = const {};
@@ -85,7 +96,38 @@ class _FlowchartCanvasState extends State<FlowchartCanvas> {
   @override
   void dispose() {
     _cursor.dispose();
+    _hoverId.dispose();
     super.dispose();
+  }
+
+  /// จุดต่อเส้นที่ [world] ชี้อยู่ (เฉพาะเครื่องมือเลือก และไม่ได้พิมพ์ข้อความ)
+  ({FcNode node, RouteSide side})? _linkHandleAt(FlowchartController f, Offset world) {
+    if (f.tool != FcTool.select || f.editing != null) return null;
+    final gap = kFcLinkGapPx / f.scale, r = kFcLinkRadiusPx / f.scale;
+    final n = fcLinkHoverNode(f.diagram, world.dx, world.dy, gap: gap, radius: r);
+    if (n == null) return null;
+    final side = fcLinkHandleAt(n, world.dx, world.dy, gap: gap, radius: r);
+    return side == null ? null : (node: n, side: side);
+  }
+
+  void _updateHover(FlowchartController f, Offset local) {
+    String? id;
+    if (f.tool == FcTool.select && f.editing == null && _drag == _Drag.none) {
+      final world = f.toWorld(local);
+      id = fcLinkHoverNode(f.diagram, world.dx, world.dy, gap: kFcLinkGapPx / f.scale, radius: kFcLinkRadiusPx / f.scale)?.id;
+    }
+    if (_hoverId.value != id) _hoverId.value = id;
+  }
+
+  /// สร้างสัญลักษณ์ใหม่ต่อจาก [from] พร้อมเส้น แล้วเปิดช่องพิมพ์ (ทางออกของการตัดสินใจ = พิมพ์ป้ายเส้นก่อน)
+  void _spawnLinked(FlowchartController f, FcNode from, double cx, double cy) {
+    final r = f.addLinkedNode(from.id, FcShape.process, cx, cy, snap: _snap);
+    if (r == null) return;
+    if (from.shape == FcShape.decision) {
+      f.beginEditEdge(r.$2.id);
+    } else {
+      f.beginEditNode(r.$1.id);
+    }
   }
 
   bool get _ctrlOrShift => HardwareKeyboard.instance.isControlPressed || HardwareKeyboard.instance.isShiftPressed;
@@ -118,6 +160,14 @@ class _FlowchartCanvasState extends State<FlowchartCanvas> {
     // กำลังพิมพ์อยู่: โฟกัสกลับมาที่หน้าหลักแล้ว (บรรทัดบน) ช่องพิมพ์จึงเสียโฟกัสและบันทึกเอง — คลิกนี้ใช้จบการพิมพ์อย่างเดียว
     if (f.editing != null) return;
     final world = f.toWorld(local);
+    final handle = _linkHandleAt(f, world);
+    if (handle != null) {
+      // คลิกจุดต่อเส้น = สร้างสัญลักษณ์ต่อออกไปทางด้านนั้นเลย
+      final (cx, cy) = fcNextNodeCenter(handle.node, handle.side, FcShape.process);
+      _spawnLinked(f, handle.node, cx, cy);
+      _hoverId.value = null;
+      return;
+    }
     final hit = _hit(f, world);
     switch (f.tool) {
       case FcTool.select:
@@ -172,6 +222,9 @@ class _FlowchartCanvasState extends State<FlowchartCanvas> {
         }, enabled: !many),
         MenuSpec(tr('คัดลอก'), Icons.copy_rounded, a.copy, shortcut: 'Ctrl+C'),
         MenuSpec(tr('ทำสำเนา'), Icons.file_copy_outlined, f.duplicateSelection, shortcut: 'Ctrl+D'),
+        if (many) MenuSpec(tr('จัดกลุ่ม'), Icons.group_work_outlined, f.groupSelection, shortcut: 'Ctrl+G'),
+        if (f.selectionHasGroup)
+          MenuSpec(tr('เลิกจัดกลุ่ม'), Icons.layers_clear_outlined, f.ungroupSelection, shortcut: 'Ctrl+Shift+G'),
         MenuSpec(tr('นำขึ้นบนสุด'), Icons.flip_to_front_rounded, () => f.reorder(front: true)),
         MenuSpec(tr('นำลงล่างสุด'), Icons.flip_to_back_rounded, () => f.reorder(front: false)),
         if (many) ...[
@@ -236,6 +289,16 @@ class _FlowchartCanvasState extends State<FlowchartCanvas> {
       return;
     }
     final world = f.toWorld(s.localPosition);
+    final link = _linkHandleAt(f, world);
+    if (link != null) {
+      _hoverId.value = null;
+      _cursor.value = world;
+      setState(() {
+        _drag = _Drag.link;
+        _dragLinkFrom = link.node.id;
+      });
+      return;
+    }
     final handle = f.handleAt(world);
     if (handle != null) {
       f.beginResize(handle);
@@ -262,7 +325,9 @@ class _FlowchartCanvasState extends State<FlowchartCanvas> {
       case _Drag.pan:
         f.panBy(u.delta);
       case _Drag.move:
-        f.moveBy(u.delta.dx / f.scale, u.delta.dy / f.scale, grid: grid);
+        // Alt ค้างไว้ = ปิดการชิดแนว (เหมือน draw.io)
+        f.moveBy(u.delta.dx / f.scale, u.delta.dy / f.scale,
+            grid: grid, guideTol: HardwareKeyboard.instance.isAltPressed ? null : kFcGuideTolPx / f.scale);
       case _Drag.resize:
         f.resizeBy(u.delta.dx / f.scale, u.delta.dy / f.scale, grid: grid);
       case _Drag.marquee:
@@ -273,15 +338,37 @@ class _FlowchartCanvasState extends State<FlowchartCanvas> {
           for (final n in f.diagram.nodes)
             if (r.overlaps(Rect.fromLTWH(n.x, n.y, n.w, n.h))) n.id,
         });
+      case _Drag.link:
+        _cursor.value = f.toWorld(u.localPosition);
       case _Drag.none:
         break;
     }
+  }
+
+  /// ปล่อยเส้นที่ลากจากจุดต่อเส้น: บนสัญลักษณ์อื่น = ต่อเส้น ; บนที่ว่างนอกตัวต้นทาง = สร้างสัญลักษณ์ใหม่ตรงนั้น
+  void _finishLink(FlowchartController f) {
+    final fromId = _dragLinkFrom, at = _cursor.value;
+    _dragLinkFrom = null;
+    _cursor.value = null;
+    final from = fromId == null ? null : f.diagram.nodeById(fromId);
+    if (from == null || at == null) return;
+    final target = fcNodeAt(f.diagram, at.dx, at.dy);
+    if (target != null) {
+      if (target.id == from.id) return;
+      final e = f.addEdge(from.id, target.id);
+      if (e != null && from.shape == FcShape.decision) f.beginEditEdge(e.id);
+      return;
+    }
+    final reach = (kFcLinkGapPx + kFcLinkRadiusPx) / f.scale;
+    if (Rect.fromLTWH(from.x, from.y, from.w, from.h).inflate(reach).contains(at)) return;
+    _spawnLinked(f, from, at.dx, at.dy);
   }
 
   void _panEnd() {
     final f = context.read<FlowchartController>();
     if (_drag == _Drag.move) f.endMove();
     if (_drag == _Drag.resize) f.endResize();
+    if (_drag == _Drag.link) _finishLink(f);
     setState(() {
       _drag = _Drag.none;
       _marqueeStart = null;
@@ -324,10 +411,14 @@ class _FlowchartCanvasState extends State<FlowchartCanvas> {
           },
           onPointerHover: (e) {
             if (f.linkSource != null) _cursor.value = f.toWorld(e.localPosition);
+            _updateHover(f, e.localPosition);
           },
           child: MouseRegion(
+            onExit: (_) => _hoverId.value = null,
             cursor: f.tool == FcTool.select
-                ? (_drag == _Drag.pan ? SystemMouseCursors.grabbing : SystemMouseCursors.basic)
+                ? (_drag == _Drag.pan
+                    ? SystemMouseCursors.grabbing
+                    : (_drag == _Drag.link || _hoverId.value != null ? SystemMouseCursors.precise : SystemMouseCursors.basic))
                 : SystemMouseCursors.precise,
             child: Stack(key: _canvasKey, children: [
               Positioned.fill(
@@ -352,11 +443,13 @@ class _FlowchartCanvasState extends State<FlowchartCanvas> {
                       scale: f.scale,
                       selectedNodes: f.selectedNodeIds,
                       selectedEdge: f.selectedEdgeId,
-                      linkSource: f.linkSource,
+                      linkSource: f.linkSource ?? _dragLinkFrom,
                       linkCursor: _cursor.value,
                       marquee: marquee,
                       hideTextOf: editing?.id,
-                      repaint: _cursor,
+                      hoverNodeId: _hoverId,
+                      guides: f.guides,
+                      repaint: _repaint,
                     ),
                     child: const SizedBox.expand(),
                   ),

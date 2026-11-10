@@ -63,6 +63,7 @@ class AppActions {
         Cmd.createTableForm: createTableFromForm,
         Cmd.editTableStructure: editTableStructure,
         Cmd.groupSelected: groupSelected,
+        Cmd.ungroupSelected: () {}, // ใช้เฉพาะแท็บ Flowchart (ดู FlowchartActions) — บนแท็บ ER ไม่ทำอะไร
         Cmd.escape: escape,
         Cmd.fit: () => cv.fit(c.project),
         Cmd.zoom100: cv.resetZoom,

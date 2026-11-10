@@ -9,6 +9,7 @@ import '../core/layout/dfd_resize.dart' show DfdHandle, dfdHandleAtRect, resizeD
 import '../core/layout/diagram_geometry.dart' show snapToGrid, kGridSize;
 import '../core/layout/flowchart_geometry.dart';
 import '../core/layout/flowchart_layout.dart';
+import '../core/layout/smart_guides.dart';
 import '../core/models/flowchart_model.dart';
 import '../core/models/workspace.dart';
 import '../core/validate/flowchart_validator.dart' show fcShapeLabel;
@@ -111,21 +112,34 @@ class FlowchartController extends DocController with DiagramViewport {
     notifyListeners();
   }
 
+  /// สมาชิกทั้งหมดของกลุ่มที่ [id] อยู่ (ไม่อยู่กลุ่ม = ตัวมันเอง)
+  Set<String> _withGroup(String id) {
+    final g = diagram.nodeById(id)?.group;
+    if (g == null) return {id};
+    return {for (final n in diagram.nodes) if (n.group == g) n.id};
+  }
+
+  /// เลือกสัญลักษณ์ (ถ้าอยู่ในกลุ่ม = เลือกทั้งกลุ่ม) ; [add] = สลับเข้า/ออกจากที่เลือกอยู่
   void selectNode(String id, {bool add = false}) {
     if (diagram.nodeById(id) == null) return;
     _edge = null;
+    final members = _withGroup(id);
     if (add) {
-      if (!_nodes.remove(id)) _nodes.add(id);
+      if (_nodes.contains(id)) {
+        _nodes.removeAll(members);
+      } else {
+        _nodes.addAll(members);
+      }
     } else {
       _nodes
         ..clear()
-        ..add(id);
+        ..addAll(members);
     }
     notifyListeners();
   }
 
   void setNodeSelection(Iterable<String> ids) {
-    final next = {for (final id in ids) if (diagram.nodeById(id) != null) id};
+    final next = <String>{for (final id in ids) if (diagram.nodeById(id) != null) ..._withGroup(id)};
     if (next.length == _nodes.length && next.containsAll(_nodes) && _edge == null) return;
     _edge = null;
     _nodes
@@ -299,15 +313,28 @@ class FlowchartController extends DocController with DiagramViewport {
   Map<String, (double, double)>? _origin;
   double _rawDx = 0, _rawDy = 0;
 
+  Rect? _originBox;
+  List<Rect> _guideTargets = const [];
+  List<GuideLine> _guides = const [];
+
+  /// เส้นช่วยจัดแนวที่กำลังแสดงระหว่างลากย้าย (ว่าง = ไม่มี)
+  List<GuideLine> get guides => _guides;
+
   void beginMove() {
     beginGesture();
-    _origin = {for (final n in selectedNodes) n.id: (n.x, n.y)};
+    final sel = selectedNodes;
+    _origin = {for (final n in sel) n.id: (n.x, n.y)};
+    _originBox = sel.isEmpty
+        ? null
+        : sel.map((n) => Rect.fromLTWH(n.x, n.y, n.w, n.h)).reduce((a, b) => a.expandToInclude(b));
+    _guideTargets = [for (final n in diagram.nodes) if (!_nodes.contains(n.id)) Rect.fromLTWH(n.x, n.y, n.w, n.h)];
     _rawDx = 0;
     _rawDy = 0;
   }
 
-  /// ย้ายสัญลักษณ์ที่เลือกแบบสด ([grid] != null = ปัดเข้าช่อง โดยทุกชิ้นเลื่อนเท่ากัน)
-  void moveBy(double dx, double dy, {double? grid}) {
+  /// ย้ายสัญลักษณ์ที่เลือกแบบสด ([grid] != null = ปัดเข้าช่อง โดยทุกชิ้นเลื่อนเท่ากัน ;
+  /// [guideTol] != null = ชิดแนวสัญลักษณ์อื่นเมื่อใกล้กว่าระยะนี้ (หน่วยพิกัดแผนภาพ) และแสดงเส้นช่วยจัดแนว — มาก่อนกริด)
+  void moveBy(double dx, double dy, {double? grid, double? guideTol}) {
     final o = _origin;
     if (o == null || o.isEmpty) return;
     _rawDx += dx;
@@ -317,6 +344,15 @@ class FlowchartController extends DocController with DiagramViewport {
       final ref = o.values.first;
       sx = snapToGrid(ref.$1 + _rawDx, grid) - ref.$1;
       sy = snapToGrid(ref.$2 + _rawDy, grid) - ref.$2;
+    }
+    final box = _originBox;
+    if (guideTol != null && box != null) {
+      final g = computeGuides(box.shift(Offset(sx, sy)), _guideTargets, tol: guideTol);
+      sx += g.dx;
+      sy += g.dy;
+      _guides = g.lines;
+    } else {
+      _guides = const [];
     }
     _live((d) {
       for (final e in o.entries) {
@@ -330,7 +366,12 @@ class FlowchartController extends DocController with DiagramViewport {
 
   void endMove() {
     _origin = null;
+    _originBox = null;
+    _guideTargets = const [];
+    final had = _guides.isNotEmpty;
+    _guides = const [];
     endGesture();
+    if (had) notifyListeners();
   }
 
   /// ขยับสัญลักษณ์ที่เลือกด้วยปุ่มลูกศร (undo ต่อการกด)
@@ -490,6 +531,37 @@ class FlowchartController extends DocController with DiagramViewport {
 
   // ---------- ทำสำเนา / คลิปบอร์ด ----------
 
+  /// จัดสัญลักษณ์ที่เลือก (ตั้งแต่ 2 อันขึ้นไป) เป็นกลุ่มเดียว — undo ขั้นเดียว ; คืน true ถ้าจัดได้
+  /// (กลุ่มเดิมของสมาชิกถูกยุบรวมเข้ากลุ่มใหม่)
+  bool groupSelection() {
+    final ids = {for (final n in selectedNodes) n.id};
+    if (!active || ids.length < 2) return false;
+    final gid = workspace.newId('g');
+    _edit((d) {
+      for (final n in d.nodes) {
+        if (ids.contains(n.id)) n.group = gid;
+      }
+    });
+    notifyListeners();
+    return true;
+  }
+
+  /// เลิกจัดกลุ่มสัญลักษณ์ที่เลือก ; คืน true ถ้ามีกลุ่มให้เลิก
+  bool ungroupSelection() {
+    final ids = {for (final n in selectedNodes) n.id};
+    if (!active || ids.isEmpty || !selectedNodes.any((n) => n.group != null)) return false;
+    _edit((d) {
+      for (final n in d.nodes) {
+        if (ids.contains(n.id)) n.group = null;
+      }
+    });
+    notifyListeners();
+    return true;
+  }
+
+  /// ที่เลือกอยู่มีสมาชิกของกลุ่มหรือไม่ (เปิด/ปิดเมนู "เลิกจัดกลุ่ม")
+  bool get selectionHasGroup => selectedNodes.any((n) => n.group != null);
+
   /// ทำสำเนาสัญลักษณ์ที่เลือก (พร้อมเส้นระหว่างกันเอง) เลื่อนไป 30 px แล้วเลือกสำเนา
   int duplicateSelection() {
     final ids = {for (final n in selectedNodes) n.id};
@@ -509,12 +581,14 @@ class FlowchartController extends DocController with DiagramViewport {
     final src = decodeFlowchartClipboard(text);
     if (!active || src == null) return 0;
     final map = <String, String>{};
+    final groups = <String, String>{}; // รหัสกลุ่มเดิม -> รหัสกลุ่มใหม่ (สำเนาเป็นกลุ่มของตัวเอง ไม่ปนกับต้นฉบับ)
     _edit((d) {
       for (final n in src.nodes) {
         final copy = FcNode.tryFromJson(n.toJson())!;
         final id = workspace.newId('c');
         map[n.id] = id;
-        d.nodes.add(FcNode.tryFromJson({...copy.toJson(), 'id': id, 'x': n.x + offset, 'y': n.y + offset})!);
+        final g = n.group == null ? null : groups.putIfAbsent(n.group!, () => workspace.newId('g'));
+        d.nodes.add(FcNode.tryFromJson({...copy.toJson(), 'id': id, 'x': n.x + offset, 'y': n.y + offset, 'group': g})!);
       }
       for (final e in src.edges) {
         final a = map[e.fromId], b = map[e.toId];
@@ -559,6 +633,31 @@ class FlowchartController extends DocController with DiagramViewport {
     _edge = e.id;
     notifyListeners();
     return e;
+  }
+
+  /// สร้างสัญลักษณ์ใหม่ที่ศูนย์กลาง ([cx],[cy]) พร้อมเส้นจาก [fromId] ไปหามัน — undo ขั้นเดียว ;
+  /// เลือกเส้นที่สร้าง ; คืน (สัญลักษณ์, เส้น) หรือ null ถ้าต้นทางไม่มี
+  (FcNode, FcEdge)? addLinkedNode(String fromId, FcShape shape, double cx, double cy, {bool snap = false}) {
+    if (!active || diagram.nodeById(fromId) == null) return null;
+    final (w, h) = fcDefaultSize(shape);
+    var x = cx - w / 2, y = cy - h / 2;
+    if (snap) {
+      x = snapToGrid(x);
+      y = snapToGrid(y);
+    }
+    late FcNode node;
+    late FcEdge edge;
+    _edit((d) {
+      node = FcNode(id: workspace.newId('c'), shape: shape, text: _defaultText(shape), x: x, y: y);
+      edge = FcEdge(id: workspace.newId('k'), fromId: fromId, toId: node.id);
+      d.nodes.add(node);
+      d.edges.add(edge);
+    });
+    _nodes.clear();
+    _edge = edge.id;
+    _tool = FcTool.select;
+    notifyListeners();
+    return (node, edge);
   }
 
   void updateEdge(String id, void Function(FcEdge e) change) {

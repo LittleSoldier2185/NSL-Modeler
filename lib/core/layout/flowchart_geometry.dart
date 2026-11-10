@@ -20,6 +20,15 @@ const double _k = 0.5522847498;
 /// ความเอียงของสี่เหลี่ยมด้านขนาน (Input/Output)
 double fcIoSkew(FcNode n) => math.min(n.w * 0.25, n.h * 0.45);
 
+/// ระยะเข้าของมุมหกเหลี่ยม
+double fcHexInset(FcNode n) => math.min(n.w * 0.2, n.h * 0.5);
+
+/// ความสูงครึ่งวงรีของฝาทรงกระบอก
+double fcCylinderCap(FcNode n) => math.min(n.h * 0.14, 14);
+
+/// แอมพลิจูดคลื่นขอบล่างของเอกสาร
+double fcDocWave(FcNode n) => math.min(10, n.h * 0.15);
+
 /// ขนาดมุมพับของโน้ต
 double fcNoteFold(FcNode n) => math.min(16, math.min(n.w, n.h) * 0.3);
 
@@ -83,6 +92,35 @@ FcShapeGeom fcShapeGeom(FcNode n) {
       ]);
     case FcShape.connector || FcShape.ellipse:
       return FcShapeGeom(_ellipse(x, y, w, h), const []);
+    case FcShape.text:
+      return FcShapeGeom(_poly([(x, y), (r, y), (r, b), (x, b)]), const []);
+    case FcShape.hexagon:
+      final i = fcHexInset(n);
+      return FcShapeGeom(_poly([(x + i, y), (r - i, y), (r, n.cy), (r - i, b), (x + i, b), (x, n.cy)]), const []);
+    case FcShape.cylinder:
+      final rx = w / 2, ry = fcCylinderCap(n), cx = n.cx;
+      return FcShapeGeom([
+        ('M', [(x, y + ry)]),
+        ('C', [(x, y + ry - ry * _k), (cx - rx * _k, y), (cx, y)]),
+        ('C', [(cx + rx * _k, y), (r, y + ry - ry * _k), (r, y + ry)]),
+        ('L', [(r, b - ry)]),
+        ('C', [(r, b - ry + ry * _k), (cx + rx * _k, b), (cx, b)]),
+        ('C', [(cx - rx * _k, b), (x, b - ry + ry * _k), (x, b - ry)]),
+        ('Z', const []),
+      ], [
+        ('M', [(x, y + ry)]),
+        ('C', [(x, y + ry + ry * _k), (cx - rx * _k, y + 2 * ry), (cx, y + 2 * ry)]),
+        ('C', [(cx + rx * _k, y + 2 * ry), (r, y + ry + ry * _k), (r, y + ry)]),
+      ]);
+    case FcShape.document:
+      final a = fcDocWave(n);
+      return FcShapeGeom([
+        ('M', [(x, y)]),
+        ('L', [(r, y)]),
+        ('L', [(r, b - a)]),
+        ('C', [(r - w * 0.33, b - a * 3), (x + w * 0.33, b + a), (x, b - a)]),
+        ('Z', const []),
+      ], const []);
     case FcShape.note:
       final f = fcNoteFold(n);
       return FcShapeGeom(_poly([(x, y), (r - f, y), (r, y + f), (r, b), (x, b)]), [
@@ -102,6 +140,10 @@ FcShapeGeom fcShapeGeom(FcNode n) {
     FcShape.start || FcShape.end => (math.min(n.w, n.h) / 4 + 4, 4.0, math.min(n.w, n.h) / 4 + 4, 4.0),
     FcShape.ellipse || FcShape.connector => (n.w * 0.14, n.h * 0.14, n.w * 0.14, n.h * 0.14),
     FcShape.note => (10.0, 8.0, fcNoteFold(n) + 4, 8.0),
+    FcShape.hexagon => (fcHexInset(n) * 0.7 + 4, 4.0, fcHexInset(n) * 0.7 + 4, 4.0),
+    FcShape.cylinder => (8.0, fcCylinderCap(n) * 2 + 2, 8.0, fcCylinderCap(n) + 4),
+    FcShape.document => (10.0, 6.0, 10.0, fcDocWave(n) * 2 + 4),
+    FcShape.text => (4.0, 2.0, 4.0, 2.0),
     _ => (10.0, 6.0, 10.0, 6.0),
   };
   return (left: n.x + l, top: n.y + t, width: math.max(4, n.w - l - rr), height: math.max(4, n.h - t - bb));
@@ -255,4 +297,57 @@ String? fcEdgeAt(FlowchartDiagram d, double x, double y, {double tolerance = 7, 
   final nx = -uy, ny = ux;
   final p1 = (bx + nx * size * 0.45, by + ny * size * 0.45), p2 = (bx - nx * size * 0.45, by - ny * size * 0.45);
   return a == FcArrow.arrow ? (true, [to, p1, p2]) : (false, [p1, to, p2]);
+}
+
+// ---------- จุดต่อเส้นที่โผล่ตอนชี้สัญลักษณ์ (แบบ draw.io) ----------
+
+/// ระยะจากขอบสัญลักษณ์ถึงจุดต่อเส้น และรัศมีของจุด (หน่วยพิกเซลจอ — ผู้เรียกหารด้วยสเกลเอง)
+const double kFcLinkGapPx = 18;
+const double kFcLinkRadiusPx = 9;
+
+/// ระยะ (พิกเซลจอ) ที่สัญลักษณ์ที่ลากอยู่จะดูดเข้าแนวสัญลักษณ์อื่น
+const double kFcGuideTolPx = 6;
+
+/// ศูนย์กลางจุดต่อเส้นด้าน [side] ของ [n] ซึ่งอยู่นอกขอบเป็นระยะ [gap]
+(double, double) fcLinkHandlePos(FcNode n, RouteSide side, double gap) => switch (side) {
+      RouteSide.top => (n.cx, n.y - gap),
+      RouteSide.bottom => (n.cx, n.bottom + gap),
+      RouteSide.left => (n.x - gap, n.cy),
+      RouteSide.right => (n.right + gap, n.cy),
+    };
+
+/// ด้านของจุดต่อเส้นที่ ([x],[y]) ชี้อยู่ ; ไม่ได้ชี้จุดไหน = null
+RouteSide? fcLinkHandleAt(FcNode n, double x, double y, {required double gap, required double radius}) {
+  for (final s in RouteSide.values) {
+    final (hx, hy) = fcLinkHandlePos(n, s, gap);
+    final dx = x - hx, dy = y - hy;
+    if (dx * dx + dy * dy <= radius * radius) return s;
+  }
+  return null;
+}
+
+/// สัญลักษณ์ที่ควรแสดงจุดต่อเส้น เมื่อเมาส์อยู่ที่ ([x],[y]): อยู่ในตัวสัญลักษณ์ หรือในแถบรอบที่ครอบจุดต่อเส้นทั้งหมด
+/// (ชั้นบนสุดก่อน) ; ไม่มี = null
+FcNode? fcLinkHoverNode(FlowchartDiagram d, double x, double y, {required double gap, required double radius}) {
+  final reach = gap + radius;
+  for (final n in d.nodes.reversed) {
+    if (fcNodeContains(n, x, y)) return n;
+    if (fcLinkHandleAt(n, x, y, gap: gap, radius: radius) != null) return n;
+    // ช่องว่างระหว่างตัวสัญลักษณ์กับจุด: ให้จุดไม่หายตอนเมาส์ข้ามผ่าน
+    final inBand = x >= n.x && x <= n.right ? (y >= n.y - reach && y <= n.bottom + reach) : false;
+    final inBandSide = y >= n.y && y <= n.bottom ? (x >= n.x - reach && x <= n.right + reach) : false;
+    if (inBand || inBandSide) return n;
+  }
+  return null;
+}
+
+/// จุดศูนย์กลางของสัญลักษณ์ใหม่ที่จะโผล่ต่อจาก [from] ทางด้าน [side] (ห่างพอดี [spacing])
+(double, double) fcNextNodeCenter(FcNode from, RouteSide side, FcShape shape, {double spacing = 60}) {
+  final (w, h) = fcDefaultSize(shape);
+  return switch (side) {
+    RouteSide.bottom => (from.cx, from.bottom + spacing + h / 2),
+    RouteSide.top => (from.cx, from.y - spacing - h / 2),
+    RouteSide.right => (from.right + spacing + w / 2, from.cy),
+    RouteSide.left => (from.x - spacing - w / 2, from.cy),
+  };
 }

@@ -47,7 +47,7 @@ void main() {
         'nodes': [
           {'id': 'a', 'shape': 'process', 'w': 3, 'h': double.nan, 'fontSize': 500, 'align': 'weird', 'fill': 'red'},
           {'id': 'a', 'shape': 'end'},
-          {'id': 'b', 'shape': 'hexagon'},
+          {'id': 'b', 'shape': 'pentagon-of-doom'},
           {'id': '', 'shape': 'process'},
           'junk',
           {'id': 'c', 'shape': 'end', 'w': 99999},

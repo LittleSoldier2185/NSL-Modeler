@@ -1,11 +1,13 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
 import '../../core/layout/dfd_resize.dart' show DfdHandle, dfdHandlePos;
 import '../../core/layout/diagram_geometry.dart' show roundedRoute;
 import '../../core/layout/flowchart_geometry.dart';
 import '../../core/layout/ortho_route.dart';
+import '../../core/layout/smart_guides.dart' show GuideLine;
 import '../../core/models/flowchart_model.dart';
 import '../theme.dart';
 
@@ -215,6 +217,19 @@ void _paintNode(Canvas canvas, FcNode n, {required bool shadows, required bool h
   final g = fcShapeGeom(n);
   final outline = fcPath(g.outline);
   final accent = Color(fcStrokeColor(n));
+  if (n.shape == FcShape.text) {
+    // ข้อความลอย: ไม่มีพื้น/กรอบ เว้นแต่ผู้ใช้กำหนดสีพื้นหรือสีเส้นเอง
+    if (n.fill != null) canvas.drawPath(outline, Paint()..color = Color(n.fill!));
+    if (n.stroke != null) {
+      _strokePath(canvas, outline, Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.7
+        ..strokeJoin = StrokeJoin.round
+        ..color = accent, n.dash);
+    }
+    _paintNodeText(canvas, n, hideText);
+    return;
+  }
   if (shadows) {
     canvas.drawPath(
       outline.shift(const Offset(0, 2)),
@@ -237,6 +252,10 @@ void _paintNode(Canvas canvas, FcNode n, {required bool shadows, required bool h
   _strokePath(canvas, outline, stroke, n.dash);
   if (g.details.isNotEmpty) canvas.drawPath(fcPath(g.details), stroke);
 
+  _paintNodeText(canvas, n, hideText);
+}
+
+void _paintNodeText(Canvas canvas, FcNode n, bool hideText) {
   if (hideText || n.text.isEmpty) return;
   final box = fcTextBox(n);
   final tp = fcTextPainter(n, box.width);
@@ -263,6 +282,8 @@ class FlowchartScreenPainter extends CustomPainter {
     this.linkCursor,
     this.marquee,
     this.hideTextOf,
+    this.hoverNodeId,
+    this.guides = const [],
     required this.repaint,
   }) : super(repaint: repaint);
 
@@ -275,6 +296,12 @@ class FlowchartScreenPainter extends CustomPainter {
   final Offset? linkCursor;
   final Rect? marquee;
   final String? hideTextOf;
+
+  /// สัญลักษณ์ที่เมาส์ชี้อยู่ (แสดงจุดต่อเส้น 4 ด้าน) ; อ่านค่าตอนวาด จึงส่ง notifier มาให้ repaint ได้
+  final ValueListenable<String?>? hoverNodeId;
+
+  /// เส้นช่วยจัดแนวระหว่างลากย้าย
+  final List<GuideLine> guides;
   final Listenable repaint;
 
   @override
@@ -299,8 +326,59 @@ class FlowchartScreenPainter extends CustomPainter {
         }
       }
     }
+    // กรอบประของกลุ่มที่มีสมาชิกถูกเลือก (เห็นว่าทั้งกลุ่มเคลื่อนไปด้วยกัน)
+    final boxes = <String, Rect>{};
+    for (final n in diagram.nodes) {
+      final g = n.group;
+      if (g == null) continue;
+      final r = Rect.fromLTWH(n.x, n.y, n.w, n.h);
+      boxes[g] = boxes[g]?.expandToInclude(r) ?? r;
+    }
+    for (final g in {for (final n in diagram.nodes) if (n.group != null && selectedNodes.contains(n.id)) n.group!}) {
+      final r = boxes[g];
+      if (r == null) continue;
+      _strokePath(
+        canvas,
+        Path()..addRRect(RRect.fromRectAndRadius(r.inflate(10), const Radius.circular(8))),
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.2 / scale
+          ..color = C.primary.withValues(alpha: 0.7),
+        FcDash.dashed,
+      );
+    }
+    if (guides.isNotEmpty) {
+      final gp = Paint()
+        ..color = const Color(0xFFE11D8D)
+        ..strokeWidth = 1 / scale
+        ..style = PaintingStyle.stroke;
+      final pad = 12 / scale;
+      for (final g in guides) {
+        if (g.vertical) {
+          canvas.drawLine(Offset(g.pos, g.from - pad), Offset(g.pos, g.to + pad), gp);
+        } else {
+          canvas.drawLine(Offset(g.from - pad, g.pos), Offset(g.to + pad, g.pos), gp);
+        }
+      }
+    }
+    final hover = hoverNodeId?.value;
+    if (hover != null && linkSource == null) {
+      final n = diagram.nodeById(hover);
+      if (n != null) _paintLinkHandles(canvas, n, scale);
+    }
     final src = linkSource == null ? null : diagram.nodeById(linkSource!);
     if (src != null && linkCursor != null) {
+      // สัญลักษณ์ปลายทางที่จะต่อถ้าปล่อยตรงนี้
+      final target = fcNodeAt(diagram, linkCursor!.dx, linkCursor!.dy);
+      if (target != null && target.id != src.id) {
+        canvas.drawRect(
+          Rect.fromLTWH(target.x, target.y, target.w, target.h).inflate(5),
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2.4 / scale
+            ..color = C.primary,
+        );
+      }
       canvas.drawLine(
         Offset(src.cx, src.cy),
         linkCursor!,
@@ -323,4 +401,40 @@ class FlowchartScreenPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(FlowchartScreenPainter old) => true;
+}
+
+/// จุดต่อเส้น 4 ด้านนอกขอบสัญลักษณ์ (วงกลมมีลูกศรชี้ออก) ; [scale] = สเกลของแคนวาส ให้ขนาดบนจอคงที่
+void _paintLinkHandles(Canvas canvas, FcNode n, double scale) {
+  final gap = kFcLinkGapPx / scale, r = kFcLinkRadiusPx / scale;
+  for (final side in RouteSide.values) {
+    final (hx, hy) = fcLinkHandlePos(n, side, gap);
+    final c = Offset(hx, hy);
+    canvas.drawCircle(c, r, Paint()..color = C.surface);
+    canvas.drawCircle(
+      c,
+      r,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.4 / scale
+        ..color = C.primary,
+    );
+    final (dx, dy) = switch (side) {
+      RouteSide.top => (0.0, -1.0),
+      RouteSide.bottom => (0.0, 1.0),
+      RouteSide.left => (-1.0, 0.0),
+      RouteSide.right => (1.0, 0.0),
+    };
+    final a = r * 0.5;
+    final tip = c + Offset(dx * a, dy * a);
+    final base = c - Offset(dx * a * 0.6, dy * a * 0.6);
+    final px = -dy * a * 0.8, py = dx * a * 0.8;
+    canvas.drawPath(
+      Path()
+        ..moveTo(tip.dx, tip.dy)
+        ..lineTo(base.dx + px, base.dy + py)
+        ..lineTo(base.dx - px, base.dy - py)
+        ..close(),
+      Paint()..color = C.primary,
+    );
+  }
 }
